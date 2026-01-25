@@ -16,8 +16,6 @@ from src.queue.manager import JobQueue
 from src.scraper.jobspy_client import JobSpyClient
 from src.scraper.scorer import JobScorer
 
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-
 if TYPE_CHECKING:
     from src.browser.connection import BrowserConnection
     from src.core.config import Settings
@@ -31,7 +29,6 @@ CYCLE_COOLDOWN_SECONDS: float = 5.0
 DEFAULT_SEARCH_LOCATION: str = "remote"
 MAX_CONSECUTIVE_FAILURES: int = 5
 FAILURE_COOLDOWN_SECONDS: float = 60.0
-APPLY_TIMEOUT_SECONDS: float = 180.0
 
 
 class RunnerState(Enum):
@@ -313,25 +310,7 @@ class AutomationRunner:
         )
 
         try:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self._agent.apply, job.url)
-                try:
-                    result = future.result(timeout=APPLY_TIMEOUT_SECONDS)
-                except FuturesTimeoutError:
-                    logger.error(
-                        f"Application timed out after {APPLY_TIMEOUT_SECONDS}s: {job.company}"
-                    )
-                    self._queue.mark_failed(job.url, "Application timed out")
-                    self._stats.jobs_applied += 1
-                    self._stats.failed_count += 1
-                    self._emit(
-                        "apply_failed",
-                        {
-                            "job": {"title": job.title, "company": job.company, "url": job.url},
-                            "error": "Application timed out",
-                        },
-                    )
-                    return False
+            result = self._agent.apply(job.url)
         except Exception as e:
             logger.error(f"Application error: {e}")
             self._queue.mark_failed(job.url, str(e))
