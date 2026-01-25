@@ -14,6 +14,8 @@ from ..executor.runner import ActionRunner
 
 logger = logging.getLogger(__name__)
 
+APPLICATION_TIMEOUT_SECONDS: float = 180.0
+
 
 class ApplicationStatus(Enum):
     """Status of job application attempt."""
@@ -53,6 +55,7 @@ class ApplicationAgent:
         resume_path: Optional[str] = None,
         max_pages: int = 15,
         claude_model: str = "claude-sonnet-4-20250514",
+        timeout_seconds: float = APPLICATION_TIMEOUT_SECONDS,
     ) -> None:
         """
         Initialize the application agent.
@@ -63,11 +66,13 @@ class ApplicationAgent:
             resume_path: Optional path to resume PDF file.
             max_pages: Maximum pages to process before giving up.
             claude_model: Claude model to use for form analysis.
+            timeout_seconds: Maximum seconds for entire application attempt.
         """
         self._tabs = tab_manager
         self._profile = profile
         self._resume_path = resume_path
         self._max_pages = max_pages
+        self._timeout_seconds = timeout_seconds
         self._claude = ClaudeAgent(model=claude_model)
 
         self._page: Optional[Page] = None
@@ -183,8 +188,18 @@ class ApplicationAgent:
         pages_processed = 0
         stuck_count = 0
         last_url = ""
+        start_time = time.time()
 
         while pages_processed < self._max_pages:
+            elapsed = time.time() - start_time
+            if elapsed > self._timeout_seconds:
+                logger.warning(f"Application timed out after {elapsed:.1f}s")
+                return ApplicationResult(
+                    status=ApplicationStatus.STUCK,
+                    message=f"Timed out after {elapsed:.1f}s",
+                    pages_processed=pages_processed,
+                    url=job_url,
+                )
             pages_processed += 1
             current_url = self._page.url
 

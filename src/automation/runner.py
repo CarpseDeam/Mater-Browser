@@ -16,6 +16,8 @@ from src.queue.manager import JobQueue
 from src.scraper.jobspy_client import JobSpyClient
 from src.scraper.scorer import JobScorer
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+
 if TYPE_CHECKING:
     from src.browser.connection import BrowserConnection
     from src.core.config import Settings
@@ -27,6 +29,9 @@ logger = logging.getLogger(__name__)
 APPLY_DELAY_SECONDS: float = 2.0
 CYCLE_COOLDOWN_SECONDS: float = 5.0
 DEFAULT_SEARCH_LOCATION: str = "remote"
+MAX_CONSECUTIVE_FAILURES: int = 5
+FAILURE_COOLDOWN_SECONDS: float = 60.0
+APPLY_TIMEOUT_SECONDS: float = 180.0
 
 
 class RunnerState(Enum):
@@ -250,6 +255,7 @@ class AutomationRunner:
     def _run_apply_cycle(self) -> None:
         """Execute application cycle for queued jobs."""
         self._state = RunnerState.APPLYING
+        consecutive_failures = 0
 
         while not self._stop_flag.is_set():
             job = self._queue.get_next()
@@ -257,21 +263,40 @@ class AutomationRunner:
                 logger.info("No more pending jobs in queue")
                 break
 
-            self._apply_to_job(job)
+            success = self._apply_to_job(job)
+
+            if success:
+                consecutive_failures = 0
+            else:
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    logger.warning(
+                        f"Too many consecutive failures ({consecutive_failures}), pausing..."
+                    )
+                    self._emit(
+                        "paused",
+                        {"reason": "consecutive_failures", "count": consecutive_failures},
+                    )
+                    time.sleep(FAILURE_COOLDOWN_SECONDS)
+                    consecutive_failures = 0
+
             time.sleep(APPLY_DELAY_SECONDS)
 
         term = self._stats.current_search
         self._emit("cycle_complete", {"search_term": term})
 
-    def _apply_to_job(self, job: JobListing) -> None:
+    def _apply_to_job(self, job: JobListing) -> bool:
         """Apply to a single job.
 
         Args:
             job: Job listing to apply to.
+
+        Returns:
+            True if application succeeded, False otherwise.
         """
         if self._agent is None:
             logger.error("Agent not initialized")
-            return
+            return False
 
         self._stats.current_job = f"{job.title} at {job.company}"
         logger.info(f"Applying to: {self._stats.current_job}")
@@ -288,7 +313,25 @@ class AutomationRunner:
         )
 
         try:
-            result = self._agent.apply(job.url)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self._agent.apply, job.url)
+                try:
+                    result = future.result(timeout=APPLY_TIMEOUT_SECONDS)
+                except FuturesTimeoutError:
+                    logger.error(
+                        f"Application timed out after {APPLY_TIMEOUT_SECONDS}s: {job.company}"
+                    )
+                    self._queue.mark_failed(job.url, "Application timed out")
+                    self._stats.jobs_applied += 1
+                    self._stats.failed_count += 1
+                    self._emit(
+                        "apply_failed",
+                        {
+                            "job": {"title": job.title, "company": job.company, "url": job.url},
+                            "error": "Application timed out",
+                        },
+                    )
+                    return False
         except Exception as e:
             logger.error(f"Application error: {e}")
             self._queue.mark_failed(job.url, str(e))
@@ -301,7 +344,7 @@ class AutomationRunner:
                     "error": str(e),
                 },
             )
-            return
+            return False
 
         self._stats.jobs_applied += 1
 
@@ -316,17 +359,19 @@ class AutomationRunner:
                     "result": {"status": result.status.value, "message": result.message},
                 },
             )
-        else:
-            self._queue.mark_failed(job.url, result.message)
-            self._stats.failed_count += 1
-            logger.warning(f"Failed to apply to {job.company}: {result.message}")
-            self._emit(
-                "apply_failed",
-                {
-                    "job": {"title": job.title, "company": job.company, "url": job.url},
-                    "result": {"status": result.status.value, "message": result.message},
-                },
-            )
+            return True
+
+        self._queue.mark_failed(job.url, result.message)
+        self._stats.failed_count += 1
+        logger.warning(f"Failed to apply to {job.company}: {result.message}")
+        self._emit(
+            "apply_failed",
+            {
+                "job": {"title": job.title, "company": job.company, "url": job.url},
+                "result": {"status": result.status.value, "message": result.message},
+            },
+        )
+        return False
 
     def _stats_dict(self) -> dict:
         """Convert stats to dictionary."""
