@@ -43,6 +43,18 @@ class BrowserConnection:
             raise RuntimeError("Not connected. Call connect() first.")
         return self._browser
 
+    @property
+    def is_connected(self) -> bool:
+        """Check if browser is connected and responsive."""
+        if not self._browser:
+            return False
+        try:
+            # Try to access contexts to verify connection is alive
+            _ = self._browser.contexts
+            return True
+        except Exception:
+            return False
+
     def _check_cdp_endpoint(self) -> bool:
         """Verify CDP endpoint is responding."""
         try:

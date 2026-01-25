@@ -343,7 +343,7 @@ class DashboardApp:
 
     def _connect_browser(self) -> None:
         """Connect or disconnect from browser."""
-        if self.connection and self.connection._browser:
+        if self.connection and self.connection.is_connected:
             if self.runner and self.runner.is_running:
                 self._log("Stop automation before disconnecting")
                 return
@@ -380,7 +380,7 @@ class DashboardApp:
 
     def _start_automation(self) -> None:
         """Start the automation runner."""
-        if not self.connection or not self.connection._browser:
+        if not self.connection or not self.connection.is_connected:
             self._log("Connect to Chrome first")
             return
 

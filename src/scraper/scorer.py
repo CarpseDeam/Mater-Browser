@@ -86,7 +86,12 @@ class JobScorer:
             score += 0.1
 
         if job.date_posted:
-            age = datetime.now() - job.date_posted
+            # Handle both date and datetime objects from JobSpy
+            posted = job.date_posted
+            if hasattr(posted, 'hour'):
+                age = datetime.now() - posted
+            else:
+                age = datetime.now() - datetime.combine(posted, datetime.min.time())
             if age < timedelta(hours=24):
                 score += 0.1
             elif age < timedelta(hours=48):

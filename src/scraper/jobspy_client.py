@@ -1,12 +1,67 @@
 """JobSpy wrapper for multi-platform job scraping."""
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Optional
 
+import pandas as pd
 from jobspy import scrape_jobs
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_str(value, default: str = "") -> str:
+    """Safely convert value to string, handling None/NaN."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return default
+    return str(value)
+
+
+def _safe_bool(value, default: bool = False) -> bool:
+    """Safely convert value to bool, handling None/NaN."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return default
+    return bool(value)
+
+
+def _safe_date(value) -> Optional[datetime]:
+    """Safely convert date/datetime, handling None/NaN."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    return None
+
+
+def _extract_location(value) -> str:
+    """Extract location string from JobSpy location field.
+    
+    JobSpy can return a Location object with city/state/country attributes,
+    or just a string.
+    """
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    
+    # If it's already a string
+    if isinstance(value, str):
+        return value
+    
+    # If it's a Location object with attributes
+    parts = []
+    if hasattr(value, 'city') and value.city:
+        parts.append(str(value.city))
+    if hasattr(value, 'state') and value.state:
+        parts.append(str(value.state))
+    if hasattr(value, 'country') and value.country and not parts:
+        parts.append(str(value.country))
+    
+    if parts:
+        return ", ".join(parts)
+    
+    # Fallback: try to convert to string
+    return str(value) if value else ""
 
 
 @dataclass
@@ -41,7 +96,7 @@ class JobSpyClient:
         hours_old: int = 72,
         country: str = "USA",
     ) -> None:
-        self.sites = sites or ["linkedin", "indeed", "glassdoor"]
+        self.sites = sites or ["indeed", "linkedin"]  # Glassdoor often fails
         self.results_wanted = results_wanted
         self.hours_old = hours_old
         self.country = country
@@ -86,22 +141,32 @@ class JobSpyClient:
 
             jobs = []
             for _, row in df.iterrows():
-                job = JobListing(
-                    id=str(row.get("id", "")),
-                    title=str(row.get("title", "")),
-                    company=str(row.get("company", "")),
-                    location=str(row.get("location", "")),
-                    url=str(row.get("job_url", "")),
-                    description=str(row.get("description", "")),
-                    salary=str(row.get("salary", "")) if row.get("salary") else None,
-                    date_posted=row.get("date_posted"),
-                    site=str(row.get("site", "")),
-                    is_remote=bool(row.get("is_remote", False)),
-                    job_type=str(row.get("job_type", "")) if row.get("job_type") else None,
-                )
-                jobs.append(job)
+                try:
+                    job = JobListing(
+                        id=_safe_str(row.get("id"), default=f"job_{len(jobs)}"),
+                        title=_safe_str(row.get("title"), default="Unknown Title"),
+                        company=_safe_str(row.get("company"), default="Unknown Company"),
+                        location=_extract_location(row.get("location")),
+                        url=_safe_str(row.get("job_url")),
+                        description=_safe_str(row.get("description")),
+                        salary=_safe_str(row.get("salary")) or None,
+                        date_posted=_safe_date(row.get("date_posted")),
+                        site=_safe_str(row.get("site")),
+                        is_remote=_safe_bool(row.get("is_remote")),
+                        job_type=_safe_str(row.get("job_type")) or None,
+                    )
+                    
+                    # Skip jobs without URLs
+                    if not job.url:
+                        logger.debug(f"Skipping job without URL: {job.title}")
+                        continue
+                        
+                    jobs.append(job)
+                except Exception as e:
+                    logger.warning(f"Failed to parse job row: {e}")
+                    continue
 
-            logger.info(f"Found {len(jobs)} jobs")
+            logger.info(f"Found {len(jobs)} valid jobs")
             return jobs
 
         except Exception as e:

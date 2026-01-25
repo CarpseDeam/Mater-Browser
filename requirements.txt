@@ -3,5 +3,5 @@ anthropic>=0.18.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
 pyyaml>=6.0.1
-jobspy>=0.28.0
+python-jobspy>=1.1.0
 pandas>=2.0.0

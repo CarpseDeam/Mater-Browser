@@ -91,3 +91,4 @@ user_data/
 # Job history and queue (contains personal data)
 job_queue.json
 job_history.json
+/.chrome-profile/

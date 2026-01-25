@@ -474,7 +474,7 @@ Resume: {self.profile.resume_path or 'Not set'}"""
 
     def _connect_browser(self) -> None:
         """Connect or disconnect from browser."""
-        if self.connection and self.connection._browser:
+        if self.connection and self.connection.is_connected:
             self.connection.disconnect()
             self.connection = None
             self._update_status(False)
@@ -505,7 +505,7 @@ Resume: {self.profile.resume_path or 'Not set'}"""
             messagebox.showwarning("No URL", "Please enter a job URL")
             return
 
-        if not self.connection or not self.connection._browser:
+        if not self.connection or not self.connection.is_connected:
             messagebox.showwarning("Not Connected", "Connect to Chrome first")
             return
 
@@ -627,7 +627,7 @@ Resume: {self.profile.resume_path or 'Not set'}"""
             self.bulk_stop_flag = True
             self.bulk_btn.config(text="Stopping...")
         else:
-            if not self.connection or not self.connection.browser:
+            if not self.connection or not self.connection.is_connected:
                 messagebox.showwarning("Not Connected", "Connect to Chrome first")
                 return
 
