@@ -182,6 +182,7 @@ class ApplicationAgent:
         Handle LinkedIn Easy Apply flow.
 
         Easy Apply opens a modal on the same page - no navigation required.
+        LinkedIn uses SPA routing which can cause ERR_ABORTED on goto().
 
         Args:
             job_url: LinkedIn job posting URL.
@@ -191,7 +192,26 @@ class ApplicationAgent:
         """
         logger.info("Using LinkedIn Easy Apply flow")
 
-        self._page.goto(job_url)
+        try:
+            self._page.goto(job_url)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "err_aborted" in error_msg or "aborted" in error_msg:
+                logger.warning(f"Navigation aborted (LinkedIn SPA behavior): {e}")
+                self._page.wait(2000)
+
+                current_url = self._page.url.lower()
+                if "linkedin.com/jobs" not in current_url:
+                    logger.error(f"Navigation failed - not on LinkedIn jobs: {current_url}")
+                    return ApplicationResult(
+                        status=ApplicationStatus.ERROR,
+                        message="Navigation to job page failed",
+                        url=job_url
+                    )
+                logger.info(f"SPA navigation succeeded, now at: {self._page.url}")
+            else:
+                raise
+
         self._page.wait(2000)
 
         # Find and click Easy Apply button
@@ -226,7 +246,23 @@ class ApplicationAgent:
         """
         logger.info(f"Using external apply flow for {source.value}")
 
-        self._page.goto(job_url)
+        try:
+            self._page.goto(job_url)
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "err_aborted" in error_msg or "aborted" in error_msg:
+                logger.warning(f"Navigation aborted: {e}")
+                self._page.wait(2000)
+                if not self._page.url or self._page.url == "about:blank":
+                    return ApplicationResult(
+                        status=ApplicationStatus.ERROR,
+                        message="Navigation failed completely",
+                        url=job_url
+                    )
+                logger.info(f"Navigation recovered, now at: {self._page.url}")
+            else:
+                raise
+
         self._page.wait(2000)
 
         # Capture current state before clicking
