@@ -1,5 +1,6 @@
 """Job application agent - orchestrates the full application flow."""
 import logging
+import re
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -28,32 +29,8 @@ class JobSource(Enum):
 # URL patterns for source detection
 LINKEDIN_PATTERNS: list[str] = ["linkedin.com/jobs", "linkedin.com/job"]
 INDEED_PATTERNS: list[str] = ["indeed.com/viewjob", "indeed.com/jobs", "indeed.com/rc"]
-DICE_PATTERNS: list[str] = ["dice.com/job-detail", "dice.com/jobs"]
-
-# Apply button selectors by source
-LINKEDIN_APPLY_SELECTORS: list[str] = [
-    'button.jobs-apply-button',
-    'button[aria-label*="Easy Apply"]',
-    'button:has-text("Easy Apply")',
-]
-
-EXTERNAL_APPLY_SELECTORS: list[str] = [
-    # Indeed
-    'button#indeedApplyButton',
-    'button[data-testid="indeedApplyButton"]',
-    'a[data-testid="indeedApplyButton"]',
-    'button[id*="apply"]',
-    # Dice
-    'a.apply-button',
-    'button.btn-apply',
-    # Generic
-    'button:has-text("Apply")',
-    'a:has-text("Apply")',
-    'button:has-text("Apply Now")',
-    'a:has-text("Apply Now")',
-    'a:has-text("Apply on company site")',
-    '[data-automation="job-detail-apply"]',
-]
+# DICE disabled - not currently scraping
+# DICE_PATTERNS: list[str] = ["dice.com/job-detail", "dice.com/jobs"]
 
 # Navigation timeout for external redirects (milliseconds)
 EXTERNAL_REDIRECT_TIMEOUT_MS: int = 15000
@@ -70,10 +47,11 @@ LOGIN_URL_PATTERNS: dict[str, list[str]] = {
         "indeed.com/account/login",
         "indeed.com/account/signin",
     ],
-    "dice": [
-        "dice.com/dashboard/login",
-        "dice.com/login",
-    ],
+    # Dice disabled
+    # "dice": [
+    #     "dice.com/dashboard/login",
+    #     "dice.com/login",
+    # ],
     "generic": [
         "/login",
         "/signin",
@@ -198,8 +176,9 @@ class ApplicationAgent:
             return JobSource.LINKEDIN
         elif any(pattern in url_lower for pattern in INDEED_PATTERNS):
             return JobSource.INDEED
-        elif any(pattern in url_lower for pattern in DICE_PATTERNS):
-            return JobSource.DICE
+        # Dice disabled
+        # elif any(pattern in url_lower for pattern in DICE_PATTERNS):
+        #     return JobSource.DICE
         else:
             return JobSource.DIRECT
 
@@ -289,14 +268,12 @@ class ApplicationAgent:
             )
 
         # Find and click Easy Apply button
-        if not self._click_apply_button(LINKEDIN_APPLY_SELECTORS):
-            # Fallback to generic selectors
-            if not self._click_apply_button(EXTERNAL_APPLY_SELECTORS):
-                return ApplicationResult(
-                    status=ApplicationStatus.NO_APPLY_BUTTON,
-                    message="Could not find Easy Apply button",
-                    url=job_url
-                )
+        if not self._click_apply_button():
+            return ApplicationResult(
+                status=ApplicationStatus.NO_APPLY_BUTTON,
+                message="Could not find Easy Apply button",
+                url=job_url
+            )
 
         # Wait for modal to appear
         self._page.wait(1500)
@@ -356,7 +333,7 @@ class ApplicationAgent:
         logger.info(f"Original page count: {original_page_count}")
 
         # Find and click apply button
-        if not self._click_apply_button(EXTERNAL_APPLY_SELECTORS):
+        if not self._click_apply_button():
             return ApplicationResult(
                 status=ApplicationStatus.NO_APPLY_BUTTON,
                 message=f"Could not find Apply button on {source.value}",
@@ -430,53 +407,74 @@ class ApplicationAgent:
         logger.warning(f"Redirect timeout after {timeout_sec}s")
         return False
 
-    def _click_apply_button(self, selectors: list[str]) -> bool:
+    def _click_apply_button(self) -> bool:
         """
-        Find and click apply button using provided selectors.
+        Find and click the Apply button using semantic locators.
 
-        Args:
-            selectors: List of CSS/text selectors to try in order.
+        Uses Playwright's combined locator pattern for resilience:
+        1. Role-based (button/link with "apply" text) - most resilient
+        2. Attribute-based (data-testid, aria-label) - platform-specific fallback
+        3. Text content fallback - last resort
 
         Returns:
             True if button found and clicked, False otherwise.
         """
-        logger.info(f"Looking for Apply button ({len(selectors)} selectors)...")
+        logger.info("Looking for Apply button (semantic locator)...")
 
-        # Try explicit selectors first
-        for selector in selectors:
-            try:
-                loc = self._page.raw.locator(selector).first
-                if loc.is_visible(timeout=1000):
-                    logger.info(f"Found Apply button: {selector}")
-                    loc.click()
-                    return True
-            except Exception:
-                continue
+        page = self._page.raw
 
-        # Fallback: DOM extraction search
-        logger.info("Trying DOM extraction to find Apply button...")
+        # Combined locator - checks all strategies in parallel, not sequential
+        # The .or_() method combines locators into one that matches ANY of them
+        apply_locator = (
+            # Primary: Role-based semantic locators (most resilient to HTML changes)
+            page.get_by_role("button", name=re.compile(r"easy\s*apply|apply\s*now|apply", re.IGNORECASE))
+            .or_(page.get_by_role("link", name=re.compile(r"easy\s*apply|apply\s*now|apply", re.IGNORECASE)))
+            # Secondary: Attribute-based (platform-specific)
+            .or_(page.locator('[data-testid*="apply" i]'))
+            .or_(page.locator('[aria-label*="apply" i]'))
+            .or_(page.locator('[id*="apply" i][id*="button" i]'))
+            # Tertiary: Class-based (less stable but common)
+            .or_(page.locator('.jobs-apply-button'))
+            .or_(page.locator('.apply-button'))
+            .or_(page.locator('[class*="apply"][class*="button" i]'))
+        )
+
         try:
-            dom_state = self._dom_service.extract()
+            # Single visibility check with reasonable timeout
+            first_match = apply_locator.first
+            if first_match.is_visible(timeout=5000):
+                # Log what we're clicking for debugging
+                try:
+                    tag = first_match.evaluate("el => el.tagName")
+                    text = first_match.evaluate("el => el.textContent?.trim()?.substring(0, 50)")
+                    logger.info(f"Found Apply button: <{tag}> '{text}'")
+                except Exception:
+                    logger.info("Found Apply button (details unavailable)")
 
-            for el in dom_state.elements:
-                text = (el.text or "").lower()
-                label = (el.label or "").lower()
-                btn_text = (el.buttonText or "").lower()
+                first_match.click()
+                logger.info("Clicked Apply button successfully")
+                return True
 
-                if any(kw in text or kw in label or kw in btn_text
-                       for kw in ["apply", "easy apply", "apply now"]):
-                    if el.tag in ("button", "a") or el.type in ("submit", "button"):
-                        selector = self._dom_service.get_selector(el.ref)
-                        if selector:
-                            try:
-                                self._page.raw.locator(selector).first.click()
-                                logger.info(f"Clicked Apply via DOM: {el.ref}")
-                                return True
-                            except Exception:
-                                continue
         except Exception as e:
-            logger.warning(f"DOM extraction failed: {e}")
+            logger.debug(f"Combined locator failed: {e}")
 
+        # Last resort: Text content search (handles weird markup)
+        logger.info("Trying text content fallback...")
+        try:
+            # Look for any clickable element containing "apply"
+            text_locator = page.locator('button, a, [role="button"]').filter(
+                has_text=re.compile(r"apply", re.IGNORECASE)
+            )
+
+            if text_locator.first.is_visible(timeout=2000):
+                text_locator.first.click()
+                logger.info("Clicked Apply via text content fallback")
+                return True
+
+        except Exception as e:
+            logger.debug(f"Text fallback failed: {e}")
+
+        logger.warning("Could not find Apply button with any strategy")
         return False
 
     def _handle_new_tab(self) -> None:
