@@ -1,19 +1,25 @@
-"""Simplified autonomous dashboard for job application automation."""
+"""Simplified autonomous dashboard for job application automation.
+
+This module provides a single-button GUI for controlling the automation loop.
+The dashboard owns the ApplicationAgent and processes apply requests on the
+main thread to avoid Playwright greenlet threading errors.
+"""
 
 from __future__ import annotations
 
 import logging
 import subprocess
 import tkinter as tk
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 from queue import Empty, Queue
 from tkinter import scrolledtext, ttk
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from src.automation.runner import AutomationRunner, RunnerState
+from src.agent.application import ApplicationAgent, ApplicationStatus
+from src.automation.runner import ApplyRequest, ApplyResult, AutomationRunner
 from src.browser.connection import BrowserConnection
+from src.browser.tabs import TabManager
 from src.core.config import Settings
 from src.core.logging import setup_logging
 from src.profile.manager import load_profile
@@ -27,6 +33,7 @@ WINDOW_TITLE: str = "Mater-Browser - Autonomous Job Applicant"
 WINDOW_GEOMETRY: str = "700x550"
 WINDOW_MIN_SIZE: tuple[int, int] = (600, 450)
 MESSAGE_POLL_MS: int = 100
+APPLY_QUEUE_POLL_MS: int = 100
 MAX_LOG_LINES: int = 500
 
 BG_DARK: str = "#1e1e1e"
@@ -88,6 +95,10 @@ class DashboardApp:
     Single-button interface for fully autonomous job searching and application.
     Displays real-time statistics and activity log.
 
+    Owns the ApplicationAgent and processes apply requests on the main thread
+    to avoid Playwright greenlet threading errors. The runner thread sends
+    ApplyRequest via apply_queue and receives ApplyResult via result_queue.
+
     Attributes:
         root: Tkinter root window.
         connection: Browser connection instance.
@@ -102,10 +113,14 @@ class DashboardApp:
         self.root.geometry(WINDOW_GEOMETRY)
         self.root.minsize(*WINDOW_MIN_SIZE)
 
-        self.connection: BrowserConnection | None = None
-        self.runner: AutomationRunner | None = None
+        self.connection: Optional[BrowserConnection] = None
+        self.runner: Optional[AutomationRunner] = None
         self.message_queue: Queue = Queue()
         self.stats = DashboardStats()
+
+        self._apply_queue: Queue[ApplyRequest] = Queue()
+        self._result_queue: Queue[ApplyResult] = Queue()
+        self._agent: Optional[ApplicationAgent] = None
 
         self.settings = Settings.from_yaml(Path("config/settings.yaml"))
         self.profile = load_profile(Path("config/profile.yaml"))
@@ -348,6 +363,7 @@ class DashboardApp:
                 self._log("Stop automation before disconnecting")
                 return
 
+            self._agent = None
             self.connection.disconnect()
             self.connection = None
             self._update_connection_status(False)
@@ -365,11 +381,37 @@ class DashboardApp:
         if self.connection.connect():
             self._update_connection_status(True)
             self._log("Connected to Chrome!")
+            self._init_agent()
         else:
             self._log(
                 "Failed to connect. Make sure Chrome is running with --remote-debugging-port"
             )
             self.connection = None
+
+    def _init_agent(self) -> None:
+        """Initialize ApplicationAgent on main thread.
+
+        Must be called after browser connection succeeds. The agent is
+        created on the main thread to ensure Playwright greenlet safety.
+        """
+        if not self.connection or not self.connection.is_connected:
+            logger.error("Cannot init agent: browser not connected")
+            return
+
+        try:
+            tab_manager = TabManager(self.connection.browser)
+            self._agent = ApplicationAgent(
+                tab_manager=tab_manager,
+                profile=self.profile.model_dump(),
+                resume_path=self.profile.resume_path or None,
+                claude_model=self.settings.claude.model,
+            )
+            logger.info("ApplicationAgent initialized on main thread")
+            self._log("Application agent ready")
+        except Exception as e:
+            logger.exception("Failed to initialize ApplicationAgent")
+            self._agent = None
+            self._log(f"Warning: Agent init failed - {e}")
 
     def _toggle_automation(self) -> None:
         """Start or stop the automation runner."""
@@ -384,10 +426,15 @@ class DashboardApp:
             self._log("Connect to Chrome first")
             return
 
+        if self._agent is None:
+            self._log("Reinitializing application agent...")
+            self._init_agent()
+
         self.runner = AutomationRunner(
-            connection=self.connection,
             profile=self.profile,
             settings=self.settings,
+            apply_queue=self._apply_queue,
+            result_queue=self._result_queue,
             on_progress=self._on_runner_progress,
         )
 
@@ -396,6 +443,7 @@ class DashboardApp:
             self.connect_btn.config(state=tk.DISABLED)
             self.activity_label.config(text="Starting automation...", foreground=ACCENT)
             self._log("Automation started")
+            self.root.after(APPLY_QUEUE_POLL_MS, self._process_apply_queue)
 
     def _stop_automation(self) -> None:
         """Stop the automation runner gracefully."""
@@ -415,6 +463,59 @@ class DashboardApp:
             data: Event data dictionary.
         """
         self.message_queue.put((event, data))
+
+    def _process_apply_queue(self) -> None:
+        """Process pending apply requests on main thread.
+
+        Called via root.after() to poll the apply_queue. When a request
+        is found, executes the application via ApplicationAgent on the
+        main thread (Playwright safe) and sends result back via result_queue.
+        """
+        if not self.runner or not self.runner.is_running:
+            logger.debug("Runner not active, stopping apply queue processor")
+            return
+
+        try:
+            request = self._apply_queue.get_nowait()
+        except Empty:
+            self.root.after(APPLY_QUEUE_POLL_MS, self._process_apply_queue)
+            return
+
+        job = request.job
+        logger.info(f"Processing apply request for {job.title} at {job.company}")
+
+        if self._agent is None:
+            logger.error("Agent not initialized, cannot process apply request")
+            result = ApplyResult(
+                job=job,
+                success=False,
+                error="Application agent not initialized",
+            )
+        else:
+            try:
+                app_result = self._agent.apply(job.url)
+                success = app_result.status == ApplicationStatus.SUCCESS
+                result = ApplyResult(
+                    job=job,
+                    success=success,
+                    error=None if success else app_result.message,
+                )
+                logger.info(
+                    f"Apply result for {job.company}: "
+                    f"{'success' if success else app_result.message}"
+                )
+            except Exception as e:
+                logger.exception(f"Apply error for {job.url}")
+                result = ApplyResult(
+                    job=job,
+                    success=False,
+                    error=str(e),
+                )
+
+        self._result_queue.put(result)
+        logger.debug(f"ApplyResult sent to result_queue for {job.url}")
+
+        self.root.after(APPLY_QUEUE_POLL_MS, self._process_apply_queue)
 
     def _process_messages(self) -> None:
         """Process messages from worker thread."""

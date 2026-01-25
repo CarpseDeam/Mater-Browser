@@ -1,23 +1,28 @@
-"""Automation runner for continuous job application loop."""
+"""Automation runner for continuous job application loop.
+
+This module orchestrates job searching and application in a background thread.
+Playwright operations are marshaled to the main thread via request/response queues
+to avoid greenlet threading errors.
+"""
 
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Optional
 
-from src.agent.application import ApplicationAgent, ApplicationStatus
 from src.automation.search_generator import SearchGenerator
-from src.browser.tabs import TabManager
 from src.queue.manager import JobQueue
 from src.scraper.jobspy_client import JobSpyClient
 from src.scraper.scorer import JobScorer
 
 if TYPE_CHECKING:
-    from src.browser.connection import BrowserConnection
+    from queue import Queue
+
     from src.core.config import Settings
     from src.profile.manager import Profile
     from src.scraper.jobspy_client import JobListing
@@ -29,6 +34,33 @@ CYCLE_COOLDOWN_SECONDS: float = 5.0
 DEFAULT_SEARCH_LOCATION: str = "remote"
 MAX_CONSECUTIVE_FAILURES: int = 5
 FAILURE_COOLDOWN_SECONDS: float = 60.0
+APPLY_TIMEOUT_SECONDS: float = 300.0
+
+
+@dataclass
+class ApplyRequest:
+    """Request to apply to a job, sent from runner to main thread.
+
+    Attributes:
+        job: The job listing to apply to.
+    """
+
+    job: JobListing
+
+
+@dataclass
+class ApplyResult:
+    """Result of apply attempt, sent from main thread to runner.
+
+    Attributes:
+        job: The job listing that was processed.
+        success: Whether the application succeeded.
+        error: Error message if application failed.
+    """
+
+    job: JobListing
+    success: bool
+    error: Optional[str] = None
 
 
 class RunnerState(Enum):
@@ -63,9 +95,13 @@ class RunnerStats:
 class AutomationRunner:
     """Orchestrates autonomous job searching and application.
 
-    Composes SearchGenerator, JobSpyClient, JobScorer, JobQueue, and
-    ApplicationAgent into a continuous automation loop. Runs in a
-    background thread with graceful stop support.
+    Composes SearchGenerator, JobSpyClient, JobScorer, and JobQueue into a
+    continuous automation loop. Runs in a background thread with graceful
+    stop support.
+
+    Application requests are sent to the main thread via apply_queue, and
+    results are received via result_queue. This avoids Playwright greenlet
+    threading errors by keeping all browser operations on the main thread.
 
     Attributes:
         state: Current runner state (IDLE, SEARCHING, APPLYING).
@@ -74,22 +110,25 @@ class AutomationRunner:
 
     def __init__(
         self,
-        connection: BrowserConnection,
         profile: Profile,
         settings: Settings,
+        apply_queue: Queue[ApplyRequest],
+        result_queue: Queue[ApplyResult],
         on_progress: Callable[[str, dict], None] | None = None,
     ) -> None:
         """Initialize automation runner with dependencies.
 
         Args:
-            connection: Browser connection for CDP communication.
             profile: User profile for job matching and applications.
             settings: Application settings including Claude config.
+            apply_queue: Queue for sending apply requests to main thread.
+            result_queue: Queue for receiving apply results from main thread.
             on_progress: Optional callback for progress events.
         """
-        self._connection = connection
         self._profile = profile
         self._settings = settings
+        self._apply_queue = apply_queue
+        self._result_queue = result_queue
         self._on_progress = on_progress
 
         self._search_gen = SearchGenerator(profile)
@@ -101,7 +140,7 @@ class AutomationRunner:
         self._stop_flag = threading.Event()
         self._thread: threading.Thread | None = None
         self._stats = RunnerStats()
-        self._agent: ApplicationAgent | None = None
+        self._consecutive_failures: int = 0
 
     @property
     def state(self) -> RunnerState:
@@ -174,13 +213,16 @@ class AutomationRunner:
                 logger.error(f"Progress callback error: {e}")
 
     def _run_loop(self) -> None:
-        """Main automation loop running in background thread."""
+        """Main automation loop running in background thread.
+
+        Alternates between search cycles (finding jobs) and apply cycles
+        (requesting applications via queue). Does not directly interact
+        with Playwright - all browser operations are on main thread.
+        """
         logger.info("Automation loop started")
         self._emit("started", {})
 
         try:
-            self._init_agent()
-
             while not self._stop_flag.is_set():
                 self._run_search_cycle()
 
@@ -202,16 +244,6 @@ class AutomationRunner:
             self._state = RunnerState.IDLE
             self._emit("stopped", {"stats": self._stats_dict()})
             logger.info("Automation loop stopped")
-
-    def _init_agent(self) -> None:
-        """Initialize the application agent."""
-        tab_manager = TabManager(self._connection.browser)
-        self._agent = ApplicationAgent(
-            tab_manager=tab_manager,
-            profile=self._profile.model_dump(),
-            resume_path=self._profile.resume_path or None,
-            claude_model=self._settings.claude.model,
-        )
 
     def _run_search_cycle(self) -> None:
         """Execute one search cycle."""
@@ -250,9 +282,13 @@ class AutomationRunner:
         )
 
     def _run_apply_cycle(self) -> None:
-        """Execute application cycle for queued jobs."""
+        """Execute application cycle for queued jobs.
+
+        Gets pending jobs from queue and sends apply requests to main thread.
+        Waits for results and updates stats accordingly.
+        """
         self._state = RunnerState.APPLYING
-        consecutive_failures = 0
+        logger.info("Starting apply cycle")
 
         while not self._stop_flag.is_set():
             job = self._queue.get_next()
@@ -263,19 +299,23 @@ class AutomationRunner:
             success = self._apply_to_job(job)
 
             if success:
-                consecutive_failures = 0
+                self._consecutive_failures = 0
             else:
-                consecutive_failures += 1
-                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                self._consecutive_failures += 1
+                if self._consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     logger.warning(
-                        f"Too many consecutive failures ({consecutive_failures}), pausing..."
+                        f"Too many consecutive failures ({self._consecutive_failures}), "
+                        f"pausing for {FAILURE_COOLDOWN_SECONDS}s..."
                     )
                     self._emit(
                         "paused",
-                        {"reason": "consecutive_failures", "count": consecutive_failures},
+                        {
+                            "reason": "consecutive_failures",
+                            "count": self._consecutive_failures,
+                        },
                     )
                     time.sleep(FAILURE_COOLDOWN_SECONDS)
-                    consecutive_failures = 0
+                    self._consecutive_failures = 0
 
             time.sleep(APPLY_DELAY_SECONDS)
 
@@ -283,7 +323,11 @@ class AutomationRunner:
         self._emit("cycle_complete", {"search_term": term})
 
     def _apply_to_job(self, job: JobListing) -> bool:
-        """Apply to a single job.
+        """Request application via queue and wait for result from main thread.
+
+        Sends an ApplyRequest to the apply_queue and blocks waiting for
+        an ApplyResult from the result_queue. This allows Playwright
+        operations to happen on the main thread.
 
         Args:
             job: Job listing to apply to.
@@ -291,12 +335,8 @@ class AutomationRunner:
         Returns:
             True if application succeeded, False otherwise.
         """
-        if self._agent is None:
-            logger.error("Agent not initialized")
-            return False
-
         self._stats.current_job = f"{job.title} at {job.company}"
-        logger.info(f"Applying to: {self._stats.current_job}")
+        logger.info(f"Requesting apply to: {self._stats.current_job}")
 
         self._emit(
             "apply_start",
@@ -309,25 +349,32 @@ class AutomationRunner:
             },
         )
 
+        request = ApplyRequest(job=job)
+        logger.debug(f"Putting ApplyRequest in queue for {job.url}")
+        self._apply_queue.put(request)
+
         try:
-            result = self._agent.apply(job.url)
-        except Exception as e:
-            logger.error(f"Application error: {e}")
-            self._queue.mark_failed(job.url, str(e))
+            logger.debug(f"Waiting for ApplyResult (timeout={APPLY_TIMEOUT_SECONDS}s)")
+            result = self._result_queue.get(timeout=APPLY_TIMEOUT_SECONDS)
+        except queue.Empty:
+            logger.error(
+                f"Apply timeout after {APPLY_TIMEOUT_SECONDS}s - no response from main thread"
+            )
+            self._queue.mark_failed(job.url, "Apply timeout - no response from main thread")
             self._stats.jobs_applied += 1
             self._stats.failed_count += 1
             self._emit(
                 "apply_failed",
                 {
                     "job": {"title": job.title, "company": job.company, "url": job.url},
-                    "error": str(e),
+                    "error": "Apply timeout - no response from main thread",
                 },
             )
             return False
 
         self._stats.jobs_applied += 1
 
-        if result.status == ApplicationStatus.SUCCESS:
+        if result.success:
             self._queue.mark_applied(job.url)
             self._stats.success_count += 1
             logger.info(f"Successfully applied to {job.company}")
@@ -335,19 +382,20 @@ class AutomationRunner:
                 "apply_complete",
                 {
                     "job": {"title": job.title, "company": job.company, "url": job.url},
-                    "result": {"status": result.status.value, "message": result.message},
+                    "result": {"status": "success", "message": "Application submitted"},
                 },
             )
             return True
 
-        self._queue.mark_failed(job.url, result.message)
+        error_msg = result.error or "Unknown error"
+        self._queue.mark_failed(job.url, error_msg)
         self._stats.failed_count += 1
-        logger.warning(f"Failed to apply to {job.company}: {result.message}")
+        logger.warning(f"Failed to apply to {job.company}: {error_msg}")
         self._emit(
             "apply_failed",
             {
                 "job": {"title": job.title, "company": job.company, "url": job.url},
-                "result": {"status": result.status.value, "message": result.message},
+                "error": error_msg,
             },
         )
         return False
