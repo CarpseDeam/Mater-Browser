@@ -495,6 +495,11 @@ class DashboardApp:
             try:
                 app_result = self._agent.apply(job.url)
                 success = app_result.status == ApplicationStatus.SUCCESS
+
+                if app_result.status == ApplicationStatus.NEEDS_LOGIN:
+                    logger.error(f"[STOPPING] {app_result.message}")
+                    self._on_login_required(app_result.message)
+
                 result = ApplyResult(
                     job=job,
                     success=success,
@@ -645,6 +650,18 @@ class DashboardApp:
         self._update_stats_display()
 
         self._log(f"✗ Failed to apply to {company}: {error}")
+
+    def _on_login_required(self, message: str) -> None:
+        """Handle login required - stop automation and alert user.
+
+        Args:
+            message: Login required message with platform details.
+        """
+        self._log(f"⚠️ {message}")
+        self.activity_label.config(text=f"⚠️ {message}", foreground=ERROR_COLOR)
+
+        if self.runner and self.runner.is_running:
+            self.runner.stop()
 
     def run(self) -> None:
         """Run the dashboard application."""

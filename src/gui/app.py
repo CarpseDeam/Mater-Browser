@@ -677,6 +677,11 @@ Resume: {self.profile.resume_path or 'Not set'}"""
                         }
                         self.job_history.append(record)
                         self._save_history()
+                    elif result.status == ApplicationStatus.NEEDS_LOGIN:
+                        self.job_queue.mark_failed(job.url, result.message)
+                        self._log(f"⚠️ [STOPPING] {result.message}")
+                        self.bulk_stop_flag = True
+                        break
                     else:
                         self.job_queue.mark_failed(job.url, result.message)
                         self._log(f"✗ Failed: {result.message}")

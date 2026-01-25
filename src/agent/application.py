@@ -58,6 +58,31 @@ EXTERNAL_APPLY_SELECTORS: list[str] = [
 # Navigation timeout for external redirects (milliseconds)
 EXTERNAL_REDIRECT_TIMEOUT_MS: int = 15000
 
+# Login page URL patterns by platform
+LOGIN_URL_PATTERNS: dict[str, list[str]] = {
+    "linkedin": [
+        "linkedin.com/login",
+        "linkedin.com/checkpoint",
+        "linkedin.com/uas/login",
+    ],
+    "indeed": [
+        "secure.indeed.com/auth",
+        "indeed.com/account/login",
+        "indeed.com/account/signin",
+    ],
+    "dice": [
+        "dice.com/dashboard/login",
+        "dice.com/login",
+    ],
+    "generic": [
+        "/login",
+        "/signin",
+        "/sign-in",
+        "/auth",
+        "/authenticate",
+    ],
+}
+
 
 class ApplicationStatus(Enum):
     """Status of job application attempt."""
@@ -67,6 +92,7 @@ class ApplicationStatus(Enum):
     MAX_PAGES_REACHED = "max_pages_reached"
     STUCK = "stuck"
     ERROR = "error"
+    NEEDS_LOGIN = "needs_login"
 
 
 @dataclass
@@ -177,6 +203,45 @@ class ApplicationAgent:
         else:
             return JobSource.DIRECT
 
+    def _check_login_required(self) -> Optional[str]:
+        """
+        Check if current page is a login page.
+
+        Returns:
+            Platform name if login required, None if not on login page.
+        """
+        current_url = self._page.url.lower()
+
+        # Check URL patterns
+        for platform, patterns in LOGIN_URL_PATTERNS.items():
+            if any(pattern in current_url for pattern in patterns):
+                logger.warning(
+                    f"[ACTION REQUIRED] {platform.upper()} login page detected: {current_url}"
+                )
+                return platform
+
+        # Check page content for login indicators
+        try:
+            password_field = self._page.raw.locator('input[type="password"]').first
+            if password_field.is_visible(timeout=1000):
+                if "linkedin" in current_url:
+                    platform = "linkedin"
+                elif "indeed" in current_url:
+                    platform = "indeed"
+                elif "dice" in current_url:
+                    platform = "dice"
+                else:
+                    platform = "unknown"
+
+                logger.warning(
+                    f"[ACTION REQUIRED] {platform.upper()} login form detected (password field visible)"
+                )
+                return platform
+        except Exception:
+            pass
+
+        return None
+
     def _apply_linkedin(self, job_url: str) -> ApplicationResult:
         """
         Handle LinkedIn Easy Apply flow.
@@ -213,6 +278,15 @@ class ApplicationAgent:
                 raise
 
         self._page.wait(2000)
+
+        # Check if we hit a login wall
+        login_platform = self._check_login_required()
+        if login_platform:
+            return ApplicationResult(
+                status=ApplicationStatus.NEEDS_LOGIN,
+                message=f"Login required for {login_platform.upper()} - please authenticate in browser",
+                url=job_url,
+            )
 
         # Find and click Easy Apply button
         if not self._click_apply_button(LINKEDIN_APPLY_SELECTORS):
@@ -265,6 +339,15 @@ class ApplicationAgent:
 
         self._page.wait(2000)
 
+        # Check if we hit a login wall immediately
+        login_platform = self._check_login_required()
+        if login_platform:
+            return ApplicationResult(
+                status=ApplicationStatus.NEEDS_LOGIN,
+                message=f"Login required for {login_platform.upper()} - please authenticate in browser",
+                url=job_url,
+            )
+
         # Capture current state before clicking
         original_url = self._page.url
         original_page_count = len(self._tabs.context.pages)
@@ -286,6 +369,15 @@ class ApplicationAgent:
 
         if not redirected:
             logger.warning("No redirect detected - may be on application page already")
+
+        # Check if redirect landed on a login page
+        login_platform = self._check_login_required()
+        if login_platform:
+            return ApplicationResult(
+                status=ApplicationStatus.NEEDS_LOGIN,
+                message=f"Login required for {login_platform.upper()} ATS - please authenticate in browser",
+                url=job_url,
+            )
 
         # Reinitialize DOM service for new page context
         self._dom_service = DomService(self._page)
