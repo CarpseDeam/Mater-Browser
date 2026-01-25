@@ -1,0 +1,58 @@
+first_name: "Kori"
+last_name: "Mead"
+email: "meadk989@gmail.com"
+phone: "580-301-3358"
+location: "Lorain, OH"
+linkedin_url: "https://www.linkedin.com/in/kori-mead-859b20355/"
+github_url: "https://github.com/CarpseDeam"
+portfolio_url: ""
+resume_path: "C:\\Projects\\Mater-Browser\\assets\\kori_mead_resume.pdf"
+
+years_experience: 6
+current_title: "Backend/Platform Engineer"
+summary: "Backend-focused Python Engineer with 6+ years of professional experience designing and operating resilient APIs, data ingestion pipelines, and platform infrastructure."
+
+skills:
+  - Python
+  - FastAPI
+  - PostgreSQL
+  - Snowflake
+  - AWS
+  - Docker
+  - SQL
+  - Pydantic
+  - SQLAlchemy
+  - AsyncIO
+  - Selenium
+  - Git
+  - CI/CD
+  - Pytest
+
+experience:
+  - title: "Python Systems Engineer"
+    company: "Mercor"
+    dates: "April 2025 - September 2025"
+    highlights:
+      - "Stabilized critical AI ingestion pipelines for $100M enterprise client"
+      - "Designed centralized FastAPI services with sub-200ms latency"
+      - "Built SQL-driven operational dashboards (Snowflake, Hex)"
+  
+  - title: "Independent Systems Developer"
+    company: "Self-Employed"
+    dates: "January 2020 - March 2025"
+    highlights:
+      - "Architected backends supporting ~25,000 concurrent users"
+      - "Developed commercial AI-assisted data labeling platform (Snowball)"
+      - "Engineered large-scale web scraping systems"
+
+education:
+  - institution: "United States Air Force"
+    description: "Technical & Electrical Systems Training"
+
+extra:
+  work_authorization: "US Citizen"
+  requires_sponsorship: false
+  willing_to_relocate: false
+  remote_only: true
+  veteran: true
+  clearance: false

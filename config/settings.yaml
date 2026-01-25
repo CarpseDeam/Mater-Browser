@@ -1,0 +1,9 @@
+browser:
+  cdp_port: 9333
+  connect_retries: 5
+  retry_delay: 2.0
+  timeout: 30000
+
+claude:
+  model: "claude-sonnet-4-20250514"
+  max_tokens: 4096
