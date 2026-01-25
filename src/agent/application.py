@@ -17,6 +17,48 @@ logger = logging.getLogger(__name__)
 APPLICATION_TIMEOUT_SECONDS: float = 180.0
 
 
+class JobSource(Enum):
+    """Source platform for job listing."""
+    LINKEDIN = "linkedin"
+    INDEED = "indeed"
+    DICE = "dice"
+    DIRECT = "direct"
+
+
+# URL patterns for source detection
+LINKEDIN_PATTERNS: list[str] = ["linkedin.com/jobs", "linkedin.com/job"]
+INDEED_PATTERNS: list[str] = ["indeed.com/viewjob", "indeed.com/jobs", "indeed.com/rc"]
+DICE_PATTERNS: list[str] = ["dice.com/job-detail", "dice.com/jobs"]
+
+# Apply button selectors by source
+LINKEDIN_APPLY_SELECTORS: list[str] = [
+    'button.jobs-apply-button',
+    'button[aria-label*="Easy Apply"]',
+    'button:has-text("Easy Apply")',
+]
+
+EXTERNAL_APPLY_SELECTORS: list[str] = [
+    # Indeed
+    'button#indeedApplyButton',
+    'button[data-testid="indeedApplyButton"]',
+    'a[data-testid="indeedApplyButton"]',
+    'button[id*="apply"]',
+    # Dice
+    'a.apply-button',
+    'button.btn-apply',
+    # Generic
+    'button:has-text("Apply")',
+    'a:has-text("Apply")',
+    'button:has-text("Apply Now")',
+    'a:has-text("Apply Now")',
+    'a:has-text("Apply on company site")',
+    '[data-automation="job-detail-apply"]',
+]
+
+# Navigation timeout for external redirects (milliseconds)
+EXTERNAL_REDIRECT_TIMEOUT_MS: int = 15000
+
+
 class ApplicationStatus(Enum):
     """Status of job application attempt."""
     SUCCESS = "success"
@@ -83,6 +125,8 @@ class ApplicationAgent:
         """
         Apply to a job given its URL.
 
+        Routes to source-specific apply logic based on URL.
+
         Args:
             job_url: URL of the job posting (LinkedIn, Indeed, company site, etc.)
 
@@ -91,83 +135,219 @@ class ApplicationAgent:
         """
         logger.info(f"Starting application: {job_url}")
 
+        source = self._detect_source(job_url)
+        logger.info(f"Detected source: {source.value}")
+
         try:
             self._page = self._tabs.get_page()
             self._dom_service = DomService(self._page)
             self._runner = ActionRunner(self._page, self._dom_service)
 
-            self._page.goto(job_url)
-            self._page.wait(2000)
-
-            if not self._click_apply_button():
-                return ApplicationResult(
-                    status=ApplicationStatus.NO_APPLY_BUTTON,
-                    message="Could not find Apply button",
-                    url=job_url
-                )
-
-            self._handle_new_tab()
-
-            return self._process_form_pages(job_url)
+            if source == JobSource.LINKEDIN:
+                return self._apply_linkedin(job_url)
+            else:
+                return self._apply_external(job_url, source)
 
         except Exception as e:
-            logger.error(f"Application error: {e}")
+            logger.exception(f"Application error: {e}")
             return ApplicationResult(
                 status=ApplicationStatus.ERROR,
                 message=str(e),
                 url=job_url
             )
 
-    def _click_apply_button(self) -> bool:
-        """Find and click the Apply/Easy Apply button."""
-        logger.info("Looking for Apply button...")
+    def _detect_source(self, url: str) -> JobSource:
+        """
+        Detect job source platform from URL.
 
-        apply_selectors = [
-            'button.jobs-apply-button',
-            'button[data-job-id]',
-            'button#indeedApplyButton',
-            'button[data-testid="indeedApplyButton"]',
-            'button:has-text("Apply")',
-            'a:has-text("Apply")',
-            'button:has-text("Easy Apply")',
-            'button:has-text("Apply Now")',
-            'a:has-text("Apply Now")',
-            '[data-automation="job-detail-apply"]',
-            '.apply-button',
-            '#apply-button',
-        ]
+        Args:
+            url: Job posting URL.
 
-        for selector in apply_selectors:
+        Returns:
+            JobSource enum value for the detected platform.
+        """
+        url_lower = url.lower()
+
+        if any(pattern in url_lower for pattern in LINKEDIN_PATTERNS):
+            return JobSource.LINKEDIN
+        elif any(pattern in url_lower for pattern in INDEED_PATTERNS):
+            return JobSource.INDEED
+        elif any(pattern in url_lower for pattern in DICE_PATTERNS):
+            return JobSource.DICE
+        else:
+            return JobSource.DIRECT
+
+    def _apply_linkedin(self, job_url: str) -> ApplicationResult:
+        """
+        Handle LinkedIn Easy Apply flow.
+
+        Easy Apply opens a modal on the same page - no navigation required.
+
+        Args:
+            job_url: LinkedIn job posting URL.
+
+        Returns:
+            ApplicationResult with status and details.
+        """
+        logger.info("Using LinkedIn Easy Apply flow")
+
+        self._page.goto(job_url)
+        self._page.wait(2000)
+
+        # Find and click Easy Apply button
+        if not self._click_apply_button(LINKEDIN_APPLY_SELECTORS):
+            # Fallback to generic selectors
+            if not self._click_apply_button(EXTERNAL_APPLY_SELECTORS):
+                return ApplicationResult(
+                    status=ApplicationStatus.NO_APPLY_BUTTON,
+                    message="Could not find Easy Apply button",
+                    url=job_url
+                )
+
+        # Wait for modal to appear
+        self._page.wait(1500)
+
+        # Modal is on same page - process forms
+        return self._process_form_pages(job_url)
+
+    def _apply_external(self, job_url: str, source: JobSource) -> ApplicationResult:
+        """
+        Handle external job board apply flow (Indeed, Dice, etc).
+
+        External applies redirect to an ATS (Greenhouse, Lever, Workday).
+        We must wait for the redirect BEFORE extracting DOM.
+
+        Args:
+            job_url: Job posting URL.
+            source: Detected job source platform.
+
+        Returns:
+            ApplicationResult with status and details.
+        """
+        logger.info(f"Using external apply flow for {source.value}")
+
+        self._page.goto(job_url)
+        self._page.wait(2000)
+
+        # Capture current state before clicking
+        original_url = self._page.url
+        original_page_count = len(self._tabs.context.pages)
+
+        logger.info(f"Original URL: {original_url}")
+        logger.info(f"Original page count: {original_page_count}")
+
+        # Find and click apply button
+        if not self._click_apply_button(EXTERNAL_APPLY_SELECTORS):
+            return ApplicationResult(
+                status=ApplicationStatus.NO_APPLY_BUTTON,
+                message=f"Could not find Apply button on {source.value}",
+                url=job_url
+            )
+
+        # Wait for either: new tab opens OR current page navigates
+        logger.info("Waiting for redirect to ATS...")
+        redirected = self._wait_for_redirect(original_url, original_page_count)
+
+        if not redirected:
+            logger.warning("No redirect detected - may be on application page already")
+
+        # Reinitialize DOM service for new page context
+        self._dom_service = DomService(self._page)
+        self._runner = ActionRunner(self._page, self._dom_service)
+
+        logger.info(f"Now on: {self._page.url}")
+
+        # NOW we can process the actual application form
+        return self._process_form_pages(job_url)
+
+    def _wait_for_redirect(self, original_url: str, original_page_count: int) -> bool:
+        """
+        Wait for navigation to complete after clicking apply.
+
+        Handles both:
+        - Same-tab navigation (URL changes)
+        - New-tab opens (page count increases)
+
+        Args:
+            original_url: URL before clicking apply.
+            original_page_count: Number of open tabs before clicking.
+
+        Returns:
+            True if redirect detected, False if timeout.
+        """
+        start = time.time()
+        timeout_sec = EXTERNAL_REDIRECT_TIMEOUT_MS / 1000
+
+        while (time.time() - start) < timeout_sec:
+            # Check for new tab
+            current_pages = self._tabs.context.pages
+            if len(current_pages) > original_page_count:
+                # Switch to new tab
+                new_page = current_pages[-1]
+                self._page = Page(new_page)
+                logger.info(f"Switched to new tab: {self._page.url}")
+                self._page.wait(2000)
+                return True
+
+            # Check for same-tab navigation
+            current_url = self._page.url
+            if current_url != original_url:
+                logger.info(f"Same-tab navigation: {original_url} -> {current_url}")
+                self._page.wait(2000)
+                return True
+
+            # Small wait before next check
+            self._page.wait(500)
+
+        logger.warning(f"Redirect timeout after {timeout_sec}s")
+        return False
+
+    def _click_apply_button(self, selectors: list[str]) -> bool:
+        """
+        Find and click apply button using provided selectors.
+
+        Args:
+            selectors: List of CSS/text selectors to try in order.
+
+        Returns:
+            True if button found and clicked, False otherwise.
+        """
+        logger.info(f"Looking for Apply button ({len(selectors)} selectors)...")
+
+        # Try explicit selectors first
+        for selector in selectors:
             try:
                 loc = self._page.raw.locator(selector).first
                 if loc.is_visible(timeout=1000):
                     logger.info(f"Found Apply button: {selector}")
                     loc.click()
-                    self._page.wait(2000)
                     return True
             except Exception:
                 continue
 
+        # Fallback: DOM extraction search
         logger.info("Trying DOM extraction to find Apply button...")
-        dom_state = self._dom_service.extract()
+        try:
+            dom_state = self._dom_service.extract()
 
-        for el in dom_state.elements:
-            text = (el.text or "").lower()
-            label = (el.label or "").lower()
-            btn_text = (el.buttonText or "").lower()
+            for el in dom_state.elements:
+                text = (el.text or "").lower()
+                label = (el.label or "").lower()
+                btn_text = (el.buttonText or "").lower()
 
-            if any(kw in text or kw in label or kw in btn_text
-                   for kw in ["apply", "easy apply", "apply now"]):
-                if el.tag in ("button", "a") or el.type in ("submit", "button"):
-                    selector = self._dom_service.get_selector(el.ref)
-                    if selector:
-                        try:
-                            self._page.raw.locator(selector).first.click()
-                            self._page.wait(2000)
-                            logger.info(f"Clicked Apply via DOM: {el.ref}")
-                            return True
-                        except Exception:
-                            continue
+                if any(kw in text or kw in label or kw in btn_text
+                       for kw in ["apply", "easy apply", "apply now"]):
+                    if el.tag in ("button", "a") or el.type in ("submit", "button"):
+                        selector = self._dom_service.get_selector(el.ref)
+                        if selector:
+                            try:
+                                self._page.raw.locator(selector).first.click()
+                                logger.info(f"Clicked Apply via DOM: {el.ref}")
+                                return True
+                            except Exception:
+                                continue
+        except Exception as e:
+            logger.warning(f"DOM extraction failed: {e}")
 
         return False
 
