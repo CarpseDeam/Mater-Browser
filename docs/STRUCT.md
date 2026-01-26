@@ -5,6 +5,10 @@
 
 ## Changelog
 
+- **2026-01-26**: Rewrote Claude prompt for improved job application form filling
+  - `src/agent/prompts.py` - Completely overhauled `SYSTEM_PROMPT` with explicit page state detection, element filtering, and field prioritization
+  - Standardized JSON output format to include `page_type`, `reasoning`, and `actions`
+
 - **2026-01-26**: Improved external LinkedIn flow and upload action robustness
   - Refactored `ExternalFlow` and `LinkedInFlow` with standardized wait constants and modular redirection helpers
   - Updated `LinkedInFlow` for immediate popup handling to prevent timeouts
@@ -75,10 +79,11 @@
 
 - `src/` - Source code
 
-    - `agent/`
-  
-                  - `form_processor.py` - Orchestrates form filling and multi-page flows      
-  
+        - `agent/`
+    
+                      - `prompts.py` - Manages system and user prompts for Claude agent
+    
+                      - `form_processor.py` - Orchestrates form filling and multi-page flows  
           
   
                   - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) using DOM analysis and vision fallback

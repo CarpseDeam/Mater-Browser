@@ -2,6 +2,13 @@
 
 All notable changes to this project.
 
+- 2026-01-26: feat: Rewrite Claude prompt for improved job application form filling
+  - Implemented explicit page state detection (Job Listing, Application Form, Confirmation)
+  - Added strict element filtering to ignore navigation/footer links and focus on form inputs
+  - Defined form-filling priorities (Required fields > Contact info > Location > etc.)
+  - Standardized field matching for common ATS questions (Work authorization, EEO, etc.)
+  - Updated `build_form_prompt` to include `page_type` classification in the expected JSON output
+
 - 2026-01-26: refactor: Simplify LinkedIn navigation logic and use centralized wait constants
   - Refactored `LinkedInFlow` to use `MAX_POPUP_WAIT_ATTEMPTS`, `MEDIUM_WAIT_MS`, and `LONG_WAIT_MS`
   - Simplified navigation in `LinkedInFlow.run` by leveraging the new `Page.goto` retry logic and removing redundant SPA-specific error handling

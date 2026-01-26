@@ -1,7 +1,10 @@
 """Action models using element refs."""
-from typing import Literal, Union
+from typing import Literal, Union, Optional
 
 from pydantic import BaseModel
+
+
+PageType = Literal["job_listing", "form", "confirmation", "unknown"]
 
 
 class FillAction(BaseModel):
@@ -48,6 +51,7 @@ Action = Union[FillAction, SelectAction, ClickAction, UploadAction, WaitAction]
 class ActionPlan(BaseModel):
     """Ordered list of actions to execute."""
 
+    page_type: PageType = "unknown"
     reasoning: str
     actions: list[Action]
     needs_more_pages: bool = False

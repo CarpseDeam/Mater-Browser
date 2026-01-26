@@ -12,6 +12,7 @@ from .claude import ClaudeAgent
 from ..executor.runner import ActionRunner
 from .page_classifier import PageClassifier
 from .loop_detector import LoopDetector, MAX_SAME_STATE_COUNT
+from .actions import ActionPlan
 from .models import (
     JobSource, ApplicationStatus, ApplicationResult,
     ACCOUNT_CREATION_URL_PATTERNS, ACCOUNT_CREATION_CONTENT,
@@ -113,6 +114,13 @@ class FormProcessor:
                     return ApplicationResult(ApplicationStatus.STUCK, "Failed to analyze form", pages_processed, job_url)
                 continue
 
+            page_type_result = self._handle_page_type(plan, pages_processed, job_url)
+            if page_type_result is not None:
+                return page_type_result
+            if self._is_job_listing_click(plan):
+                self._execute_job_listing_click(plan)
+                continue
+
             if len(plan.actions) == 0:
                 input_count = sum(1 for e in dom_state.elements if e.get('tag') in ('input', 'select', 'textarea'))
                 page_state, handled = self._zero_handler.classify_and_handle(input_count)
@@ -207,3 +215,31 @@ class FormProcessor:
         except Exception as e:
             logger.debug(f"Next button locator failed: {e}")
         return False
+
+    def _handle_page_type(
+        self, plan: ActionPlan, pages_processed: int, job_url: str
+    ) -> Optional[ApplicationResult]:
+        """Handle confirmation page type, returning result if complete."""
+        if plan.page_type == "confirmation":
+            logger.info("Claude detected confirmation page")
+            return ApplicationResult(
+                ApplicationStatus.SUCCESS,
+                "Confirmation page detected",
+                pages_processed,
+                job_url,
+            )
+        return None
+
+    def _is_job_listing_click(self, plan: ActionPlan) -> bool:
+        """Check if this is a job listing page with single Apply click."""
+        return (
+            plan.page_type == "job_listing"
+            and len(plan.actions) == 1
+            and plan.actions[0].action == "click"
+        )
+
+    def _execute_job_listing_click(self, plan: ActionPlan) -> None:
+        """Execute single click action on job listing page."""
+        logger.info("Job listing page - clicking Apply")
+        self._runner.execute(plan)
+        self._page.wait(1500)
