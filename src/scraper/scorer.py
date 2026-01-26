@@ -7,34 +7,78 @@ from .jobspy_client import JobListing
 
 logger = logging.getLogger(__name__)
 
-# Tech stacks to exclude for Python-focused searches
+# Tech stacks to exclude - incompatible with Python backend focus
 STACK_EXCLUSIONS: list[str] = [
     # .NET ecosystem
-    ".net", "dotnet", "c#", "csharp", "asp.net", "blazor",
-    # Frontend-only (when not full-stack with Python)
-    "angular developer", "react developer", "vue developer", "frontend developer", "front-end developer",
+    ".net", "dotnet", "c#", "csharp", "asp.net", "blazor", "f#",
     # Java ecosystem
-    "java developer", "java engineer", "spring boot", "kotlin",
+    "java developer", "java engineer", "spring boot", "spring framework",
+    "kotlin", "scala", "jvm",
+    # Frontend-only frameworks (as primary requirement)
+    "angular", "react developer", "react engineer", "vue developer",
+    "vue engineer", "frontend developer", "front-end developer",
+    "frontend engineer", "front-end engineer", "ui developer", "ui engineer",
     # Other backend stacks
-    "php", "laravel", "symfony",
-    "ruby", "rails", "ruby on rails",
-    "golang developer", "go developer",
+    "php developer", "php engineer", "laravel", "symfony", "wordpress",
+    "ruby developer", "ruby engineer", "rails", "ruby on rails",
+    "golang developer", "go developer", "go engineer", "rust developer",
     # Mobile
-    "ios developer", "android developer", "swift developer", "mobile developer",
-    # Specific non-Python roles
-    "salesforce", "servicenow", "sap ",
+    "ios developer", "ios engineer", "android developer", "android engineer",
+    "swift developer", "mobile developer", "mobile engineer", "react native",
+    "flutter", "kotlin developer",
+    # Enterprise/Legacy
+    "salesforce", "servicenow", "sap ", "oracle developer", "peoplesoft",
+    "cobol", "mainframe", "as400",
+    # Data Science (different from Data Engineering)
+    "machine learning engineer", "ml engineer", "ai engineer",
+    "data scientist", "research scientist",
 ]
 
-# Role types to exclude - not aligned with target position
+# Role types to exclude
 ROLE_EXCLUSIONS: list[str] = [
-    # Seniority mismatches (4+ years experience = not junior)
-    "junior", "jr.", "jr ", "entry level", "entry-level", "intern", "internship",
+    # Seniority mismatches (4+ years = mid-senior, not junior)
+    "junior", "jr.", "jr ", "entry level", "entry-level",
+    "associate developer", "associate engineer",
+    "intern", "internship", "apprentice", "trainee", "graduate",
     # Non-development roles
-    "system admin", "sysadmin", "systems administrator", "network admin",
-    "helpdesk", "help desk", "it support", "tech support", "desktop support",
-    "qa analyst", "qa engineer", "quality assurance",
-    # Management (unless targeting management)
-    "manager", "lead", "supervisor",
+    "system admin", "sysadmin", "systems administrator",
+    "network admin", "network engineer", "infrastructure engineer",
+    "helpdesk", "help desk", "it support", "tech support",
+    "desktop support", "support engineer", "support specialist",
+    # QA/Testing
+    "qa analyst", "qa engineer", "quality assurance", "test engineer",
+    "sdet", "automation tester",
+    # Management/Leadership
+    "engineering manager", "tech lead", "team lead", "director",
+    "vp of engineering", "head of engineering", "cto",
+    # Security-specific
+    "security engineer", "security analyst", "penetration tester",
+    "cybersecurity", "infosec",
+    # DevOps-only (different from Platform Engineering with coding)
+    "devops engineer", "site reliability", "sre",
+    "cloud engineer", "cloud architect",
+    # Over-senior
+    "staff engineer", "principal engineer", "distinguished engineer",
+    "senior staff", "architect",
+    # Full Stack (often means frontend-heavy or jack-of-all-trades)
+    "full stack", "fullstack", "full-stack",
+]
+
+# Positive signals that boost score - these indicate good fit
+POSITIVE_SIGNALS: list[str] = [
+    # Python ecosystem
+    "fastapi", "django", "flask", "sqlalchemy", "pydantic",
+    "celery", "asyncio", "pytest",
+    # Data/Infrastructure
+    "postgresql", "postgres", "snowflake", "redshift",
+    "airflow", "dagster", "prefect", "dbt",
+    "kafka", "rabbitmq", "redis",
+    # Cloud/DevOps (as tools, not primary role)
+    "aws", "docker", "kubernetes", "terraform",
+    "ci/cd", "github actions",
+    # Architecture
+    "microservices", "rest api", "graphql",
+    "distributed systems", "event-driven",
 ]
 
 
@@ -49,7 +93,8 @@ class JobScorer:
         excluded_keywords: Optional[list[str]] = None,
         stack_exclusions: Optional[list[str]] = None,
         role_exclusions: Optional[list[str]] = None,
-        min_score: float = 0.4,
+        positive_signals: Optional[list[str]] = None,
+        min_score: float = 0.5,
     ) -> None:
         self.profile = profile
         self.skills = [s.lower() for s in profile.get("skills", [])]
@@ -58,7 +103,15 @@ class JobScorer:
             k.lower()
             for k in (
                 title_keywords
-                or ["python", "backend", "platform", "systems", "data", "engineer"]
+                or [
+                    # Primary targets
+                    "python", "backend", "back-end", "back end",
+                    "platform", "data engineer", "data infrastructure",
+                    "systems engineer", "api engineer", "api developer",
+                    # Secondary targets (good if combined with Python)
+                    "software engineer",
+                    "integration", "etl", "pipeline",
+                ]
             )
         ]
         self.required_keywords = [
@@ -69,15 +122,16 @@ class JobScorer:
             for k in (
                 excluded_keywords
                 or [
-                    "senior staff",
-                    "principal",
-                    "director",
-                    "vp",
-                    "head of",
-                    "10+ years",
-                    "15+ years",
-                    "clearance required",
-                    "on-site only",
+                    # Seniority requirements we can't meet
+                    "10+ years", "15+ years", "12+ years",
+                    "10 years", "15 years", "12 years",
+                    # Clearance/Location restrictions
+                    "clearance required", "security clearance", "ts/sci",
+                    "on-site only", "onsite only", "no remote",
+                    "must be local", "relocation required",
+                    # Specific tech requirements we don't have
+                    "node.js required", "java required", "c++ required",
+                    "react required", "angular required",
                 ]
             )
         ]
@@ -87,6 +141,9 @@ class JobScorer:
         self.role_exclusions = [
             k.lower() for k in (role_exclusions or ROLE_EXCLUSIONS)
         ]
+        self.positive_signals = [
+            k.lower() for k in (positive_signals or POSITIVE_SIGNALS)
+        ]
         self.min_score = min_score
 
     def score(self, job: JobListing) -> float:
@@ -95,13 +152,14 @@ class JobScorer:
 
         Factors:
         - Title keyword match (40%)
-        - Skills match in description (40%)
+        - Skills + positive signals match in description (40%)
         - Remote preference (10%)
         - Freshness (10%)
 
         Exclusions:
         - Excluded keywords in title/description
         - Incompatible tech stacks in title
+        - Excluded role types in title
         - Missing required keywords
         """
         title_lower = job.title.lower()
@@ -134,9 +192,15 @@ class JobScorer:
         if self.title_keywords:
             score += 0.4 * min(title_matches / 2, 1.0)
 
+        # Skills/tech match in description (40%)
+        # Count matches from both profile skills AND positive signals
         skill_matches = sum(1 for skill in self.skills if skill in desc_lower)
-        if self.skills:
-            score += 0.4 * min(skill_matches / 5, 1.0)
+        signal_matches = sum(1 for signal in self.positive_signals if signal in desc_lower)
+        combined_matches = skill_matches + signal_matches
+
+        if self.skills or self.positive_signals:
+            # Need at least 3 matches for full score
+            score += 0.4 * min(combined_matches / 3, 1.0)
 
         if job.is_remote:
             score += 0.1

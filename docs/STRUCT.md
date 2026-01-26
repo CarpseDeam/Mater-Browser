@@ -25,16 +25,23 @@ src/
 ## Key Components
 
 ### JobScorer (`src/scraper/scorer.py`)
-Scores and filters job listings based on:
-- Title keyword matching (40%)
-- Skills match in description (40%)
+Scores and filters job listings for Python Backend/Platform Engineer roles (4+ years experience).
+
+**Scoring (0.0-1.0):**
+- Title keyword matching (40%) - python, backend, platform, data engineer, etc.
+- Skills + positive signals match (40%) - profile skills AND tech signals (fastapi, postgres, aws, etc.)
 - Remote preference (10%)
 - Freshness/recency (10%)
 
 **Exclusions:**
-- `STACK_EXCLUSIONS` - Tech stacks not aligned with Python focus (.NET, Java, PHP, etc.)
-- `ROLE_EXCLUSIONS` - Role types to exclude (junior, intern, sysadmin, QA, manager)
-- Custom excluded keywords (principal, director, clearance required, etc.)
+- `STACK_EXCLUSIONS` - Incompatible tech stacks (.NET, Java, PHP, Ruby, Go, Mobile, etc.)
+- `ROLE_EXCLUSIONS` - Non-target roles (junior, full stack, devops, QA, management, over-senior)
+- `excluded_keywords` - Clearance requirements, 10+ years experience, location restrictions
+
+**Positive Signals:**
+- `POSITIVE_SIGNALS` - Boost score for Python ecosystem (fastapi, django), data tools (postgres, snowflake), cloud (aws, docker)
+
+**Minimum score:** 0.5 (raised from 0.4 for stricter filtering)
 
 ### ApplicationAgent (`src/agent/application.py`)
 Orchestrates the complete job application flow:
@@ -52,6 +59,17 @@ Orchestrates the complete job application flow:
 - `_click_indeed_continue()` - Indeed-specific Continue button with scroll support
 
 ## Changelog
+
+### 2026-01-25 (update 3)
+- Complete overhaul of JobScorer for targeted Python Backend/Platform Engineer filtering
+- Expanded `STACK_EXCLUSIONS` to 30+ patterns (.NET, Java, PHP, Ruby, Go, Mobile, Enterprise, Data Science)
+- Expanded `ROLE_EXCLUSIONS` to 35+ patterns (junior, full stack, devops, QA, management, security, over-senior)
+- Added `POSITIVE_SIGNALS` list - 25+ patterns for Python ecosystem, data tools, cloud infrastructure
+- Updated `excluded_keywords` defaults - clearance, location restrictions, incompatible tech requirements
+- Updated `title_keywords` defaults - backend, platform, data engineer, api engineer, systems engineer
+- Score now combines profile skills + positive signals (need 3+ matches for full 40%)
+- Raised `min_score` from 0.4 to 0.5 for stricter filtering
+- Added `positive_signals` parameter to JobScorer for customization
 
 ### 2026-01-25 (update 2)
 - Fixed `_handle_indeed_resume_card()` to detect already-selected resumes (checkmark indicator)
