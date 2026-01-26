@@ -1,83 +1,94 @@
-Fix the external job flow in linkedin_flow.py and add Dice modal dismissal to page_classifier.py.
+Fix aggressive timeouts and add retry logic for navigation failures.
 
-**Problem 1: External jobs waste 30s trying to click invisible button**
+## Problem
+- `EXTERNAL_REDIRECT_TIMEOUT_MS = 15000` is too short - Workday/Taleo can take 30+ seconds
+- No retry on navigation failure - network hiccup = wrong page state
+- Magic numbers scattered everywhere instead of constants
 
-In `src/agent/linkedin_flow.py`, after `classifier.click_apply_button()` for EXTERNAL pages:
-- The popup is already captured by TabManager
-- But flow enters FormProcessor which extracts DOM from LinkedIn page
-- Claude says "click Apply button" 
-- Runner tries clicking the now-invisible button → 30s timeout
-- Eventually popup is handled, but we wasted 30s
+## Files to modify
+- `src/agent/models.py`
+- `src/agent/linkedin_flow.py`
+- `src/agent/external_flow.py`
+- `src/browser/page.py`
 
-**Fix for linkedin_flow.py:**
+## models.py changes
 
-After `classifier.click_apply_button()`, if `page_type == PageType.EXTERNAL_LINK`:
-1. Wait 1-2 seconds for popup
-2. Check `self._tabs.get_captured_popup_url()`
-3. If popup URL exists, navigate to it immediately
-4. THEN enter FormProcessor
-
+Add/update these constants at top of file:
 ```python
-if not classifier.click_apply_button():
-    return ApplicationResult(...)
+# Timeouts
+APPLICATION_TIMEOUT_SECONDS: float = 300.0  # 5 minutes total (was 180)
+EXTERNAL_REDIRECT_TIMEOUT_MS: int = 30000   # 30 seconds (was 15000)
+PAGE_LOAD_TIMEOUT_MS: int = 30000           # 30 seconds for page load
+ELEMENT_TIMEOUT_MS: int = 10000             # 10 seconds for element wait
+CLICK_TIMEOUT_MS: int = 8000                # 8 seconds for click
+SHORT_WAIT_MS: int = 500                    # Short pause
+MEDIUM_WAIT_MS: int = 1500                  # Medium pause  
+LONG_WAIT_MS: int = 2500                    # Long pause
 
-self._page.wait(1500)
-
-# For external jobs, immediately handle popup before FormProcessor
-if page_type == PageType.EXTERNAL_LINK:
-    popup_url = self._tabs.get_captured_popup_url()
-    if popup_url and popup_url != "about:blank":
-        logger.info(f"External job: navigating to popup {popup_url}")
-        self._page.goto(popup_url)
-        self._page.wait(2000)
-        self._tabs.close_extras(keep=1)
-
-# Now create FormProcessor with updated page state
-dom_service = DomService(self._page)
+# Retry counts
+MAX_NAVIGATION_RETRIES: int = 3
+MAX_CLICK_RETRIES: int = 3
+MAX_POPUP_WAIT_ATTEMPTS: int = 5
 ```
 
-**Problem 2: Dice modal blocks all clicks**
+## page.py changes
 
-On Dice, a React modal overlay blocks pointer events:
-```html
-<div data-rac="" class="fixed left-0 top-0 z-modal ... bg-black bg-opacity-50 ...">
-```
-
-**Fix for page_classifier.py `_dismiss_overlays()`:**
-
-Add Dice modal selector to the dismiss logic:
-```javascript
-// Add to the evaluate script:
-document.querySelectorAll('[class*="z-modal"][class*="bg-opacity"], [class*="bg-black"][class*="bg-opacity-50"]').forEach(el => {
-    if (el.classList.contains('fixed') && el.offsetParent) el.remove();
-});
-```
-
-**Problem 3: Upload action targets label instead of input**
-
-In `src/executor/runner.py`, the upload action fails when Claude targets a `<label>` instead of the actual `<input type="file">`.
-
-**Fix for runner.py `_execute_action()` UploadAction case:**
-
-When the locator resolves to a label, find and use the associated input:
+1. Add retry logic to `goto()`:
 ```python
-case UploadAction():
-    selector = self._dom.get_selector(action.ref)
-    loc = self._page.raw.locator(selector).first
+def goto(self, url: str, wait_until: str = "domcontentloaded", max_retries: int = 3) -> bool:
+    """Navigate to URL with retry logic.
     
-    # If targeting a label, find the associated input
-    tag = loc.evaluate("el => el.tagName.toLowerCase()")
-    if tag == "label":
-        for_attr = loc.get_attribute("for")
-        if for_attr:
-            loc = self._page.raw.locator(f'input#{for_attr}').first
-        else:
-            # Try finding input inside the label
-            loc = loc.locator('input[type="file"]').first
+    Returns True if navigation succeeded, False if all retries failed.
+    """
+    from .models import MEDIUM_WAIT_MS
     
-    loc.set_input_files(action.file)
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Navigating to: {url} (attempt {attempt + 1})")
+            self._page.goto(url, wait_until=wait_until, timeout=30000)
+            return True
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "err_aborted" in error_msg or "aborted" in error_msg:
+                logger.warning(f"Navigation aborted (attempt {attempt + 1}): {e}")
+                self.wait(MEDIUM_WAIT_MS)
+                # Check if we're actually on the right page
+                if url.split('?')[0] in self._page.url:
+                    logger.info("Navigation succeeded despite abort")
+                    return True
+            elif attempt < max_retries - 1:
+                logger.warning(f"Navigation failed (attempt {attempt + 1}): {e}")
+                self.wait(MEDIUM_WAIT_MS)
+            else:
+                logger.error(f"Navigation failed after {max_retries} attempts: {e}")
+                raise
+    return False
 ```
 
-Keep files under 200 lines. Test that external LinkedIn jobs now navigate to popup immediately without 30s delay.
+## linkedin_flow.py changes
+
+1. Import the new constants at top:
+```python
+from .models import (
+    ...,
+    MEDIUM_WAIT_MS, LONG_WAIT_MS, PAGE_LOAD_TIMEOUT_MS
+)
+```
+
+2. Replace magic numbers:
+- `self._page.wait(2000)` → `self._page.wait(LONG_WAIT_MS)`
+- `self._page.wait(1500)` → `self._page.wait(MEDIUM_WAIT_MS)`
+- `timeout=5000` → `timeout=PAGE_LOAD_TIMEOUT_MS`
+
+## external_flow.py changes
+
+1. Import the new constants
+2. Replace all magic number waits with constants
+3. Update `_wait_for_redirect()` to use `EXTERNAL_REDIRECT_TIMEOUT_MS` constant (it already does, but verify)
+
+## Code standards
+- Static typing everywhere
+- Max 25 lines per function  
+- Use logging module only
 
 Write clean, scalable, modular, efficient code. Follow single responsibility principle. Do not repeat yourself. Use consistent naming conventions. No unnecessary comments.

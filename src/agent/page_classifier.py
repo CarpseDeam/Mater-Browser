@@ -94,9 +94,13 @@ class PageClassifier:
             logger.warning("PageClassifier: No apply button candidate found")
             return False
         logger.info(f"PageClassifier: Clicking '{candidate.text}' (score={candidate.score:.2f})")
-        self._dismiss_overlays()
+        self.dismiss_overlays()
         if self._try_click_candidate(candidate, timeout):
+            self._page.wait_for_timeout(500)
+            self.dismiss_overlays()
             return True
+        self._page.wait_for_timeout(500)
+        self.dismiss_overlays()
         candidate = self.find_apply_button(refresh=True)
         return self._try_click_candidate(candidate, timeout) if candidate else False
 
@@ -144,11 +148,34 @@ class PageClassifier:
             score -= 3.0
         return score
 
-    def _dismiss_overlays(self) -> None:
+    def dismiss_overlays(self) -> None:
         try:
-            self._page.evaluate('''() => { document.querySelector('.msg-overlay-list-bubble')?.remove(); document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(el => el.offsetParent && el.remove()); document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach(d => { const text = (d.textContent || '').toLowerCase(); if (!text.includes('easy apply') && !text.includes('application') && d.offsetParent) d.remove(); }); document.querySelectorAll('.artdeco-toast-item, .notification-badge').forEach(n => n.remove()); document.querySelectorAll('[class*="z-modal"][class*="bg-opacity"], [class*="bg-black"][class*="bg-opacity-50"]').forEach(el => { if (el.classList.contains('fixed') && el.offsetParent) el.remove(); }); }''')
+            self._page.evaluate(self._get_overlay_removal_js())
         except Exception:
             pass
+
+    def _get_overlay_removal_js(self) -> str:
+        return '''() => {
+            document.querySelector('.msg-overlay-list-bubble')?.remove();
+            document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(el => el.offsetParent && el.remove());
+            document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach(d => {
+                const text = (d.textContent || '').toLowerCase();
+                if (!text.includes('easy apply') && !text.includes('application') && d.offsetParent) d.remove();
+            });
+            document.querySelectorAll('.artdeco-toast-item, .notification-badge').forEach(n => n.remove());
+            document.querySelectorAll('[class*="z-modal"][class*="bg-opacity"], [class*="bg-black"][class*="bg-opacity-50"]').forEach(el => {
+                if (el.classList.contains('fixed') && el.offsetParent) el.remove();
+            });
+            document.querySelectorAll('[style*="pointer-events"]').forEach(el => {
+                if (getComputedStyle(el).pointerEvents === 'none') return;
+                const style = getComputedStyle(el);
+                if (style.position === 'fixed' && parseInt(style.zIndex || 0) > 100) {
+                    if (!el.querySelector('form, input, button[type="submit"]')) {
+                        el.remove();
+                    }
+                }
+            });
+        }'''
 
     def _attempt_click_sequence(self, locator: Locator, timeout: int) -> bool:
         for attempt in self._click_attempts(locator, timeout):

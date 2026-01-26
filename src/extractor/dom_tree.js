@@ -72,12 +72,39 @@
         return null;
     }
 
+    function hasPointerEventsNone(el) {
+        let current = el;
+        while (current && current !== document.body) {
+            const style = window.getComputedStyle(current);
+            if (style.pointerEvents === 'none') return true;
+            current = current.parentElement;
+        }
+        return false;
+    }
+
+    function isCoveredByOverlay(el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return false;
+
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const topEl = document.elementFromPoint(centerX, centerY);
+
+        if (!topEl || el.contains(topEl) || topEl.contains(el)) return false;
+
+        const topStyle = window.getComputedStyle(topEl);
+        const isOverlay = topStyle.position === 'fixed' || topStyle.position === 'absolute';
+        return isOverlay;
+    }
+
     function isVisible(el) {
         const rect = el.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) return false;
         const style = window.getComputedStyle(el);
         if (style.display === 'none' || style.visibility === 'hidden') return false;
         if (parseFloat(style.opacity) === 0) return false;
+        if (hasPointerEventsNone(el)) return false;
+        if (isCoveredByOverlay(el)) return false;
         return true;
     }
 

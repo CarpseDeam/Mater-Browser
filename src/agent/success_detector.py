@@ -50,6 +50,16 @@ SUCCESS_TEXT_PATTERNS: list[str] = [
     "you have applied",
 ]
 
+JOB_PAGE_URL_PATTERNS: list[str] = [
+    "/job-detail",
+    "/viewjob",
+    "/jobs/view",
+    "/careers/job",
+    "/job/",
+    "/posting/",
+    "/requisition/",
+]
+
 
 class SuccessDetector:
     """Detects application completion through multiple signals."""
@@ -95,6 +105,31 @@ class SuccessDetector:
 
     def _check_text(self) -> CompletionResult:
         """Check page content for success text."""
+        if self._is_job_listing_page():
+            logger.debug("Skipping text check on job listing page")
+            return CompletionResult(False, CompletionSignal.NONE, "")
+
+        if not self._forms_filled:
+            return self._check_text_with_url_confirmation()
+
+        return self._check_text_content()
+
+    def _is_job_listing_page(self) -> bool:
+        """Check if current URL matches job listing patterns."""
+        url = self._page.url.lower()
+        return any(pattern in url for pattern in JOB_PAGE_URL_PATTERNS)
+
+    def _check_text_with_url_confirmation(self) -> CompletionResult:
+        """Require both URL pattern and text match when no form filled."""
+        url = self._page.url.lower()
+        has_success_url = any(p.lower() in url for p in SUCCESS_URL_PATTERNS)
+        if not has_success_url:
+            return CompletionResult(False, CompletionSignal.NONE, "")
+
+        return self._check_text_content()
+
+    def _check_text_content(self) -> CompletionResult:
+        """Check page content for success text patterns."""
         try:
             content = self._page.content().lower()
             for pattern in SUCCESS_TEXT_PATTERNS:

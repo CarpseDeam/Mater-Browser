@@ -35,6 +35,28 @@ class LinkedInFlow:
         self._timeout_seconds = timeout_seconds
         self._max_pages = max_pages
 
+    def _wait_for_external_popup(
+        self, max_attempts: int = 5, delay_ms: int = 1000
+    ) -> Optional[str]:
+        """Poll for captured popup URL with retries.
+
+        Args:
+            max_attempts: Maximum number of polling attempts.
+            delay_ms: Delay between attempts in milliseconds.
+
+        Returns:
+            Captured popup URL or None if not found.
+        """
+        for attempt in range(max_attempts):
+            url = self._tabs.get_captured_popup_url()
+            if url and url != "about:blank":
+                logger.info(f"Popup URL found on attempt {attempt + 1}: {url}")
+                return url
+            if attempt < max_attempts - 1:
+                self._page.wait(delay_ms)
+        logger.warning(f"No popup URL captured after {max_attempts} attempts")
+        return None
+
     def apply(self, job_url: str) -> ApplicationResult:
         """
         Handle LinkedIn Easy Apply flow.
@@ -122,11 +144,14 @@ class LinkedInFlow:
         self._page.wait(1500)
 
         if page_type == PageType.EXTERNAL_LINK:
-            popup_url = self._tabs.get_captured_popup_url()
-            if popup_url and popup_url != "about:blank":
+            popup_url = self._wait_for_external_popup(max_attempts=5, delay_ms=1000)
+            if popup_url:
                 logger.info(f"External job: navigating to popup {popup_url}")
-                self._page.goto(popup_url)
-                self._page.wait(2000)
+                try:
+                    self._page.goto(popup_url)
+                    self._page.wait(2000)
+                except Exception as e:
+                    logger.error(f"Failed to navigate to external URL: {e}")
                 self._tabs.close_extras(keep=1)
 
         dom_service = DomService(self._page)

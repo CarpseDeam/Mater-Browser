@@ -21,7 +21,7 @@ class TabManager:
         """
         self._browser = browser
         self._context: Optional[BrowserContext] = None
-        self._popup_url: Optional[str] = None
+        self._popup_urls: list[str] = []
         self._popup_handler_installed: bool = False
 
     @property
@@ -58,35 +58,59 @@ class TabManager:
             return
 
         def on_popup(popup: PlaywrightPage) -> None:
+            url = self._capture_popup_url(popup)
+            if url:
+                self._popup_urls.append(url)
+                logger.info(f"Captured popup URL: {url}")
             try:
-                popup.wait_for_load_state("domcontentloaded", timeout=5000)
-                self._popup_url = popup.url
-                logger.info(f"Captured popup URL: {self._popup_url}")
                 popup.close()
-            except Exception as e:
-                logger.debug(f"Popup handling error: {e}")
-                try:
-                    self._popup_url = popup.url
-                    popup.close()
-                except Exception:
-                    pass
+            except Exception:
+                pass
 
         page.on("popup", on_popup)
         self._popup_handler_installed = True
 
+    def _capture_popup_url(self, popup: PlaywrightPage) -> Optional[str]:
+        """Capture URL from popup with retry for about:blank."""
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                popup.wait_for_load_state("domcontentloaded", timeout=5000)
+            except Exception as e:
+                logger.debug(f"Popup load state error (attempt {attempt + 1}): {e}")
+            url = popup.url
+            if url and url != "about:blank":
+                return url
+            if attempt < max_attempts - 1:
+                time.sleep(0.5)
+        return popup.url if popup.url else None
+
     def get_captured_popup_url(self) -> Optional[str]:
-        """Get and clear the captured popup URL.
+        """Get and remove the first non-blank popup URL from the list.
 
         Returns:
-            The URL that was opened in a popup, or None if no popup was captured.
+            The first captured popup URL, or None if list is empty.
         """
-        url = self._popup_url
-        self._popup_url = None
-        return url
+        for i, url in enumerate(self._popup_urls):
+            if url and url != "about:blank":
+                return self._popup_urls.pop(i)
+        if self._popup_urls:
+            return self._popup_urls.pop(0)
+        return None
+
+    def get_all_popup_urls(self) -> list[str]:
+        """Get all captured popup URLs and clear the internal list.
+
+        Returns:
+            Copy of all captured URLs.
+        """
+        urls = self._popup_urls.copy()
+        self._popup_urls.clear()
+        return urls
 
     def clear_popup_url(self) -> None:
-        """Clear any captured popup URL."""
-        self._popup_url = None
+        """Clear all captured popup URLs."""
+        self._popup_urls.clear()
 
     def new_page(self) -> Page:
         """Create a new page/tab.

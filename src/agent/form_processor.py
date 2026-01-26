@@ -67,6 +67,7 @@ class FormProcessor:
                 pages_processed -= 1
                 continue
 
+            PageClassifier(self._page.raw).dismiss_overlays()
             current_url = self._page.url
 
             if PageClassifier(self._page.raw)._is_payment_page():
@@ -98,7 +99,8 @@ class FormProcessor:
             dom_state = self._dom_service.extract()
             logger.info(f"Found {dom_state.elementCount} elements")
 
-            self._loop_detector.record_state(current_url, dom_state.elementCount)
+            actions_executed = len(plan.actions) if plan else 0
+            self._loop_detector.record_state(current_url, dom_state.elementCount, actions_executed, success if plan else True)
             if self._loop_detector.is_looping():
                 logger.warning(f"LOOP DETECTED - same state {MAX_SAME_STATE_COUNT} times")
                 return ApplicationResult(ApplicationStatus.FAILED, "Stuck in form loop", pages_processed, job_url)
@@ -136,6 +138,7 @@ class FormProcessor:
             if any(a.action == "fill" for a in plan.actions):
                 self._success_detector.mark_form_filled()
 
+            PageClassifier(self._page.raw).dismiss_overlays()
             success = self._runner.execute(plan)
 
             self._page.wait(1000)

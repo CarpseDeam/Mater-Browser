@@ -5,9 +5,9 @@ from typing import Optional
 
 from anthropic import Anthropic
 
-from .actions import ActionPlan
+from .actions import Action, ActionPlan
 from .prompts import SYSTEM_PROMPT, build_form_prompt
-from ..extractor.dom_service import DomState, DomService
+from ..extractor.dom_service import DomElement, DomState, DomService
 
 logger = logging.getLogger(__name__)
 
