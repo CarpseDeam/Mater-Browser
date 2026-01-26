@@ -17,7 +17,8 @@ from queue import Empty, Queue
 from tkinter import scrolledtext, ttk
 from typing import TYPE_CHECKING, Optional
 
-from src.agent.application import ApplicationAgent, ApplicationStatus
+from src.agent.application import ApplicationAgent
+from src.agent.models import ApplicationStatus
 from src.automation.runner import ApplyRequest, ApplyResult, AutomationRunner
 from src.browser.connection import BrowserConnection
 from src.browser.tabs import TabManager

@@ -11,7 +11,8 @@ from queue import Empty, Queue
 from tkinter import messagebox, scrolledtext, ttk
 from typing import Optional
 
-from ..agent.application import ApplicationAgent, ApplicationStatus
+from ..agent.application import ApplicationAgent
+from ..agent.models import ApplicationStatus
 from ..browser.connection import BrowserConnection
 from ..browser.tabs import TabManager
 from ..core.config import Settings
