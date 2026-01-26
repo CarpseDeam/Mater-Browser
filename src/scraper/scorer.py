@@ -146,6 +146,46 @@ class JobScorer:
         ]
         self.min_score = min_score
 
+    def _check_exclusion(self, job: JobListing) -> Optional[str]:
+        """Check if job should be excluded and return the reason, or None if it passes."""
+        title_lower = job.title.lower()
+        desc_lower = job.description.lower()
+        combined = f"{title_lower} {desc_lower}"
+
+        for excluded in self.excluded_keywords:
+            if excluded in combined:
+                return f"matched excluded keyword '{excluded}'"
+
+        for stack in self.stack_exclusions:
+            if stack in title_lower:
+                return f"incompatible stack '{stack}' in title"
+
+        for role in self.role_exclusions:
+            if role in title_lower:
+                return f"excluded role '{role}' in title"
+
+        if self.required_keywords:
+            if not any(kw in combined for kw in self.required_keywords):
+                return f"missing required keywords {self.required_keywords}"
+
+        return None
+
+    def passes_filter(self, job: JobListing) -> bool:
+        """Check if a single job passes all exclusion checks and meets min_score."""
+        if self._check_exclusion(job) is not None:
+            return False
+        return self.score(job) >= self.min_score
+
+    def get_exclusion_reason(self, job: JobListing) -> str:
+        """Return the reason a job was excluded, or 'below min_score' if score too low."""
+        reason = self._check_exclusion(job)
+        if reason:
+            return reason
+        score = self.score(job)
+        if score < self.min_score:
+            return f"score {score:.2f} below min_score {self.min_score}"
+        return "passed all checks"
+
     def score(self, job: JobListing) -> float:
         """
         Score a job from 0.0 to 1.0.
@@ -162,29 +202,10 @@ class JobScorer:
         - Excluded role types in title
         - Missing required keywords
         """
-        title_lower = job.title.lower()
-        desc_lower = job.description.lower()
-        combined = f"{title_lower} {desc_lower}"
-
-        for excluded in self.excluded_keywords:
-            if excluded in combined:
-                logger.debug(f"Excluded '{job.title}' - matched excluded keyword '{excluded}'")
-                return 0.0
-
-        for stack in self.stack_exclusions:
-            if stack in title_lower:
-                logger.debug(f"Excluded '{job.title}' - incompatible stack '{stack}' in title")
-                return 0.0
-
-        for role in self.role_exclusions:
-            if role in title_lower:
-                logger.debug(f"Excluded '{job.title}' - excluded role '{role}' in title")
-                return 0.0
-
-        if self.required_keywords:
-            if not any(kw in combined for kw in self.required_keywords):
-                logger.debug(f"Excluded '{job.title}' - missing required keywords {self.required_keywords}")
-                return 0.0
+        exclusion_reason = self._check_exclusion(job)
+        if exclusion_reason:
+            logger.debug(f"Excluded '{job.title}' - {exclusion_reason}")
+            return 0.0
 
         score = 0.0
 

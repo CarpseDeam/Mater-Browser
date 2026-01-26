@@ -335,6 +335,12 @@ class AutomationRunner:
         Returns:
             True if application succeeded, False otherwise.
         """
+        if not self._scorer.passes_filter(job):
+            reason = f"Failed re-validation: {self._scorer.get_exclusion_reason(job)}"
+            logger.info(f"Skipping {job.title} at {job.company}: {reason}")
+            self._queue.mark_skipped(job.url, reason)
+            return True
+
         self._stats.current_job = f"{job.title} at {job.company}"
         logger.info(f"Requesting apply to: {self._stats.current_job}")
 
