@@ -16,3 +16,11 @@ The `SuccessDetector` component is responsible for determining if an application
 1. **URL Signal**: Matches current URL against known success patterns (e.g., `/thank-you`, `/confirmation`).
 2. **Content Signal**: Scans page text for confirmation phrases (e.g., "application submitted").
 3. **State Signal**: Detects when form elements disappear from the page, indicating a successful transition.
+
+## Job Scoring & Filtering
+
+The `JobScorer` filters and ranks job listings to ensure only relevant Python-based roles are processed:
+- **Hard Exclusions**: Immediately rejects jobs with non-relevant titles (e.g., Staff, Lead, Architect, DevOps, Mobile, QA).
+- **Stack & Role Filtering**: Excludes roles focused on Java, Rust, Cloud Infrastructure, or IoT.
+- **Python-First Requirement**: Enforces that "Python" must appear in the job title or within the first 500 characters of the description.
+- **External ATS Detection**: Detects if a job requires an external account (e.g., Workday) and can filter accordingly.
