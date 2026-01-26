@@ -5,6 +5,14 @@
 
 ## Changelog
 
+- **2026-01-26**: Enhanced PageClassifier detection and click robustness
+
+  - Refactored `PageClassifier` to improve `EXTERNAL_LINK` vs `EASY_APPLY` classification using ARIA labels and roles
+
+  - Implemented generator-based click retry sequence for more reliable interactions with complex buttons
+
+  - Cleaned up internal classification logic and constant formatting
+
 - **2026-01-26**: Centralized filter configuration and enhanced JobScorer
 
   - Introduced `FilterConfig` for externalized filter rules and weights

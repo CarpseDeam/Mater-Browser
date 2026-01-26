@@ -4,6 +4,14 @@ API documentation.
 
 ## Agent API
 
+### `PageClassifier`
+
+Classifies job pages and finds primary action buttons.
+
+- `classify() -> PageType`: Analyzes the current page to determine its type (e.g., `EASY_APPLY`, `EXTERNAL_LINK`, `ALREADY_APPLIED`).
+- `find_apply_button(refresh: bool = False) -> Optional[ElementCandidate]`: Identifies the best candidate for an "Apply" button on the page using weighted scoring.
+- `click_apply_button(candidate: ElementCandidate, timeout: int = 5000) -> bool`: Attempts to click the identified button using a robust multi-stage retry sequence.
+
 ### `FormProcessor`
 
 Handles multi-page application flows.

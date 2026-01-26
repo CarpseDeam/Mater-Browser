@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-01-26: refactor: Enhance PageClassifier detection and click robustness
+  - Improved `EXTERNAL_LINK` detection by checking ARIA labels, roles, and button text patterns
+  - Refactored apply button classification into specialized `_classify_apply_button` logic
+  - Enhanced `click_apply_button` with a generator-based retry sequence (`_click_attempts`)
+  - Optimized DOM overlay dismissal and login detection logic
+
 - 2026-01-26: feat: Enhance form interaction robustness and success detection
   - Added rate limiting and click limits to Indeed modal dismissal in IndeedHelpers
   - Improved SuccessDetector accuracy by tracking if forms were actually filled before detecting disappearance
