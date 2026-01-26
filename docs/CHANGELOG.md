@@ -2,10 +2,16 @@
 
 All notable changes to this project.
 
+- 2026-01-26: refactor: Standardize ATS handlers and fix naming inconsistencies
+  - Standardized all ATS handlers to use `detect_page_state`, `FormPage`, and `PageResult` to match `BaseATSHandler`
+  - Fixed inconsistencies in `LeverHandler`, `PhenomHandler`, and `IndeedHandler` where `PageState` and `HandlerResult` were incorrectly used
+  - Renamed `detect_page_type` to `detect_page_state` in `SmartRecruitersHandler` and `ICIMSHandler` for consistency
+
 - 2026-01-26: fix: Fix ATS enum mismatch by adding SMARTRECRUITERS and TALEO to ATSType
   - Added `SMARTRECRUITERS` and `TALEO` to `ATSType` enum in `src/ats/detector.py`
   - Updated `ATS_URL_PATTERNS` and `ATS_PAGE_SIGNATURES` with patterns for SmartRecruiters and Taleo
   - Standardized `ATSType` names (e.g., `INDEED_EASY` to `INDEED`)
+  - Refactored `BaseATSHandler` to use `detect_page_state` and added `apply()` flow logic
 
 - 2026-01-26: feat: Build ATS-first architecture with deterministic handlers
   - Replaced "throw everything at Claude" approach with deterministic ATS-specific handlers for Workday, Greenhouse, Lever, iCIMS, and Phenom

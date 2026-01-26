@@ -4,7 +4,7 @@ from typing import Optional
 
 from playwright.sync_api import Page
 
-from ..base_handler import BaseATSHandler, HandlerResult, PageState
+from ..base_handler import BaseATSHandler, PageResult, FormPage
 
 logger = logging.getLogger(__name__)
 
@@ -36,20 +36,20 @@ class LeverHandler(BaseATSHandler):
     ) -> None:
         super().__init__(page, profile, resume_path)
 
-    def detect_page_state(self) -> PageState:
+    def detect_page_state(self) -> FormPage:
         """Detect Lever page state."""
         url = self._page.url.lower()
 
         if self._is_confirmation_page(url):
-            return PageState.CONFIRMATION
+            return FormPage.CONFIRMATION
 
         if self._is_form_page(url):
-            return PageState.FORM
+            return FormPage.FORM
 
         if self._is_job_listing_page():
-            return PageState.JOB_LISTING
+            return FormPage.JOB_LISTING
 
-        return PageState.UNKNOWN
+        return FormPage.UNKNOWN
 
     def _is_confirmation_page(self, url: str) -> bool:
         """Check if current page is confirmation."""
@@ -67,7 +67,7 @@ class LeverHandler(BaseATSHandler):
         """Check if current page is job listing."""
         return self._has_element(".posting-btn-submit")
 
-    def fill_current_page(self) -> HandlerResult:
+    def fill_current_page(self) -> PageResult:
         """Fill Lever form."""
         filled_count = 0
 
@@ -77,10 +77,9 @@ class LeverHandler(BaseATSHandler):
         self._upload_resume()
 
         logger.info(f"{self.ATS_NAME}: Filled {filled_count} fields")
-        return HandlerResult(
-            True, f"Filled {filled_count} fields", PageState.FORM
+        return PageResult(
+            True, FormPage.FORM, f"Filled {filled_count} fields", True
         )
-
     def _fill_name_field(self) -> int:
         """Fill the name field (Lever uses single name field)."""
         first = self._profile.get("first_name", "")
@@ -121,6 +120,6 @@ class LeverHandler(BaseATSHandler):
         if self._resume_path:
             self._upload_file("input[type='file'][name='resume']", self._resume_path)
 
-    def advance_page(self) -> HandlerResult:
+    def advance_page(self) -> PageResult:
         """Submit application."""
         return self._click_next_button()

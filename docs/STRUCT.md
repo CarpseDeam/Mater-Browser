@@ -5,9 +5,13 @@
 
 ## Changelog
 
+- **2026-01-26**: Standardize ATS handlers and fix naming inconsistencies
+  - Standardized all ATS handlers to use `detect_page_state`, `FormPage`, and `PageResult` to match `BaseATSHandler`
+  - Fixed naming inconsistencies in Lever, Phenom, Indeed, SmartRecruiters, and iCIMS handlers
+
 - **2026-01-26**: Fix ATS enum mismatch by adding SMARTRECRUITERS and TALEO to ATSType
   - Updated `src/ats/detector.py` and `src/ats/base_handler.py` to support SmartRecruiters and Taleo
-  - Standardized ATS type naming and refactored base handler to use `PageState` and `HandlerResult`
+  - Standardized ATS type naming and refactored base handler with `apply()` flow logic
 
 - **2026-01-26**: Strengthened form advancement logic and prompt rules
   - `src/agent/form_processor.py` - Added `_ensure_plan_has_submit` failsafe to automatically append missing Next/Submit clicks

@@ -34,11 +34,10 @@ Identifies ATS systems from URL patterns and page content.
 
 Abstract base class for all ATS-specific handlers.
 
-- `detect_page_state() -> PageState`: Identifies the current application state (e.g., `FORM`, `REVIEW`, `CONFIRMATION`).
-- `fill_current_page() -> HandlerResult`: Executes the logic to fill fields for the current page.
-- `advance_page() -> HandlerResult`: Clicks next/submit to advance the form.
-- `apply() -> HandlerResult`: Main entry point to run the full application flow.
-
+- `detect_page_state() -> FormPage`: Identifies the current application state (e.g., `FORM`, `REVIEW`, `CONFIRMATION`).
+- `fill_current_page() -> PageResult`: Executes the logic to fill fields for the current page.
+- `advance_page() -> PageResult`: Clicks next/submit to advance the form.
+- `apply() -> PageResult`: Main entry point to run the full application flow.
 ### `ZeroActionsHandler`
 
 Handles edge cases when no form actions are detected.

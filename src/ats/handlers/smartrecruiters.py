@@ -1,5 +1,6 @@
 """SmartRecruiters ATS handler."""
 import logging
+from typing import Optional
 
 from ..base_handler import BaseATSHandler, FormPage, PageResult
 
@@ -78,8 +79,15 @@ class SmartRecruitersHandler(BaseATSHandler):
         ],
     }
 
-    def detect_page_type(self) -> FormPage:
-        """Detect current SmartRecruiters page type."""
+    def _is_visible(self, selector: str, timeout: int = 500) -> bool:
+        """Check if element is visible."""
+        try:
+            return self._page.locator(selector).first.is_visible(timeout=timeout)
+        except Exception:
+            return False
+
+    def detect_page_state(self) -> FormPage:
+        """Detect current SmartRecruiters page state."""
         for selector in self.PAGE_INDICATORS[FormPage.CONFIRMATION]:
             if self._is_visible(selector, timeout=500):
                 return FormPage.CONFIRMATION
@@ -96,7 +104,7 @@ class SmartRecruitersHandler(BaseATSHandler):
 
     def fill_current_page(self) -> PageResult:
         """Fill SmartRecruiters application."""
-        page_type = self.detect_page_type()
+        page_type = self.detect_page_state()
 
         if page_type == FormPage.CONFIRMATION:
             return PageResult(True, page_type, "Application submitted", False)
@@ -104,8 +112,55 @@ class SmartRecruitersHandler(BaseATSHandler):
         if page_type == FormPage.JOB_LISTING:
             if self.click_apply():
                 self._wait(1500)
+                page_type = self.detect_page_state()
+                if page_type == FormPage.CONFIRMATION:
+                    return PageResult(True, page_type, "Application submitted", False)
 
         return self._fill_application_form()
+
+    def advance_page(self) -> PageResult:
+        """Click next/submit to advance to the next page."""
+        if self.click_submit():
+            return PageResult(True, FormPage.PERSONAL_INFO, "Submitted", True)
+        if self.click_next():
+            return PageResult(True, FormPage.PERSONAL_INFO, "Advanced to next page", True)
+        return PageResult(False, FormPage.PERSONAL_INFO, "Could not advance", False)
+
+    def click_apply(self) -> bool:
+        """Click the apply button."""
+        for selector in self.APPLY_BUTTON_SELECTORS:
+            try:
+                loc = self._page.locator(selector).first
+                if loc.is_visible(timeout=500):
+                    loc.click()
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def click_next(self) -> bool:
+        """Click the next button."""
+        for selector in self.NEXT_BUTTON_SELECTORS:
+            try:
+                loc = self._page.locator(selector).first
+                if loc.is_visible(timeout=500):
+                    loc.click()
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def click_submit(self) -> bool:
+        """Click the submit button."""
+        for selector in self.SUBMIT_BUTTON_SELECTORS:
+            try:
+                loc = self._page.locator(selector).first
+                if loc.is_visible(timeout=500):
+                    loc.click()
+                    return True
+            except Exception:
+                continue
+        return False
 
     def _fill_application_form(self) -> PageResult:
         """Fill the application form."""
@@ -116,12 +171,12 @@ class SmartRecruitersHandler(BaseATSHandler):
 
         if self.click_submit():
             self._wait(3000)
-            if self.detect_page_type() == FormPage.CONFIRMATION:
+            if self.detect_page_state() == FormPage.CONFIRMATION:
                 return PageResult(
                     True, FormPage.PERSONAL_INFO, "Application submitted", False
                 )
             return PageResult(
-                True, FormPage.PERSONAL_INFO, f"Filled {filled} fields", True
+                True, FormPage.PERSONAL_INFO, f"Filled {filled} fields, submitted", True
             )
 
         if self.click_next():
@@ -168,3 +223,17 @@ class SmartRecruitersHandler(BaseATSHandler):
                     cb.check()
         except Exception:
             pass
+
+    def _fill_field(self, selectors: list, value: str) -> bool:
+        """Fill a field using multiple selector options."""
+        for selector in selectors:
+            if super()._fill_field(selector, value):
+                return True
+        return False
+
+    def _upload_file(self, selectors: list, file_path: str) -> bool:
+        """Upload a file using multiple selector options."""
+        for selector in selectors:
+            if super()._upload_file(selector, file_path):
+                return True
+        return False

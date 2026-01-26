@@ -85,8 +85,8 @@ class ICIMSHandler(BaseATSHandler):
         ],
     }
 
-    def detect_page_type(self) -> FormPage:
-        """Detect current iCIMS page type."""
+    def detect_page_state(self) -> FormPage:
+        """Detect current iCIMS page state."""
         url = self._page.url.lower()
 
         if "/login" in url:
@@ -95,13 +95,13 @@ class ICIMSHandler(BaseATSHandler):
         for page_type, selectors in self.PAGE_INDICATORS.items():
             for selector in selectors:
                 if self._is_visible(selector, timeout=500):
-                    logger.info(f"iCIMS page type: {page_type.value}")
+                    logger.info(f"iCIMS page state: {page_type.value}")
                     return page_type
         return FormPage.UNKNOWN
 
     def fill_current_page(self) -> PageResult:
         """Fill current iCIMS page."""
-        page_type = self.detect_page_type()
+        page_type = self.detect_page_state()
 
         handlers = {
             FormPage.LOGIN: lambda: PageResult(

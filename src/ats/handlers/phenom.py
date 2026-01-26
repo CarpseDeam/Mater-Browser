@@ -4,7 +4,7 @@ from typing import Optional
 
 from playwright.sync_api import Page
 
-from ..base_handler import BaseATSHandler, HandlerResult, PageState
+from ..base_handler import BaseATSHandler, PageResult, FormPage
 from ..field_mapper import FieldMapper
 
 logger = logging.getLogger(__name__)
@@ -42,23 +42,23 @@ class PhenomHandler(BaseATSHandler):
         super().__init__(page, profile, resume_path)
         self._mapper = FieldMapper(profile)
 
-    def detect_page_state(self) -> PageState:
+    def detect_page_state(self) -> FormPage:
         """Detect Phenom page state."""
         url = self._page.url.lower()
 
         if self._is_confirmation_page(url):
-            return PageState.CONFIRMATION
+            return FormPage.CONFIRMATION
 
         if self._is_login_page(url):
-            return PageState.LOGIN_REQUIRED
+            return FormPage.LOGIN_REQUIRED
 
         if self._is_form_page(url):
-            return PageState.FORM
+            return FormPage.FORM
 
         if self._is_job_listing_page():
-            return PageState.JOB_LISTING
+            return FormPage.JOB_LISTING
 
-        return PageState.UNKNOWN
+        return FormPage.UNKNOWN
 
     def _is_confirmation_page(self, url: str) -> bool:
         """Check if current page is confirmation."""
@@ -85,7 +85,7 @@ class PhenomHandler(BaseATSHandler):
         """Check if current page is job listing."""
         return self._has_element("#link-apply")
 
-    def fill_current_page(self) -> HandlerResult:
+    def fill_current_page(self) -> PageResult:
         """Fill Phenom form fields."""
         filled_count = 0
 
@@ -96,8 +96,8 @@ class PhenomHandler(BaseATSHandler):
         self._handle_checkboxes()
 
         logger.info(f"{self.ATS_NAME}: Filled {filled_count} fields")
-        return HandlerResult(
-            True, f"Filled {filled_count} fields", PageState.FORM
+        return PageResult(
+            True, FormPage.FORM, f"Filled {filled_count} fields", True
         )
 
     def _fill_standard_fields(self) -> int:
@@ -165,6 +165,6 @@ class PhenomHandler(BaseATSHandler):
                 return parts[1]
         return ""
 
-    def advance_page(self) -> HandlerResult:
+    def advance_page(self) -> PageResult:
         """Click next/submit."""
         return self._click_next_button()
