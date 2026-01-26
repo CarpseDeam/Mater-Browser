@@ -11,6 +11,8 @@ start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
     --disable-session-crashed-bubble ^
     --hide-crash-restore-bubble ^
     --disable-features=TranslateUI ^
-    --start-maximized
+    --window-position=-2400,-2400 ^
+    --window-size=1920,1080
 
-echo Chrome started on port 9333
+echo Chrome started off-screen on port 9333
+echo To view: Win+Shift+Arrow to move window back, or use virtual desktop

@@ -85,6 +85,21 @@ class ApplicationResult:
     url: str = ""
 
 
+ACCOUNT_CREATION_URL_PATTERNS: list[str] = [
+    "/login", "/signin", "/sign-in", "/signup", "/sign-up",
+    "/register", "/create-account", "/authenticate",
+    "icims.com", "myworkdayjobs.com", "taleo.net",
+]
+
+ACCOUNT_CREATION_CONTENT: list[str] = [
+    "sign in", "log in", "create an account", "register now",
+    "confirm password", "already have an account", "forgot password",
+]
+
+LOOP_DETECTION_THRESHOLD: int = 3
+LOOP_ELEMENT_COUNT_TOLERANCE: int = 5
+
+
 class ApplicationAgent:
     """
     Orchestrates complete job application flow.
@@ -127,6 +142,33 @@ class ApplicationAgent:
         self._page: Optional[Page] = None
         self._dom_service: Optional[DomService] = None
         self._runner: Optional[ActionRunner] = None
+        self._page_states: list[tuple[str, int]] = []
+
+    def _detect_loop(self, url: str, element_count: int) -> bool:
+        """Detect if stuck in loop (same URL + similar element count 3+ times)."""
+        self._page_states.append((url, element_count))
+
+        if len(self._page_states) >= LOOP_DETECTION_THRESHOLD:
+            recent = self._page_states[-LOOP_DETECTION_THRESHOLD:]
+            urls_same = all(s[0] == recent[0][0] for s in recent)
+            counts_similar = all(
+                abs(s[1] - recent[0][1]) <= LOOP_ELEMENT_COUNT_TOLERANCE
+                for s in recent
+            )
+            if urls_same and counts_similar:
+                return True
+        return False
+
+    def _is_account_creation_page(self, url: str, page_text: str) -> bool:
+        """Detect pages requiring account creation."""
+        url_lower = url.lower()
+        for pattern in ACCOUNT_CREATION_URL_PATTERNS:
+            if pattern in url_lower:
+                return True
+
+        text_lower = page_text.lower()
+        matches = sum(1 for phrase in ACCOUNT_CREATION_CONTENT if phrase in text_lower)
+        return matches >= 2
 
     def apply(self, job_url: str) -> ApplicationResult:
         """
@@ -141,6 +183,7 @@ class ApplicationAgent:
             ApplicationResult with status and details.
         """
         logger.info(f"Starting application: {job_url}")
+        self._page_states.clear()
 
         source = self._detect_source(job_url)
         logger.info(f"Detected source: {source.value}")
@@ -535,6 +578,20 @@ class ApplicationAgent:
                     url=job_url,
                 )
 
+            try:
+                page_text = self._page.raw.content()[:5000]
+            except Exception:
+                page_text = ""
+
+            if self._is_account_creation_page(current_url, page_text):
+                logger.warning(f"ACCOUNT CREATION PAGE DETECTED - aborting: {current_url}")
+                return ApplicationResult(
+                    status=ApplicationStatus.FAILED,
+                    message="Requires account creation",
+                    pages_processed=pages_processed,
+                    url=job_url,
+                )
+
             logger.info(f"=== Page {pages_processed} ===")
             logger.info(f"URL: {current_url}")
 
@@ -565,6 +622,15 @@ class ApplicationAgent:
 
             dom_state = self._dom_service.extract()
             logger.info(f"Found {dom_state.elementCount} elements")
+
+            if self._detect_loop(current_url, dom_state.elementCount):
+                logger.warning(f"LOOP DETECTED - same URL and element count {LOOP_DETECTION_THRESHOLD} times")
+                return ApplicationResult(
+                    status=ApplicationStatus.FAILED,
+                    message="Stuck in form loop",
+                    pages_processed=pages_processed,
+                    url=job_url,
+                )
 
             if dom_state.elementCount == 0:
                 stuck_count += 1

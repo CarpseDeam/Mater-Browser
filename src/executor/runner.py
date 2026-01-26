@@ -1,6 +1,8 @@
 """Execute actions using element refs."""
 import logging
 
+from playwright.sync_api import Locator
+
 from ..agent.actions import (
     Action,
     ActionPlan,
@@ -22,6 +24,33 @@ class ActionRunner:
     def __init__(self, page: Page, dom_service: DomService) -> None:
         self._page = page
         self._dom = dom_service
+
+    def _fill_react_select(self, element: Locator, value: str) -> bool:
+        """Handle React Select dropdowns (combobox role)."""
+        try:
+            element.click()
+            self._page.wait(200)
+            element.fill(value)
+            self._page.wait(300)
+            element.press("Enter")
+            return True
+        except Exception as e:
+            logger.warning(f"React Select fill failed: {e}")
+            return False
+
+    def _execute_fill(self, element: Locator, value: str) -> bool:
+        """Fill form element, detecting type."""
+        tag = element.evaluate("el => el.tagName.toLowerCase()")
+        role = element.get_attribute("role")
+
+        if tag == "select":
+            element.select_option(label=value)
+        elif role == "combobox":
+            return self._fill_react_select(element, value)
+        else:
+            element.clear()
+            element.fill(value)
+        return True
 
     def execute(self, plan: ActionPlan) -> bool:
         """Execute all actions, resolving refs to selectors."""
@@ -53,12 +82,15 @@ class ActionRunner:
             case FillAction():
                 selector = self._dom.get_selector(action.ref)
                 loc = self._page.raw.locator(selector).first
-                loc.clear()
-                loc.fill(action.value)
+                self._execute_fill(loc, action.value)
             case SelectAction():
                 selector = self._dom.get_selector(action.ref)
                 loc = self._page.raw.locator(selector).first
-                loc.select_option(label=action.value)
+                role = loc.get_attribute("role")
+                if role == "combobox":
+                    self._fill_react_select(loc, action.value)
+                else:
+                    loc.select_option(label=action.value)
             case ClickAction():
                 selector = self._dom.get_selector(action.ref)
                 loc = self._page.raw.locator(selector).first

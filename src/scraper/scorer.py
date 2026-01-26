@@ -169,7 +169,7 @@ class JobScorer:
 
     def _requires_external_account(self, job: JobListing) -> tuple[bool, str]:
         """Check if job URL points to ATS requiring account creation."""
-        url_lower = job.job_url.lower() if job.job_url else ""
+        url_lower = job.url.lower() if job.url else ""
         for domain in ACCOUNT_REQUIRED_DOMAINS:
             if domain in url_lower:
                 return True, domain
