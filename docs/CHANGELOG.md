@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-01-26: fix: Strengthen form advancement logic in FormProcessor and prompts
+  - Added `_ensure_plan_has_submit` failsafe to automatically append Next/Submit button clicks if missing from agent plan
+  - Overhauled `SYSTEM_PROMPT` with mandatory rules for clicking advancement buttons even for pre-filled forms
+  - Added "Common Mistakes" section to Claude prompts to prevent hangs on completed forms
+  - Implemented prioritized keyword matching for locating the best submit button (Submit > Next > Continue > Review > Apply)
+
 - 2026-01-26: feat: Rewrite Claude prompt for improved job application form filling
   - Implemented explicit page state detection (Job Listing, Application Form, Confirmation)
   - Added strict element filtering to ignore navigation/footer links and focus on form inputs

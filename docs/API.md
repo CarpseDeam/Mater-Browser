@@ -16,7 +16,7 @@ Classifies job pages and finds primary action buttons.
 
 Handles multi-page application flows.
 
-- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process, including page classification, action execution, and automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.
+- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process, including page classification, action execution, and automated recovery via `ZeroActionsHandler`. Includes a failsafe to ensure forms always advance by auto-appending clicks to submit/next buttons if the AI plan is incomplete. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.
 
 ### `ZeroActionsHandler`
 

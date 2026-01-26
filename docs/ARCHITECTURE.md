@@ -17,6 +17,7 @@ The `FormProcessor` handles the interaction with web forms. It utilizes a multi-
 - **Page State Detection**: The agent first classifies the page as a `job_listing`, `form`, or `confirmation` page to determine the appropriate course of action.
 - **Element Filtering**: Actively ignores non-functional elements like headers, footers, and social links to reduce noise and token usage.
 - **Prioritized Filling**: Enforces a strict order of operations (e.g., required fields and contact info before optional fields) and ensures the primary action button is clicked last.
+- **Form Advancement Failsafe**: Automatically detects if the agent's plan fails to include a terminal click action on a multi-page form and appends a click to the most likely 'Submit' or 'Next' button to prevent execution hangs.
 - **Recovery from Edge Cases**: When the analysis model returns no actionable elements, it delegates to `ZeroActionsHandler` to:    - **Classify Page State**: Distinguish between job descriptions, confirmation pages, loading states, and error pages.
 - **Recover from JD Pages**: Automatically scroll and search for "Apply" buttons if on a job description.
 - **Vision Fallback**: Employs `VisionFallback` to use Claude's vision capabilities as a second layer of detection when traditional DOM-based element analysis fails.

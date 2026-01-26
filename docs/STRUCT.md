@@ -5,6 +5,11 @@
 
 ## Changelog
 
+- **2026-01-26**: Strengthened form advancement logic and prompt rules
+  - `src/agent/form_processor.py` - Added `_ensure_plan_has_submit` failsafe to automatically append missing Next/Submit clicks
+  - `src/agent/prompts.py` - Updated `SYSTEM_PROMPT` with mandatory advancement rules and common mistakes to avoid
+  - Implemented prioritized submit button detection (Submit > Next > Continue > Review > Apply)
+
 - **2026-01-26**: Rewrote Claude prompt for improved job application form filling
   - `src/agent/prompts.py` - Completely overhauled `SYSTEM_PROMPT` with explicit page state detection, element filtering, and field prioritization
   - Standardized JSON output format to include `page_type`, `reasoning`, and `actions`
