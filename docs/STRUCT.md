@@ -23,8 +23,11 @@
 - `docs/` - Documentation
 - `scripts/` - Scripts
 - `src/` - Source code
-
-## Stats
+  - `agent/`
+    - `form_processor.py` - Orchestrates form filling and multi-page flows
+    - `success_detector.py` - Detects application completion via URL, text, and form state
+    - `page_classifier.py` - Classifies pages and finds primary action buttons
+- `assets/` - Static assets
 
 - files: 1844
 - dirs: 426
