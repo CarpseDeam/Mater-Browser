@@ -15,6 +15,10 @@ from .models import (
     ApplicationResult,
     LOGIN_URL_PATTERNS,
     EXTERNAL_REDIRECT_TIMEOUT_MS,
+    MEDIUM_WAIT_MS,
+    LONG_WAIT_MS,
+    PAGE_LOAD_TIMEOUT_MS,
+    SHORT_WAIT_MS,
 )
 from .form_processor import FormProcessor
 
@@ -51,27 +55,17 @@ class ExternalFlow:
         """
         logger.info(f"Using external apply flow for {source.value}")
 
-        try:
-            self._page.goto(job_url)
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "err_aborted" in error_msg or "aborted" in error_msg:
-                logger.warning(f"Navigation aborted: {e}")
-                self._page.wait(2000)
-                if not self._page.url or self._page.url == "about:blank":
-                    return ApplicationResult(
-                        status=ApplicationStatus.ERROR,
-                        message="Navigation failed completely",
-                        url=job_url
-                    )
-                logger.info(f"Navigation recovered, now at: {self._page.url}")
-            else:
-                raise
+        if not self._page.goto(job_url):
+            return ApplicationResult(
+                status=ApplicationStatus.ERROR,
+                message="Navigation failed completely",
+                url=job_url,
+            )
 
-        self._page.wait(2000)
+        self._page.wait(LONG_WAIT_MS)
 
         try:
-            self._page.raw.wait_for_load_state("networkidle", timeout=5000)
+            self._page.raw.wait_for_load_state("networkidle", timeout=PAGE_LOAD_TIMEOUT_MS)
         except Exception:
             pass
 
@@ -168,31 +162,33 @@ class ExternalFlow:
         timeout_sec = EXTERNAL_REDIRECT_TIMEOUT_MS / 1000
 
         while (time.time() - start) < timeout_sec:
-            popup_url = self._tabs.get_captured_popup_url()
-            if popup_url and popup_url != "about:blank":
-                logger.info(f"Popup captured, navigating to: {popup_url}")
-                try:
-                    self._page.goto(popup_url)
-                except Exception as e:
-                    error_msg = str(e).lower()
-                    if "err_aborted" in error_msg or "aborted" in error_msg:
-                        logger.warning(f"Navigation aborted (SPA behavior): {e}")
-                        self._page.wait(2000)
-                    else:
-                        raise
-                self._page.wait(2000)
-                self._tabs.close_extras(keep=1)
+            if self._handle_popup_redirect():
                 return True
-
-            current_url = self._page.url
-            if current_url != original_url:
-                logger.info(f"Same-tab navigation: {original_url} -> {current_url}")
-                self._page.wait(2000)
+            if self._check_same_tab_redirect(original_url):
                 return True
-
-            self._page.wait(500)
+            self._page.wait(SHORT_WAIT_MS)
 
         logger.warning(f"Redirect timeout after {timeout_sec}s")
+        return False
+
+    def _handle_popup_redirect(self) -> bool:
+        """Check for and handle popup redirect. Returns True if popup found."""
+        popup_url = self._tabs.get_captured_popup_url()
+        if not popup_url or popup_url == "about:blank":
+            return False
+        logger.info(f"Popup captured, navigating to: {popup_url}")
+        self._page.goto(popup_url)
+        self._page.wait(LONG_WAIT_MS)
+        self._tabs.close_extras(keep=1)
+        return True
+
+    def _check_same_tab_redirect(self, original_url: str) -> bool:
+        """Check for same-tab navigation. Returns True if redirected."""
+        current_url = self._page.url
+        if current_url != original_url:
+            logger.info(f"Same-tab navigation: {original_url} -> {current_url}")
+            self._page.wait(LONG_WAIT_MS)
+            return True
         return False
 
     def _check_login_required(self) -> Optional[str]:

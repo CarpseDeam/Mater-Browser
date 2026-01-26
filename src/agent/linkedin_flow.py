@@ -133,20 +133,17 @@ class LinkedInFlow:
             return ApplicationResult(
                 status=ApplicationStatus.NO_APPLY_BUTTON,
                 message="Could not find Easy Apply button",
-                url=job_url
+                url=job_url,
             )
 
-        self._page.wait(1500)
+        self._page.wait(MEDIUM_WAIT_MS)
 
         if page_type == PageType.EXTERNAL_LINK:
-            popup_url = self._wait_for_external_popup(max_attempts=5, delay_ms=1000)
+            popup_url = self._wait_for_external_popup()
             if popup_url:
                 logger.info(f"External job: navigating to popup {popup_url}")
-                try:
-                    self._page.goto(popup_url)
-                    self._page.wait(2000)
-                except Exception as e:
-                    logger.error(f"Failed to navigate to external URL: {e}")
+                self._page.goto(popup_url)
+                self._page.wait(LONG_WAIT_MS)
                 self._tabs.close_extras(keep=1)
 
         dom_service = DomService(self._page)
