@@ -1,11 +1,12 @@
 """Similo-inspired page classifier for apply button detection."""
 import logging
+import random
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from playwright.sync_api import Page as PlaywrightPage
+from playwright.sync_api import Locator, Page as PlaywrightPage
 
 logger = logging.getLogger(__name__)
 
@@ -149,8 +150,6 @@ class PageClassifier:
         """
         Find and click the best apply button candidate.
 
-        Retries once with fresh DOM extraction if first attempt fails.
-
         Args:
             timeout: Click timeout in milliseconds.
 
@@ -169,30 +168,175 @@ class PageClassifier:
 
         logger.info(f"PageClassifier: Clicking '{candidate.text}' (score={candidate.score:.2f})")
 
-        for attempt in range(2):
-            try:
-                locator = self._page.locator(candidate.selector).first
+        self._dismiss_overlays()
 
-                locator.evaluate('el => el.scrollIntoView({block: "center", behavior: "instant"})')
-                self._page.wait_for_timeout(500)
+        locator = self._page.locator(candidate.selector).first
 
-                if not locator.is_visible(timeout=2000):
-                    logger.warning(f"PageClassifier: Element not visible after scroll, attempt {attempt + 1}")
-                    if attempt == 1:
-                        locator.click(timeout=timeout, force=True)
-                        return True
-                    continue
+        if not self._scroll_element_into_view(locator):
+            logger.warning("PageClassifier: Failed to bring element into view")
 
-                locator.click(timeout=timeout)
-                return True
-            except Exception as e:
-                logger.warning(f"PageClassifier: Click attempt {attempt + 1} failed - {e}")
-                if attempt == 0:
-                    candidate = self.find_apply_button(refresh=True)
-                    if not candidate:
-                        break
+        if not self._verify_element_visible(locator):
+            logger.warning("PageClassifier: Element not visible after scroll attempts")
+
+        self._page.wait_for_timeout(random.randint(200, 500))
+
+        if self._attempt_click_sequence(locator, timeout):
+            return True
+
+        logger.debug("PageClassifier: First click sequence failed, refreshing DOM...")
+        candidate = self.find_apply_button(refresh=True)
+        if not candidate:
+            logger.error("PageClassifier: No candidate found after refresh")
+            return False
+
+        locator = self._page.locator(candidate.selector).first
+        self._scroll_element_into_view(locator)
+        self._verify_element_visible(locator)
+
+        if self._attempt_click_sequence(locator, timeout):
+            return True
 
         logger.error("PageClassifier: All click attempts failed")
+        return False
+
+    def _dismiss_overlays(self) -> None:
+        """Remove overlays and modals that might intercept clicks."""
+        try:
+            self._page.evaluate('''() => {
+                // Close LinkedIn messaging overlay
+                const msgOverlay = document.querySelector('.msg-overlay-list-bubble');
+                if (msgOverlay) msgOverlay.remove();
+
+                // Close cookie banners
+                const cookieBanners = document.querySelectorAll(
+                    '[class*="cookie"], [class*="consent"], [id*="cookie"], [id*="consent"]'
+                );
+                cookieBanners.forEach(el => {
+                    if (el.offsetParent !== null) el.remove();
+                });
+
+                // Close generic modal dialogs (excluding job application modals)
+                const dialogs = document.querySelectorAll('[role="dialog"], [role="alertdialog"]');
+                dialogs.forEach(d => {
+                    const text = (d.textContent || '').toLowerCase();
+                    const isApplyModal = text.includes('easy apply') || text.includes('application');
+                    if (!isApplyModal && d.offsetParent !== null) {
+                        d.remove();
+                    }
+                });
+
+                // Close floating notifications
+                const notifications = document.querySelectorAll(
+                    '.artdeco-toast-item, .notification-badge, [class*="popup"]'
+                );
+                notifications.forEach(n => n.remove());
+            }''')
+            logger.debug("PageClassifier: Dismissed overlays")
+        except Exception as e:
+            logger.debug(f"PageClassifier: Overlay dismissal error - {e}")
+
+    def _scroll_element_into_view(self, locator: Locator) -> bool:
+        """Scroll page to bring element to viewport center."""
+        try:
+            box = locator.bounding_box(timeout=2000)
+            if not box:
+                locator.scroll_into_view_if_needed(timeout=2000)
+                return True
+
+            viewport = self._page.viewport_size
+            if not viewport:
+                locator.scroll_into_view_if_needed(timeout=2000)
+                return True
+
+            target_y = box['y'] - (viewport['height'] / 2) + (box['height'] / 2)
+            self._page.evaluate(f"window.scrollTo({{top: {target_y}, behavior: 'smooth'}})")
+            self._page.wait_for_timeout(500)
+            return True
+        except Exception as e:
+            logger.debug(f"PageClassifier: Scroll error - {e}")
+            return False
+
+    def _verify_element_visible(self, locator: Locator, max_attempts: int = 3) -> bool:
+        """Verify element visibility with retry scrolling."""
+        for attempt in range(max_attempts):
+            try:
+                if locator.is_visible(timeout=1000):
+                    return True
+                locator.scroll_into_view_if_needed(timeout=2000)
+                self._page.wait_for_timeout(300)
+            except Exception:
+                pass
+        return False
+
+    def _check_click_intercepted(self, locator: Locator) -> bool:
+        """Check if another element would intercept the click."""
+        try:
+            box = locator.bounding_box(timeout=1000)
+            if not box:
+                return True
+
+            center_x = box['x'] + box['width'] / 2
+            center_y = box['y'] + box['height'] / 2
+
+            is_intercepted = self._page.evaluate(f'''() => {{
+                const el = document.elementFromPoint({center_x}, {center_y});
+                if (!el) return true;
+
+                const target = document.querySelector('{locator.first._selector if hasattr(locator, "_selector") else ""}');
+                if (!target) return false;
+
+                return !target.contains(el) && !el.contains(target) && el !== target;
+            }}''')
+
+            if is_intercepted:
+                logger.debug("PageClassifier: Click would be intercepted, dismissing overlays")
+                self._dismiss_overlays()
+                return True
+            return False
+        except Exception:
+            return False
+
+    def _attempt_click_sequence(self, locator: Locator, timeout: int) -> bool:
+        """Execute click sequence with fallbacks."""
+        self._check_click_intercepted(locator)
+
+        # Attempt 1: Normal click
+        try:
+            locator.click(timeout=timeout)
+            logger.debug("PageClassifier: Normal click succeeded")
+            return True
+        except Exception as e:
+            logger.debug(f"PageClassifier: Normal click failed - {e}")
+
+        # Attempt 2: Click at element center with position
+        try:
+            box = locator.bounding_box(timeout=1000)
+            if box:
+                locator.click(
+                    timeout=timeout,
+                    position={"x": box['width'] / 2, "y": box['height'] / 2}
+                )
+                logger.debug("PageClassifier: Position click succeeded")
+                return True
+        except Exception as e:
+            logger.debug(f"PageClassifier: Position click failed - {e}")
+
+        # Attempt 3: JavaScript click
+        try:
+            locator.evaluate("el => el.click()")
+            logger.debug("PageClassifier: JS click succeeded")
+            return True
+        except Exception as e:
+            logger.debug(f"PageClassifier: JS click failed - {e}")
+
+        # Attempt 4: Force click (last resort)
+        try:
+            locator.click(timeout=timeout, force=True)
+            logger.debug("PageClassifier: Force click succeeded")
+            return True
+        except Exception as e:
+            logger.debug(f"PageClassifier: Force click failed - {e}")
+
         return False
 
     def _extract_candidates(self) -> list[ElementCandidate]:
