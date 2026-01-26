@@ -33,6 +33,10 @@ src/
 
 ## Changelog
 
+- **2026-01-25**: Improved Indeed external apply button detection
+  - `_click_apply_button` - Added patterns for "Apply on company website" links (Indeed external applies)
+  - `_log_available_buttons()` - New debug helper to dump visible buttons/links when apply button not found
+  - Increased initial visibility check timeout from 5000ms to 8000ms for slow-loading Indeed pages
 - **2026-01-25**: Added job re-validation before apply
   - `JobScorer.passes_filter(job)` - single-job validation check
   - `JobScorer.get_exclusion_reason(job)` - returns exclusion reason for logging

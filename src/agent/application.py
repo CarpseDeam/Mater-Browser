@@ -423,12 +423,15 @@ class ApplicationAgent:
 
         page = self._page.raw
 
-        # Combined locator - checks all strategies in parallel, not sequential
-        # The .or_() method combines locators into one that matches ANY of them
         apply_locator = (
             # Primary: Role-based semantic locators (most resilient to HTML changes)
             page.get_by_role("button", name=re.compile(r"easy\s*apply|apply\s*now|apply", re.IGNORECASE))
             .or_(page.get_by_role("link", name=re.compile(r"easy\s*apply|apply\s*now|apply", re.IGNORECASE)))
+            # Indeed external apply patterns (company website redirects)
+            .or_(page.get_by_role("link", name=re.compile(r"apply on|apply at|company site", re.IGNORECASE)))
+            .or_(page.locator('a[href*="apply"]'))
+            .or_(page.locator('[data-testid="indeedApplyButton"]'))
+            .or_(page.locator('[data-testid*="applyButton" i]'))
             # Secondary: Attribute-based (platform-specific)
             .or_(page.locator('[data-testid*="apply" i]'))
             .or_(page.locator('[aria-label*="apply" i]'))
@@ -440,9 +443,8 @@ class ApplicationAgent:
         )
 
         try:
-            # Single visibility check with reasonable timeout
             first_match = apply_locator.first
-            if first_match.is_visible(timeout=5000):
+            if first_match.is_visible(timeout=8000):
                 # Log what we're clicking for debugging
                 try:
                     tag = first_match.evaluate("el => el.tagName")
@@ -475,7 +477,23 @@ class ApplicationAgent:
             logger.debug(f"Text fallback failed: {e}")
 
         logger.warning("Could not find Apply button with any strategy")
+        self._log_available_buttons()
         return False
+
+    def _log_available_buttons(self) -> None:
+        """Log visible buttons/links on page for debugging apply button detection failures."""
+        logger.debug("Available buttons/links on page:")
+        try:
+            buttons = self._page.raw.locator('button, a[href], [role="button"]').all()
+            for i, btn in enumerate(buttons[:20]):
+                try:
+                    text = btn.text_content()[:50] if btn.text_content() else "(no text)"
+                    tag = btn.evaluate("el => el.tagName")
+                    logger.debug(f"  [{i}] <{tag}> {text}")
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug(f"  Could not enumerate elements: {e}")
 
     def _handle_new_tab(self) -> None:
         """Check for and switch to new tab (external ATS)."""
