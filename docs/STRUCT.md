@@ -5,31 +5,68 @@
 
 ## Changelog
 
+- **2026-01-26**: Enhanced job scoring and filtering logic
+
+  - Added strict title-based exclusions and refined role/stack filters in `JobScorer`
+
+  - Required "Python" to be present in title or early description
+
 - **2026-01-26**: Refactored zero-action handling in FormProcessor
+
   - `src/agent/zero_actions_handler.py` - New component to handle job descriptions, loading states, and error pages when no form actions are detected
+
   - `FormProcessor` now uses `ZeroActionsHandler` for automated recovery and state classification
-- **2026-01-26**: Improved form completion detection and payment page filtering
+
+- **2026-01-26**: Improved form completion detection and payment page filtering 
+
   - Updated `FormProcessor` with additional success URL signals
+
   - Refined `PageClassifier` to ignore safe job application domains during payment detection
-- **2026-01-26**: Improved form processing with scrolling and fallback logic
+
+- **2026-01-26**: Improved form processing with scrolling and fallback logic    
+
   - `src/agent/form_processor.py` - Added job description detection, automatic scrolling for "Apply" buttons, and regex-based fallback clicking
+
 - **2026-01-25**: Implemented Similo-inspired PageClassifier for apply button detection
+
   - `src/agent/page_classifier.py` - New module with batch DOM extraction and weighted scoring
+
   - `PageType` enum - Classifies pages as EASY_APPLY, EXTERNAL_LINK, ALREADY_APPLIED, CLOSED, LOGIN_REQUIRED, or UNKNOWN
+
   - `ElementCandidate` dataclass - Stores candidate element attributes and score
+
   - `PageClassifier` class - Extracts candidates in single JS call, scores using Similo-style weights
+
   - Refactored `application.py` to use PageClassifier instead of sequential locator chains
+
+
 
 ## Structure
 
+
+
 - `config/` - Configuration
+
 - `docs/` - Documentation
+
 - `scripts/` - Scripts
+
 - `src/` - Source code
+
   - `agent/`
+
         - `form_processor.py` - Orchestrates form filling and multi-page flows      
+
         - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) when no form actions are found
-        - `success_detector.py` - Detects application completion via URL, text, and form state    - `page_classifier.py` - Classifies pages and finds primary action buttons
+
+        - `success_detector.py` - Detects application completion via URL, text, and form state
+
+        - `page_classifier.py` - Classifies pages and finds primary action buttons
+
+  - `scraper/`
+
+        - `scorer.py` - Evaluates job relevance based on title, description, and technology stack
+
 - `assets/` - Static assets
 
 - files: 1844

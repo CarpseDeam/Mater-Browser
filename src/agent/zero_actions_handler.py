@@ -2,9 +2,11 @@
 import logging
 import re
 from enum import Enum
-from typing import Tuple
+from typing import Optional, Tuple
 
 from playwright.sync_api import Page
+
+from .vision_fallback import VisionFallback
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +23,9 @@ class PageState(Enum):
 class ZeroActionsHandler:
     """Handles situations where Claude returns 0 actions."""
 
-    def __init__(self, page: Page) -> None:
+    def __init__(self, page: Page, api_key: Optional[str] = None) -> None:
         self._page = page
+        self._vision = VisionFallback(page, api_key)
 
     def classify_and_handle(self, input_count: int) -> Tuple[PageState, bool]:
         """
@@ -106,6 +109,10 @@ class ZeroActionsHandler:
             except Exception:
                 continue
 
+        logger.info("DOM detection failed - trying vision fallback")
+        if self._vision.find_and_click_apply():
+            return True
+
         return self._try_scroll_and_find_button()
 
     def _handle_loading(self) -> bool:
@@ -138,5 +145,9 @@ class ZeroActionsHandler:
                     return True
             except Exception:
                 continue
+
+        logger.info("All scroll attempts failed - final vision fallback")
+        if self._vision.find_and_click_apply():
+            return True
 
         return False

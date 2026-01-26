@@ -2,6 +2,10 @@
 
 All notable changes to this project.
 
+- 2026-01-26: feat: Enhance job scoring and filtering logic in JobScorer
+  - Added `TITLE_HARD_EXCLUSIONS` for immediate filtering of non-relevant roles (Senior/Lead, Mobile, DevOps, etc.)
+  - Expanded `STACK_EXCLUSIONS` to include Cloud, IoT, and non-Python languages (Java, Rust)
+  - Implemented strict Python keyword check in job title and early description
 - 2026-01-26: feat: Refactor zero-action handling in FormProcessor using ZeroActionsHandler
   - Delegated job description detection, scrolling, and fallback button clicking to `ZeroActionsHandler`
   - Added specific handling for confirmation pages and error pages during the application flow

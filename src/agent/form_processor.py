@@ -1,5 +1,6 @@
 """Form processing logic for multi-page application flows."""
 import logging
+import os
 import re
 import time
 from typing import Optional
@@ -42,7 +43,8 @@ class FormProcessor:
         self._loop_detector = LoopDetector()
         self._indeed_helpers = IndeedHelpers(page)
         self._success_detector = SuccessDetector(page.raw)
-        self._zero_handler = ZeroActionsHandler(page.raw)
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        self._zero_handler = ZeroActionsHandler(page.raw, api_key)
 
     def process(self, job_url: str, source: Optional[JobSource] = None) -> ApplicationResult:
         """Process multi-page application form."""
