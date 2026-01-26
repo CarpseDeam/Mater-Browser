@@ -400,6 +400,9 @@ class DashboardApp:
 
         try:
             tab_manager = TabManager(self.connection.browser)
+            # Clean up any tabs from previous sessions
+            tab_manager.close_extras(keep=1)
+            logger.info("Closed extra tabs from previous session")
             self._agent = ApplicationAgent(
                 tab_manager=tab_manager,
                 profile=self.profile.model_dump(),
