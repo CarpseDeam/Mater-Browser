@@ -1,332 +1,314 @@
-"""Job scoring based on profile match."""
+"""Job scoring based on profile match and centralized filter configuration."""
 import logging
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
+from .filter_config import FilterConfig, FilterResult, RuleType
 from .jobspy_client import JobListing
 
 logger = logging.getLogger(__name__)
 
-ACCOUNT_REQUIRED_DOMAINS: list[str] = [
-    "workday.com",
-    "myworkdayjobs.com",
-    "taleo.net",
-    "brassring.com",
-    "icims.com",
-    "lever.co",
-    "greenhouse.io",
-    "jobvite.com",
-    "ultipro.com",
-    "successfactors.com",
-    "smartrecruiters.com",
-    "paylocity.com",
-    "adp.com",
-    "cornerstoneondemand.com",
-    "pwc.com",
-    "wd1.myworkdaysite.com",
-    "wd3.myworkdaysite.com",
-    "wd5.myworkdaysite.com",
-]
 
-# Tech stacks to exclude - incompatible with Python backend focus
-STACK_EXCLUSIONS: list[str] = [
-    # .NET ecosystem
-    ".net", "dotnet", "c#", "csharp", "asp.net", "blazor", "f#",
-    # Java ecosystem
-    "java developer", "java engineer", "spring boot", "spring framework",
-    "kotlin", "scala", "jvm",
-    # Frontend-only frameworks (as primary requirement)
-    "angular", "react developer", "react engineer", "vue developer",
-    "vue engineer", "frontend developer", "front-end developer",
-    "frontend engineer", "front-end engineer", "ui developer", "ui engineer",
-    # Other backend stacks
-    "php developer", "php engineer", "laravel", "symfony", "wordpress",
-    "ruby developer", "ruby engineer", "rails", "ruby on rails",
-    "golang developer", "go developer", "go engineer", "rust developer",
-    # Mobile
-    "ios developer", "ios engineer", "android developer", "android engineer",
-    "swift developer", "mobile developer", "mobile engineer", "react native",
-    "flutter", "kotlin developer",
-    # Enterprise/Legacy
-    "salesforce", "servicenow", "sap ", "oracle developer", "peoplesoft",
-    "cobol", "mainframe", "as400",
-    # Data Science (different from Data Engineering)
-    "machine learning engineer", "ml engineer", "ai engineer",
-    "data scientist", "research scientist",
-    # Cloud/IoT/Embedded (not Python backend)
-    "cloud developer", "cloud dev", "iot developer", "iot engineer",
-    "embedded developer", "embedded engineer", "firmware",
-    "azure developer", "gcp developer", "aws developer",
-    # Java/Rust when primary (in title)
-    "java", "rust developer", "rust engineer",
-]
+@dataclass
+class FilterStats:
+    """Statistics from filtering a batch of jobs."""
 
-# Role types to exclude
-ROLE_EXCLUSIONS: list[str] = [
-    # Seniority mismatches (4+ years = mid-senior, not junior)
-    "junior", "jr.", "jr ", "entry level", "entry-level",
-    "associate developer", "associate engineer",
-    "intern", "internship", "apprentice", "trainee", "graduate",
-    # Non-development roles
-    "system admin", "sysadmin", "systems administrator",
-    "network admin", "network engineer", "infrastructure engineer",
-    "helpdesk", "help desk", "it support", "tech support",
-    "desktop support", "support engineer", "support specialist",
-    # QA/Testing
-    "qa analyst", "qa engineer", "quality assurance", "test engineer",
-    "sdet", "automation tester",
-    # Management/Leadership
-    "engineering manager", "tech lead", "team lead", "director",
-    "vp of engineering", "head of engineering", "cto",
-    # Security-specific
-    "security engineer", "security analyst", "penetration tester",
-    "cybersecurity", "infosec",
-    # DevOps-only (different from Platform Engineering with coding)
-    "devops engineer", "site reliability", "sre",
-    "cloud engineer", "cloud architect",
-    # Over-senior
-    "staff ", "staff,", "principal", "distinguished",
-    "senior staff", "lead engineer", "lead developer", "architect",
-    # Full Stack (often means frontend-heavy or jack-of-all-trades)
-    "full stack", "fullstack", "full-stack",
-]
+    total: int = 0
+    passed: int = 0
+    rejected: int = 0
+    rejection_counts: Counter = field(default_factory=Counter)
 
-TITLE_HARD_EXCLUSIONS: list[str] = [
-    "staff", "principal", "distinguished", "lead", "architect",
-    "director", "vp", "head of", "chief",
-    "manager", "management",
-    "junior", "jr", "entry", "intern", "graduate", "apprentice",
-    "ios", "android", "mobile", "frontend", "front-end", "front end",
-    "devops", "sre", "site reliability", "cloud engineer", "cloud developer",
-    "security", "infosec", "cyber",
-    "data scientist", "ml engineer", "machine learning", "ai engineer",
-    "qa", "quality assurance", "test engineer", "sdet",
-    "support", "helpdesk",
-    "salesforce", "servicenow", "sap",
-    ".net", "c#", "java developer", "java engineer", "php", "ruby", "golang", "go developer",
-    "iot", "embedded", "firmware",
-]
+    def record_result(self, result: FilterResult) -> None:
+        """Record a filter result."""
+        self.total += 1
+        if result.passed:
+            self.passed += 1
+        else:
+            self.rejected += 1
+            self.rejection_counts[result.rule_type.value] += 1
 
-# Positive signals that boost score - these indicate good fit
-POSITIVE_SIGNALS: list[str] = [
-    # Python ecosystem
-    "fastapi", "django", "flask", "sqlalchemy", "pydantic",
-    "celery", "asyncio", "pytest",
-    # Data/Infrastructure
-    "postgresql", "postgres", "snowflake", "redshift",
-    "airflow", "dagster", "prefect", "dbt",
-    "kafka", "rabbitmq", "redis",
-    # Cloud/DevOps (as tools, not primary role)
-    "aws", "docker", "kubernetes", "terraform",
-    "ci/cd", "github actions",
-    # Architecture
-    "microservices", "rest api", "graphql",
-    "distributed systems", "event-driven",
-]
+    def log_summary(self) -> None:
+        """Log a summary of filtering results."""
+        logger.info(f"Filter results: {self.total} jobs -> {self.passed} passed, {self.rejected} rejected")
+        if self.rejection_counts:
+            breakdown = ", ".join(
+                f"{count} {rule_type}" for rule_type, count in self.rejection_counts.most_common()
+            )
+            logger.info(f"Rejection breakdown: {breakdown}")
 
 
 class JobScorer:
-    """Scores jobs based on profile relevance."""
+    """Scores jobs based on profile relevance using centralized configuration."""
 
     def __init__(
         self,
         profile: dict,
-        title_keywords: Optional[list[str]] = None,
-        required_keywords: Optional[list[str]] = None,
-        excluded_keywords: Optional[list[str]] = None,
-        stack_exclusions: Optional[list[str]] = None,
-        role_exclusions: Optional[list[str]] = None,
-        positive_signals: Optional[list[str]] = None,
-        min_score: float = 0.5,
+        config: Optional[FilterConfig] = None,
+        config_path: Optional[Path] = None,
     ) -> None:
         self.profile = profile
         self.skills = [s.lower() for s in profile.get("skills", [])]
 
-        self.title_keywords = [
-            k.lower()
-            for k in (
-                title_keywords
-                or [
-                    # Primary targets
-                    "python", "backend", "back-end", "back end",
-                    "platform", "data engineer", "data infrastructure",
-                    "systems engineer", "api engineer", "api developer",
-                    # Secondary targets (good if combined with Python)
-                    "software engineer",
-                    "integration", "etl", "pipeline",
-                ]
-            )
-        ]
-        self.required_keywords = [
-            k.lower() for k in (required_keywords or ["python"])
-        ]
-        self.excluded_keywords = [
-            k.lower()
-            for k in (
-                excluded_keywords
-                or [
-                    # Seniority requirements we can't meet
-                    "10+ years", "15+ years", "12+ years",
-                    "10 years", "15 years", "12 years",
-                    # Clearance/Location restrictions
-                    "clearance required", "security clearance", "ts/sci",
-                    "on-site only", "onsite only", "no remote",
-                    "must be local", "relocation required",
-                    # Specific tech requirements we don't have
-                    "node.js required", "java required", "c++ required",
-                    "react required", "angular required",
-                ]
-            )
-        ]
-        self.stack_exclusions = [
-            k.lower() for k in (stack_exclusions or STACK_EXCLUSIONS)
-        ]
-        self.role_exclusions = [
-            k.lower() for k in (role_exclusions or ROLE_EXCLUSIONS)
-        ]
-        self.positive_signals = [
-            k.lower() for k in (positive_signals or POSITIVE_SIGNALS)
-        ]
-        self.min_score = min_score
+        if config is not None:
+            self._config = config
+        else:
+            self._config = FilterConfig.load(config_path)
 
-    def _requires_external_account(self, job: JobListing) -> tuple[bool, str]:
-        """Check if job URL points to ATS requiring account creation."""
-        url_lower = job.url.lower() if job.url else ""
-        for domain in ACCOUNT_REQUIRED_DOMAINS:
-            if domain in url_lower:
-                return True, domain
-        return False, ""
+        self._last_filter_stats: Optional[FilterStats] = None
 
-    def _check_exclusion(self, job: JobListing) -> Optional[str]:
-        """Check if job should be excluded and return the reason, or None if it passes."""
+    @property
+    def config(self) -> FilterConfig:
+        """Return the current filter configuration."""
+        return self._config
+
+    @property
+    def min_score(self) -> float:
+        """Return minimum score threshold."""
+        return self._config.min_score
+
+    @property
+    def last_filter_stats(self) -> Optional[FilterStats]:
+        """Return stats from the last filter_and_score call."""
+        return self._last_filter_stats
+
+    def reload_config(self) -> None:
+        """Reload filter configuration from file."""
+        self._config = self._config.reload()
+
+    def check_filter(self, job: JobListing) -> FilterResult:
+        """Check if job passes all filters and return detailed result."""
         title_lower = job.title.lower()
-
-        for excl in TITLE_HARD_EXCLUSIONS:
-            if excl in title_lower:
-                return f"title contains excluded term '{excl}'"
-
-        requires_account, domain = self._requires_external_account(job)
-        if requires_account:
-            return f"external ATS requires account: {domain}"
-
-        desc_lower = job.description.lower()
+        url_lower = job.url.lower() if job.url else ""
+        desc_lower = job.description.lower() if job.description else ""
         combined = f"{title_lower} {desc_lower}"
 
-        for excluded in self.excluded_keywords:
-            if excluded in combined:
-                return f"matched excluded keyword '{excluded}'"
+        for excl in self._config.title_exclusions:
+            if excl in title_lower:
+                return FilterResult(
+                    passed=False,
+                    reason=f"title contains excluded term: '{excl}'",
+                    rule_type=RuleType.TITLE_EXCLUSION,
+                    matched_value=excl,
+                )
 
-        for stack in self.stack_exclusions:
+        for domain in self._config.blocked_domains:
+            if domain in url_lower:
+                return FilterResult(
+                    passed=False,
+                    reason=f"blocked domain: {domain}",
+                    rule_type=RuleType.BLOCKED_DOMAIN,
+                    matched_value=domain,
+                )
+
+        for pattern in self._config.blocked_url_patterns:
+            if pattern in url_lower:
+                return FilterResult(
+                    passed=False,
+                    reason=f"blocked URL pattern: {pattern}",
+                    rule_type=RuleType.BLOCKED_URL_PATTERN,
+                    matched_value=pattern,
+                )
+
+        for excl in self._config.description_exclusions:
+            if excl in combined:
+                return FilterResult(
+                    passed=False,
+                    reason=f"matched excluded keyword: '{excl}'",
+                    rule_type=RuleType.DESCRIPTION_EXCLUSION,
+                    matched_value=excl,
+                )
+
+        for stack in self._config.stack_exclusions:
             if stack in title_lower:
-                return f"incompatible stack '{stack}' in title"
+                return FilterResult(
+                    passed=False,
+                    reason=f"incompatible stack in title: '{stack}'",
+                    rule_type=RuleType.STACK_EXCLUSION,
+                    matched_value=stack,
+                )
 
-        for role in self.role_exclusions:
+        for role in self._config.role_exclusions:
             if role in title_lower:
-                return f"excluded role '{role}' in title"
+                return FilterResult(
+                    passed=False,
+                    reason=f"excluded role in title: '{role}'",
+                    rule_type=RuleType.ROLE_EXCLUSION,
+                    matched_value=role,
+                )
 
-        if self.required_keywords:
-            if not any(kw in combined for kw in self.required_keywords):
-                return f"missing required keywords {self.required_keywords}"
+        if self._config.required_keywords:
+            search_text = title_lower if self._config.keyword_in_title else combined
+            if not any(kw in search_text for kw in self._config.required_keywords):
+                return FilterResult(
+                    passed=False,
+                    reason=f"missing required keyword: {self._config.required_keywords}",
+                    rule_type=RuleType.MISSING_KEYWORD,
+                    matched_value=str(self._config.required_keywords),
+                )
 
-        if "python" not in title_lower and "python" not in desc_lower[:500]:
-            return "python not in title or early description"
+        score = self._calculate_score(job, title_lower, desc_lower)
+        if score < self._config.min_score:
+            return FilterResult(
+                passed=False,
+                reason=f"score {score:.2f} below minimum {self._config.min_score}",
+                rule_type=RuleType.LOW_SCORE,
+                matched_value=f"{score:.2f}",
+            )
 
-        return None
+        return FilterResult(
+            passed=True,
+            reason=f"score: {score:.2f}",
+            rule_type=RuleType.PASSED,
+            matched_value=f"{score:.2f}",
+        )
 
-    def passes_filter(self, job: JobListing) -> bool:
-        """Check if a single job passes all exclusion checks and meets min_score."""
-        if self._check_exclusion(job) is not None:
-            return False
-        return self.score(job) >= self.min_score
-
-    def get_exclusion_reason(self, job: JobListing) -> str:
-        """Return the reason a job was excluded, or 'below min_score' if score too low."""
-        reason = self._check_exclusion(job)
-        if reason:
-            return reason
-        score = self.score(job)
-        if score < self.min_score:
-            return f"score {score:.2f} below min_score {self.min_score}"
-        return "passed all checks"
-
-    def score(self, job: JobListing) -> float:
-        """
-        Score a job from 0.0 to 1.0.
-
-        Factors:
-        - Title keyword match (40%)
-        - Skills + positive signals match in description (40%)
-        - Remote preference (10%)
-        - Freshness (10%)
-
-        Exclusions:
-        - Excluded keywords in title/description
-        - Incompatible tech stacks in title
-        - Excluded role types in title
-        - Missing required keywords
-        """
-        requires_account, domain = self._requires_external_account(job)
-        if requires_account:
-            logger.info(f"Skipping {job.title} - external ATS requires account: {domain}")
-            return 0.0
-
-        exclusion_reason = self._check_exclusion(job)
-        if exclusion_reason:
-            logger.debug(f"Excluded '{job.title}' - {exclusion_reason}")
-            return 0.0
-
-        title_lower = job.title.lower()
-        desc_lower = job.description.lower()
-
+    def _calculate_score(
+        self, job: JobListing, title_lower: str, desc_lower: str
+    ) -> float:
+        """Calculate the score for a job (0.0 to 1.0)."""
+        weights = self._config.weights
         score = 0.0
 
-        title_matches = sum(1 for kw in self.title_keywords if kw in title_lower)
-        if self.title_keywords:
-            score += 0.4 * min(title_matches / 2, 1.0)
+        title_matches = sum(1 for kw in self._config.title_keywords if kw in title_lower)
+        if self._config.title_keywords:
+            score += weights.title_match * min(title_matches / 2, 1.0)
 
-        # Skills/tech match in description (40%)
-        # Count matches from both profile skills AND positive signals
         skill_matches = sum(1 for skill in self.skills if skill in desc_lower)
-        signal_matches = sum(1 for signal in self.positive_signals if signal in desc_lower)
+        signal_matches = sum(
+            1 for signal in self._config.positive_signals if signal in desc_lower
+        )
         combined_matches = skill_matches + signal_matches
 
-        if self.skills or self.positive_signals:
-            # Need at least 3 matches for full score
-            score += 0.4 * min(combined_matches / 3, 1.0)
+        if self.skills or self._config.positive_signals:
+            score += weights.skills_match * min(combined_matches / 3, 1.0)
 
         if job.is_remote:
-            score += 0.1
+            score += weights.remote_bonus
 
         if job.date_posted:
-            # Handle both date and datetime objects from JobSpy
             posted = job.date_posted
-            if hasattr(posted, 'hour'):
+            if hasattr(posted, "hour"):
                 age = datetime.now() - posted
             else:
                 age = datetime.now() - datetime.combine(posted, datetime.min.time())
             if age < timedelta(hours=24):
-                score += 0.1
+                score += weights.freshness_bonus
             elif age < timedelta(hours=48):
-                score += 0.05
+                score += weights.freshness_bonus * 0.5
 
         return min(score, 1.0)
 
+    def score(self, job: JobListing) -> float:
+        """Score a job from 0.0 to 1.0. Returns 0.0 if job is excluded."""
+        result = self.check_filter(job)
+
+        if not result.passed:
+            logger.debug(f'REJECTED "{job.title}" - {result.reason}')
+            return 0.0
+
+        title_lower = job.title.lower()
+        desc_lower = job.description.lower() if job.description else ""
+        final_score = self._calculate_score(job, title_lower, desc_lower)
+
+        logger.debug(f'PASSED "{job.title}" - score: {final_score:.2f}')
+        return final_score
+
+    def passes_filter(self, job: JobListing) -> bool:
+        """Check if a job passes all filters."""
+        result = self.check_filter(job)
+        return result.passed
+
+    def get_exclusion_reason(self, job: JobListing) -> str:
+        """Return the reason a job was excluded, or 'passed' if it passes."""
+        result = self.check_filter(job)
+        return result.reason
+
+    def explain(self, job: JobListing) -> str:
+        """Return detailed explanation of why job passed or failed."""
+        result = self.check_filter(job)
+
+        title_lower = job.title.lower()
+        desc_lower = job.description.lower() if job.description else ""
+        url_lower = job.url.lower() if job.url else ""
+
+        lines = [
+            f"Job: {job.title} at {job.company}",
+            f"URL: {job.url}",
+            "",
+            f"Result: {'PASSED' if result.passed else 'REJECTED'}",
+            f"Reason: {result.reason}",
+            f"Rule Type: {result.rule_type.value}",
+        ]
+
+        if result.matched_value:
+            lines.append(f"Matched Value: {result.matched_value}")
+
+        lines.append("")
+        lines.append("--- Filter Checks ---")
+
+        title_hits = [e for e in self._config.title_exclusions if e in title_lower]
+        lines.append(f"Title exclusions matched: {title_hits if title_hits else 'none'}")
+
+        domain_hits = [d for d in self._config.blocked_domains if d in url_lower]
+        lines.append(f"Blocked domains matched: {domain_hits if domain_hits else 'none'}")
+
+        combined = f"{title_lower} {desc_lower}"
+        desc_hits = [e for e in self._config.description_exclusions if e in combined]
+        lines.append(f"Description exclusions matched: {desc_hits if desc_hits else 'none'}")
+
+        stack_hits = [s for s in self._config.stack_exclusions if s in title_lower]
+        lines.append(f"Stack exclusions matched: {stack_hits if stack_hits else 'none'}")
+
+        role_hits = [r for r in self._config.role_exclusions if r in title_lower]
+        lines.append(f"Role exclusions matched: {role_hits if role_hits else 'none'}")
+
+        search_text = title_lower if self._config.keyword_in_title else combined
+        kw_found = [kw for kw in self._config.required_keywords if kw in search_text]
+        lines.append(f"Required keywords found: {kw_found if kw_found else 'none'}")
+
+        lines.append("")
+        lines.append("--- Scoring ---")
+        score = self._calculate_score(job, title_lower, desc_lower)
+        lines.append(f"Final score: {score:.2f} (min: {self._config.min_score})")
+
+        title_matches = [kw for kw in self._config.title_keywords if kw in title_lower]
+        lines.append(f"Title keywords matched: {title_matches}")
+
+        skill_matches = [s for s in self.skills if s in desc_lower]
+        signal_matches = [s for s in self._config.positive_signals if s in desc_lower]
+        lines.append(f"Skills matched: {skill_matches}")
+        lines.append(f"Positive signals matched: {signal_matches}")
+        lines.append(f"Remote: {job.is_remote}")
+        lines.append(f"Date posted: {job.date_posted}")
+
+        return "\n".join(lines)
+
     def filter_and_score(self, jobs: list[JobListing]) -> list[JobListing]:
-        """Score all jobs and filter by minimum score."""
-        scored = []
-        excluded_count = 0
+        """Score all jobs and filter by minimum score. Logs detailed stats."""
+        stats = FilterStats()
+        scored: list[JobListing] = []
 
         for job in jobs:
-            job.score = self.score(job)
-            if job.score >= self.min_score:
+            result = self.check_filter(job)
+            stats.record_result(result)
+
+            if result.passed:
+                job.score = self._calculate_score(
+                    job,
+                    job.title.lower(),
+                    job.description.lower() if job.description else "",
+                )
                 scored.append(job)
-            elif job.score == 0.0:
-                excluded_count += 1
+                logger.debug(f'PASSED "{job.title} at {job.company}" - score: {job.score:.2f}')
+            else:
+                job.score = 0.0
+                logger.debug(f'REJECTED "{job.title} at {job.company}" - {result.reason}')
 
         scored.sort(key=lambda j: j.score, reverse=True)
+        self._last_filter_stats = stats
+        stats.log_summary()
 
-        logger.info(
-            f"Scored {len(jobs)} jobs: {len(scored)} passed (>={self.min_score}), "
-            f"{excluded_count} excluded (stack/keyword mismatch)"
-        )
         return scored

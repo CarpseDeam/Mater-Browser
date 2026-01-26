@@ -1,0 +1,363 @@
+# Job Filtering Configuration
+# All filtering rules in one place - edit this file to tune what jobs pass
+
+scoring:
+  min_score: 0.5
+  weights:
+    title_match: 0.4
+    skills_match: 0.4
+    remote_bonus: 0.1
+    freshness_bonus: 0.1
+
+required:
+  # Job MUST mention at least one of these somewhere in title or description
+  keywords:
+    - "python"
+  # If true, keyword must be in title. If false, anywhere in posting works.
+  keyword_in_title: false
+
+title_exclusions:
+  # Instant reject if title contains any of these (case-insensitive)
+  seniority:
+    - "staff"
+    - "principal"
+    - "distinguished"
+    - "lead"
+    - "architect"
+    - "director"
+    - "vp"
+    - "head of"
+    - "chief"
+    - "manager"
+    - "management"
+    - "junior"
+    - "jr"
+    - "entry"
+    - "intern"
+    - "graduate"
+    - "apprentice"
+
+  platforms:
+    - "ios"
+    - "android"
+    - "mobile"
+    - "frontend"
+    - "front-end"
+    - "front end"
+
+  roles:
+    - "devops"
+    - "sre"
+    - "site reliability"
+    - "cloud engineer"
+    - "cloud developer"
+    - "security"
+    - "infosec"
+    - "cyber"
+    - "data scientist"
+    - "ml engineer"
+    - "machine learning"
+    - "ai engineer"
+    - "qa"
+    - "quality assurance"
+    - "test engineer"
+    - "sdet"
+    - "support"
+    - "helpdesk"
+
+  stacks:
+    - "salesforce"
+    - "servicenow"
+    - "sap"
+    - ".net"
+    - "c#"
+    - "java developer"
+    - "java engineer"
+    - "php"
+    - "ruby"
+    - "golang"
+    - "go developer"
+    - "iot"
+    - "embedded"
+    - "firmware"
+
+description_exclusions:
+  # Reject if description contains these
+  - "10+ years"
+  - "15+ years"
+  - "12+ years"
+  - "10 years"
+  - "15 years"
+  - "12 years"
+  - "clearance required"
+  - "security clearance"
+  - "ts/sci"
+  - "on-site only"
+  - "onsite only"
+  - "no remote"
+  - "must be local"
+  - "relocation required"
+  - "node.js required"
+  - "java required"
+  - "c++ required"
+  - "react required"
+  - "angular required"
+
+blocked_domains:
+  # ATS platforms requiring account creation - skip entirely
+  - "workday.com"
+  - "myworkdayjobs.com"
+  - "wd1.myworkdaysite.com"
+  - "wd3.myworkdaysite.com"
+  - "wd5.myworkdaysite.com"
+  - "taleo.net"
+  - "brassring.com"
+  - "icims.com"
+  - "lever.co"
+  - "greenhouse.io"
+  - "jobvite.com"
+  - "ultipro.com"
+  - "successfactors.com"
+  - "smartrecruiters.com"
+  - "paylocity.com"
+  - "adp.com"
+  - "cornerstoneondemand.com"
+  - "pwc.com"
+
+blocked_url_patterns:
+  # URL patterns to block (payment pages, account creation)
+  - "premium"
+  - "upgrade"
+  - "pricing"
+  - "subscribe"
+  - "checkout"
+  - "billing"
+  - "payment"
+  - "register"
+  - "signup"
+  - "sign-up"
+  - "create-account"
+  - "createaccount"
+  - "registration"
+  - "newuser"
+
+positive_signals:
+  # Boost score if description mentions these
+  - "fastapi"
+  - "django"
+  - "flask"
+  - "sqlalchemy"
+  - "pydantic"
+  - "celery"
+  - "asyncio"
+  - "pytest"
+  - "postgresql"
+  - "postgres"
+  - "snowflake"
+  - "redshift"
+  - "airflow"
+  - "dagster"
+  - "prefect"
+  - "dbt"
+  - "kafka"
+  - "rabbitmq"
+  - "redis"
+  - "aws"
+  - "docker"
+  - "kubernetes"
+  - "terraform"
+  - "ci/cd"
+  - "github actions"
+  - "microservices"
+  - "rest api"
+  - "graphql"
+  - "distributed systems"
+  - "event-driven"
+
+title_keywords:
+  # Keywords that indicate good title match
+  - "python"
+  - "backend"
+  - "back-end"
+  - "back end"
+  - "platform"
+  - "data engineer"
+  - "data infrastructure"
+  - "systems engineer"
+  - "api engineer"
+  - "api developer"
+  - "software engineer"
+  - "integration"
+  - "etl"
+  - "pipeline"
+
+stack_exclusions:
+  # Tech stacks to exclude - incompatible with Python backend focus
+  dotnet:
+    - ".net"
+    - "dotnet"
+    - "c#"
+    - "csharp"
+    - "asp.net"
+    - "blazor"
+    - "f#"
+
+  java:
+    - "java developer"
+    - "java engineer"
+    - "spring boot"
+    - "spring framework"
+    - "kotlin"
+    - "scala"
+    - "jvm"
+
+  frontend:
+    - "angular"
+    - "react developer"
+    - "react engineer"
+    - "vue developer"
+    - "vue engineer"
+    - "frontend developer"
+    - "front-end developer"
+    - "frontend engineer"
+    - "front-end engineer"
+    - "ui developer"
+    - "ui engineer"
+
+  other_backends:
+    - "php developer"
+    - "php engineer"
+    - "laravel"
+    - "symfony"
+    - "wordpress"
+    - "ruby developer"
+    - "ruby engineer"
+    - "rails"
+    - "ruby on rails"
+    - "golang developer"
+    - "go developer"
+    - "go engineer"
+    - "rust developer"
+
+  mobile:
+    - "ios developer"
+    - "ios engineer"
+    - "android developer"
+    - "android engineer"
+    - "swift developer"
+    - "mobile developer"
+    - "mobile engineer"
+    - "react native"
+    - "flutter"
+    - "kotlin developer"
+
+  enterprise:
+    - "salesforce"
+    - "servicenow"
+    - "sap "
+    - "oracle developer"
+    - "peoplesoft"
+    - "cobol"
+    - "mainframe"
+    - "as400"
+
+  data_science:
+    - "machine learning engineer"
+    - "ml engineer"
+    - "ai engineer"
+    - "data scientist"
+    - "research scientist"
+
+  cloud_iot:
+    - "cloud developer"
+    - "cloud dev"
+    - "iot developer"
+    - "iot engineer"
+    - "embedded developer"
+    - "embedded engineer"
+    - "firmware"
+    - "azure developer"
+    - "gcp developer"
+    - "aws developer"
+
+  other:
+    - "java"
+    - "rust developer"
+    - "rust engineer"
+
+role_exclusions:
+  # Role types to exclude
+  junior:
+    - "junior"
+    - "jr."
+    - "jr "
+    - "entry level"
+    - "entry-level"
+    - "associate developer"
+    - "associate engineer"
+    - "intern"
+    - "internship"
+    - "apprentice"
+    - "trainee"
+    - "graduate"
+
+  non_dev:
+    - "system admin"
+    - "sysadmin"
+    - "systems administrator"
+    - "network admin"
+    - "network engineer"
+    - "infrastructure engineer"
+    - "helpdesk"
+    - "help desk"
+    - "it support"
+    - "tech support"
+    - "desktop support"
+    - "support engineer"
+    - "support specialist"
+
+  qa:
+    - "qa analyst"
+    - "qa engineer"
+    - "quality assurance"
+    - "test engineer"
+    - "sdet"
+    - "automation tester"
+
+  management:
+    - "engineering manager"
+    - "tech lead"
+    - "team lead"
+    - "director"
+    - "vp of engineering"
+    - "head of engineering"
+    - "cto"
+
+  security:
+    - "security engineer"
+    - "security analyst"
+    - "penetration tester"
+    - "cybersecurity"
+    - "infosec"
+
+  devops:
+    - "devops engineer"
+    - "site reliability"
+    - "sre"
+    - "cloud engineer"
+    - "cloud architect"
+
+  senior:
+    - "staff "
+    - "staff,"
+    - "principal"
+    - "distinguished"
+    - "senior staff"
+    - "lead engineer"
+    - "lead developer"
+    - "architect"
+
+  fullstack:
+    - "full stack"
+    - "fullstack"
+    - "full-stack"

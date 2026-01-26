@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 from src.automation.search_generator import SearchGenerator
 from src.queue.manager import JobQueue
 from src.scraper.jobspy_client import JobSpyClient
-from src.scraper.scorer import ACCOUNT_REQUIRED_DOMAINS, JobScorer
+from src.scraper.scorer import JobScorer
 
 if TYPE_CHECKING:
     from queue import Queue
@@ -35,15 +35,6 @@ DEFAULT_SEARCH_LOCATION: str = "remote"
 MAX_CONSECUTIVE_FAILURES: int = 5
 FAILURE_COOLDOWN_SECONDS: float = 60.0
 APPLY_TIMEOUT_SECONDS: float = 300.0
-
-BLOCKED_URL_PATTERNS: list[str] = [
-    # Payment
-    "premium", "upgrade", "pricing", "subscribe",
-    "checkout", "billing", "payment",
-    # Account creation
-    "register", "signup", "sign-up", "create-account",
-    "createaccount", "registration", "newuser",
-]
 
 
 @dataclass
@@ -331,16 +322,6 @@ class AutomationRunner:
         term = self._stats.current_search
         self._emit("cycle_complete", {"search_term": term})
 
-    def _is_blocked_url(self, url: str) -> bool:
-        """Check if URL contains blocked payment/upgrade patterns."""
-        url_lower = url.lower()
-        return any(pattern in url_lower for pattern in BLOCKED_URL_PATTERNS)
-
-    def _requires_account_creation(self, url: str) -> bool:
-        """Check if URL is an external ATS requiring account."""
-        url_lower = url.lower()
-        return any(domain in url_lower for domain in ACCOUNT_REQUIRED_DOMAINS)
-
     def _apply_to_job(self, job: JobListing) -> bool:
         """Request application via queue and wait for result from main thread.
 
@@ -354,21 +335,10 @@ class AutomationRunner:
         Returns:
             True if application succeeded, False otherwise.
         """
-        if self._is_blocked_url(job.url):
-            reason = "Blocked URL pattern detected - potential payment page"
-            logger.warning(f"BLOCKING {job.url}: {reason}")
-            self._queue.mark_skipped(job.url, reason)
-            return True
-
-        if self._requires_account_creation(job.url):
-            logger.info(f"Skipping external ATS (requires account): {job.url}")
-            self._queue.mark_skipped(job.url, "External ATS requires account")
-            return True
-
-        if not self._scorer.passes_filter(job):
-            reason = f"Failed re-validation: {self._scorer.get_exclusion_reason(job)}"
-            logger.info(f"Skipping {job.title} at {job.company}: {reason}")
-            self._queue.mark_skipped(job.url, reason)
+        result = self._scorer.check_filter(job)
+        if not result.passed:
+            logger.info(f"Skipping {job.title} at {job.company}: {result.reason}")
+            self._queue.mark_skipped(job.url, result.reason)
             return True
 
         self._stats.current_job = f"{job.title} at {job.company}"
@@ -391,7 +361,7 @@ class AutomationRunner:
 
         try:
             logger.debug(f"Waiting for ApplyResult (timeout={APPLY_TIMEOUT_SECONDS}s)")
-            result = self._result_queue.get(timeout=APPLY_TIMEOUT_SECONDS)
+            apply_result = self._result_queue.get(timeout=APPLY_TIMEOUT_SECONDS)
         except queue.Empty:
             logger.error(
                 f"Apply timeout after {APPLY_TIMEOUT_SECONDS}s - no response from main thread"
@@ -410,7 +380,7 @@ class AutomationRunner:
 
         self._stats.jobs_applied += 1
 
-        if result.success:
+        if apply_result.success:
             self._queue.mark_applied(job.url)
             self._stats.success_count += 1
             logger.info(f"Successfully applied to {job.company}")
@@ -423,7 +393,7 @@ class AutomationRunner:
             )
             return True
 
-        error_msg = result.error or "Unknown error"
+        error_msg = apply_result.error or "Unknown error"
         self._queue.mark_failed(job.url, error_msg)
         self._stats.failed_count += 1
         logger.warning(f"Failed to apply to {job.company}: {error_msg}")
