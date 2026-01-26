@@ -92,3 +92,5 @@ user_data/
 job_queue.json
 job_history.json
 /.chrome-profile/
+
+.conductor/

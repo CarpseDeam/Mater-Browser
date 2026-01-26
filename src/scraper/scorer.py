@@ -25,6 +25,18 @@ STACK_EXCLUSIONS: list[str] = [
     "salesforce", "servicenow", "sap ",
 ]
 
+# Role types to exclude - not aligned with target position
+ROLE_EXCLUSIONS: list[str] = [
+    # Seniority mismatches (4+ years experience = not junior)
+    "junior", "jr.", "jr ", "entry level", "entry-level", "intern", "internship",
+    # Non-development roles
+    "system admin", "sysadmin", "systems administrator", "network admin",
+    "helpdesk", "help desk", "it support", "tech support", "desktop support",
+    "qa analyst", "qa engineer", "quality assurance",
+    # Management (unless targeting management)
+    "manager", "lead", "supervisor",
+]
+
 
 class JobScorer:
     """Scores jobs based on profile relevance."""
@@ -36,6 +48,7 @@ class JobScorer:
         required_keywords: Optional[list[str]] = None,
         excluded_keywords: Optional[list[str]] = None,
         stack_exclusions: Optional[list[str]] = None,
+        role_exclusions: Optional[list[str]] = None,
         min_score: float = 0.4,
     ) -> None:
         self.profile = profile
@@ -71,6 +84,9 @@ class JobScorer:
         self.stack_exclusions = [
             k.lower() for k in (stack_exclusions or STACK_EXCLUSIONS)
         ]
+        self.role_exclusions = [
+            k.lower() for k in (role_exclusions or ROLE_EXCLUSIONS)
+        ]
         self.min_score = min_score
 
     def score(self, job: JobListing) -> float:
@@ -100,6 +116,11 @@ class JobScorer:
         for stack in self.stack_exclusions:
             if stack in title_lower:
                 logger.debug(f"Excluded '{job.title}' - incompatible stack '{stack}' in title")
+                return 0.0
+
+        for role in self.role_exclusions:
+            if role in title_lower:
+                logger.debug(f"Excluded '{job.title}' - excluded role '{role}' in title")
                 return 0.0
 
         if self.required_keywords:

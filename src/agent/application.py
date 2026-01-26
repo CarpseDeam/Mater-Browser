@@ -521,6 +521,22 @@ class ApplicationAgent:
                     url=job_url
                 )
 
+            # Try Indeed resume card FIRST (before DOM extraction)
+            if self._handle_indeed_resume_card():
+                logger.info("Handled Indeed resume card - continuing to next page check")
+                self._page.wait(1500)
+                if self._is_complete():
+                    logger.info("Application complete after resume selection!")
+                    return ApplicationResult(
+                        status=ApplicationStatus.SUCCESS,
+                        message="Application submitted successfully",
+                        pages_processed=pages_processed,
+                        url=job_url
+                    )
+                self._click_next_button()
+                self._page.wait(1500)
+                continue
+
             dom_state = self._dom_service.extract()
             logger.info(f"Found {dom_state.elementCount} elements")
 
@@ -612,6 +628,56 @@ class ApplicationAgent:
                             return True
                         except Exception as e:
                             logger.warning(f"Resume upload failed: {e}")
+
+        return False
+
+    def _handle_indeed_resume_card(self) -> bool:
+        """
+        Handle Indeed's pre-uploaded resume selection.
+
+        Indeed shows a "Use your Indeed Resume" card that must be clicked,
+        rather than a traditional file upload input.
+
+        Returns:
+            True if resume card found and clicked, False otherwise.
+        """
+        page = self._page.raw
+        current_url = self._page.url.lower()
+
+        if "indeed.com" not in current_url:
+            return False
+
+        logger.info("Checking for Indeed resume card...")
+
+        resume_card_locator = (
+            page.get_by_text(re.compile(r"use your indeed resume", re.IGNORECASE))
+            .or_(page.get_by_text(re.compile(r"use indeed resume", re.IGNORECASE)))
+            .or_(page.get_by_role("button", name=re.compile(r"indeed resume", re.IGNORECASE)))
+            .or_(page.get_by_role("radio", name=re.compile(r"indeed resume", re.IGNORECASE)))
+            .or_(page.locator('[data-testid*="resume-card" i]'))
+            .or_(page.locator('[data-testid*="indeed-resume" i]'))
+            .or_(page.locator('[class*="resume"][class*="card" i]'))
+            .or_(page.locator('[class*="resume-display-card" i]'))
+            .or_(page.locator('[aria-label*="Indeed Resume" i]'))
+        )
+
+        try:
+            first_match = resume_card_locator.first
+            if first_match.is_visible(timeout=3000):
+                try:
+                    tag = first_match.evaluate("el => el.tagName")
+                    text = first_match.evaluate("el => el.textContent?.trim()?.substring(0, 50)")
+                    logger.info(f"Found Indeed resume card: <{tag}> '{text}'")
+                except Exception:
+                    logger.info("Found Indeed resume card (details unavailable)")
+
+                first_match.click()
+                logger.info("Clicked Indeed resume card successfully")
+                self._page.wait(1000)
+                return True
+
+        except Exception as e:
+            logger.debug(f"Indeed resume card not found: {e}")
 
         return False
 
