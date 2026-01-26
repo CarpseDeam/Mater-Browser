@@ -23,41 +23,16 @@ class PageType(Enum):
     UNKNOWN = "unknown"
 
 
-ALREADY_APPLIED_PHRASES: list[str] = [
-    "already applied", "you applied", "you have applied",
-    "application submitted", "previously applied", "application on file",
-]
-CLOSED_PHRASES: list[str] = [
-    "no longer accepting", "position filled", "position has been filled",
-    "job has been filled", "no longer available", "this job is closed",
-    "job is no longer", "posting has expired", "job expired", "job closed",
-]
-PAYMENT_URL_PATTERNS: list[str] = [
-    "premium", "upgrade", "subscribe", "pricing", "checkout", "payment", "billing", "purchase", "cart", "order", "plans",
-]
-SAFE_URL_PATTERNS: list[str] = [
-    "smartapply.indeed.com",
-    "indeed.com/applystart",
-    "linkedin.com/jobs",
-]
-PAYMENT_CONTENT_PHRASES: list[str] = [
-    "enter payment", "credit card", "debit card", "billing information", "purchase now", "buy now",
-    "upgrade to premium", "start free trial", "subscription", "per month", "/month", "/year",
-    "indeed premium", "linkedin premium", "recruiter lite",
-]
-PAYMENT_BUTTON_WORDS: list[str] = [
-    "buy", "purchase", "upgrade", "premium", "subscribe", "checkout", "pay now", "start trial", "get premium", "unlock", "pro version", "pricing",
-]
-ACCOUNT_CREATION_URL_PATTERNS: list[str] = [
-    "register", "signup", "sign-up", "sign_up", "create-account", "create_account", "createaccount",
-    "join", "registration", "new-account", "new_account", "newuser", "new-user",
-]
-ACCOUNT_CREATION_CONTENT_PHRASES: list[str] = [
-    "create an account", "create your account", "create account", "sign up for", "register for",
-    "join now", "join for free", "create password", "confirm password", "retype password",
-    "already have an account", "have an account? sign in", "create your profile", "set up your account",
-]
-NEGATIVE_TEXT_SIGNALS: list[str] = ["save", "later", "dismiss", "close", "cancel", "not now"]
+ALREADY_APPLIED_PHRASES = ["already applied", "you applied", "you have applied", "application submitted", "previously applied", "application on file"]
+CLOSED_PHRASES = ["no longer accepting", "position filled", "position has been filled", "job has been filled", "no longer available", "this job is closed", "job is no longer", "posting has expired", "job expired", "job closed"]
+PAYMENT_URL_PATTERNS = ["premium", "upgrade", "subscribe", "pricing", "checkout", "payment", "billing", "purchase", "cart", "order", "plans"]
+SAFE_URL_PATTERNS = ["smartapply.indeed.com", "indeed.com/applystart", "linkedin.com/jobs"]
+PAYMENT_CONTENT_PHRASES = ["enter payment", "credit card", "debit card", "billing information", "purchase now", "buy now", "upgrade to premium", "start free trial", "subscription", "per month", "/month", "/year", "indeed premium", "linkedin premium", "recruiter lite"]
+PAYMENT_BUTTON_WORDS = ["buy", "purchase", "upgrade", "premium", "subscribe", "checkout", "pay now", "start trial", "get premium", "unlock", "pro version", "pricing"]
+ACCOUNT_CREATION_URL_PATTERNS = ["register", "signup", "sign-up", "sign_up", "create-account", "create_account", "createaccount", "join", "registration", "new-account", "new_account", "newuser", "new-user"]
+ACCOUNT_CREATION_CONTENT_PHRASES = ["create an account", "create your account", "create account", "sign up for", "register for", "join now", "join for free", "create password", "confirm password", "retype password", "already have an account", "have an account? sign in", "create your profile", "set up your account"]
+NEGATIVE_TEXT_SIGNALS = ["save", "later", "dismiss", "close", "cancel", "not now"]
+EXTERNAL_ARIA_PHRASES = ["on company website", "company site", "external site"]
 
 
 class PageClassifier:
@@ -77,21 +52,30 @@ class PageClassifier:
             content_lower = self._page.content().lower()[:5000]
         except Exception:
             content_lower = ""
-        if any(phrase in content_lower for phrase in ALREADY_APPLIED_PHRASES):
+        if any(p in content_lower for p in ALREADY_APPLIED_PHRASES):
             return PageType.ALREADY_APPLIED
-        if any(phrase in content_lower for phrase in CLOSED_PHRASES):
+        if any(p in content_lower for p in CLOSED_PHRASES):
             return PageType.CLOSED
         if self._check_login_required():
             return PageType.LOGIN_REQUIRED
         candidate = self.find_apply_button()
-        if candidate:
-            combined = candidate.text.lower() + " " + (candidate.aria_label or "").lower()
-            if "easy" in combined:
-                return PageType.EASY_APPLY
-            if candidate.tag == "a" and candidate.href:
-                return PageType.EXTERNAL_LINK
+        return self._classify_apply_button(candidate) if candidate else PageType.UNKNOWN
+
+    def _classify_apply_button(self, candidate: ElementCandidate) -> PageType:
+        text_lower = candidate.text.lower()
+        aria_lower = (candidate.aria_label or "").lower()
+        role_lower = (candidate.role or "").lower()
+
+        if "easy" in text_lower or "easy" in aria_lower:
             return PageType.EASY_APPLY
-        return PageType.UNKNOWN
+
+        is_external = (
+            any(phrase in aria_lower for phrase in EXTERNAL_ARIA_PHRASES) or
+            (candidate.tag == "button" and role_lower == "link") or
+            (candidate.tag == "a" and candidate.href) or
+            "apply on " in text_lower
+        )
+        return PageType.EXTERNAL_LINK if is_external else PageType.EASY_APPLY
 
     def find_apply_button(self, refresh: bool = False) -> Optional[ElementCandidate]:
         if self._candidates is None or refresh:
@@ -111,18 +95,16 @@ class PageClassifier:
             return False
         logger.info(f"PageClassifier: Clicking '{candidate.text}' (score={candidate.score:.2f})")
         self._dismiss_overlays()
+        if self._try_click_candidate(candidate, timeout):
+            return True
+        candidate = self.find_apply_button(refresh=True)
+        return self._try_click_candidate(candidate, timeout) if candidate else False
+
+    def _try_click_candidate(self, candidate: ElementCandidate, timeout: int) -> bool:
         locator = self._page.locator(candidate.selector).first
         scroll_element_into_view(self._page, locator)
         verify_element_visible(self._page, locator)
         self._page.wait_for_timeout(random.randint(200, 500))
-        if self._attempt_click_sequence(locator, timeout):
-            return True
-        candidate = self.find_apply_button(refresh=True)
-        if not candidate:
-            return False
-        locator = self._page.locator(candidate.selector).first
-        scroll_element_into_view(self._page, locator)
-        verify_element_visible(self._page, locator)
         return self._attempt_click_sequence(locator, timeout)
 
     def _score_candidate(self, candidate: ElementCandidate) -> float:
@@ -164,48 +146,28 @@ class PageClassifier:
 
     def _dismiss_overlays(self) -> None:
         try:
-            self._page.evaluate('''() => {
-                document.querySelector('.msg-overlay-list-bubble')?.remove();
-                document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(el => el.offsetParent && el.remove());
-                document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach(d => {
-                    const text = (d.textContent || '').toLowerCase();
-                    if (!text.includes('easy apply') && !text.includes('application') && d.offsetParent) d.remove();
-                });
-                document.querySelectorAll('.artdeco-toast-item, .notification-badge').forEach(n => n.remove());
-            }''')
+            self._page.evaluate('''() => { document.querySelector('.msg-overlay-list-bubble')?.remove(); document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(el => el.offsetParent && el.remove()); document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach(d => { const text = (d.textContent || '').toLowerCase(); if (!text.includes('easy apply') && !text.includes('application') && d.offsetParent) d.remove(); }); document.querySelectorAll('.artdeco-toast-item, .notification-badge').forEach(n => n.remove()); }''')
         except Exception:
             pass
 
     def _attempt_click_sequence(self, locator: Locator, timeout: int) -> bool:
-        try:
-            locator.click(timeout=timeout)
-            return True
-        except Exception:
-            pass
-        try:
-            box = locator.bounding_box(timeout=1000)
-            if box:
-                locator.click(timeout=timeout, position={"x": box['width'] / 2, "y": box['height'] / 2})
-                return True
-        except Exception:
-            pass
-        try:
-            locator.evaluate("el => el.click()")
-            return True
-        except Exception:
-            pass
-        try:
-            locator.click(timeout=timeout, force=True)
-            return True
-        except Exception:
-            pass
+        for attempt in self._click_attempts(locator, timeout):
+            try:
+                if attempt():
+                    return True
+            except Exception:
+                pass
         return False
 
+    def _click_attempts(self, locator: Locator, timeout: int):
+        yield lambda: (locator.click(timeout=timeout), True)[1]
+        yield lambda: (box := locator.bounding_box(timeout=1000)) and (locator.click(timeout=timeout, position={"x": box['width'] / 2, "y": box['height'] / 2}), True)[1]
+        yield lambda: (locator.evaluate("el => el.click()"), True)[1]
+        yield lambda: (locator.click(timeout=timeout, force=True), True)[1]
+
     def _check_login_required(self) -> bool:
-        try:
-            return self._page.locator('input[type="password"]').first.is_visible(timeout=1000)
-        except Exception:
-            return False
+        try: return self._page.locator('input[type="password"]').first.is_visible(timeout=1000)
+        except Exception: return False
 
     def _is_payment_page(self) -> bool:
         url_lower = self._page.url.lower()

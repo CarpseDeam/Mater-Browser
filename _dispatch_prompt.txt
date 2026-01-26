@@ -1,0 +1,41 @@
+Fix PageClassifier.classify() in src/agent/page_classifier.py to correctly distinguish Easy Apply from External Apply buttons.
+
+**Problem:**
+The classifier defaults to EASY_APPLY for any button that doesn't have "easy" in text and isn't an `<a>` tag. But LinkedIn's external apply buttons are `<button role="link">` with aria-label containing "on company website".
+
+Example misclassified button that caused a 30s timeout:
+```html
+<button role="link" aria-label="Apply to Software Engineer (Python) | $120/hr Remote on company website">Apply</button>
+```
+
+This should be EXTERNAL_LINK, not EASY_APPLY.
+
+**Current buggy logic in classify():**
+```python
+if candidate:
+    combined = candidate.text.lower() + " " + (candidate.aria_label or "").lower()
+    if "easy" in combined:
+        return PageType.EASY_APPLY
+    if candidate.tag == "a" and candidate.href:
+        return PageType.EXTERNAL_LINK
+    return PageType.EASY_APPLY  # ← BUG: defaults to Easy Apply
+```
+
+**Fix required:**
+Update classify() to detect external apply signals BEFORE defaulting:
+
+1. Check aria_label for "on company website", "company site", "external site"
+2. Check if candidate has `role="link"` (indicates redirect, not modal)  
+3. Check button text for "Apply on" pattern
+4. Only return EASY_APPLY if positive Easy Apply signals exist, otherwise EXTERNAL_LINK
+
+**Expected classifications:**
+- text="Easy Apply" or aria contains "easy apply" → EASY_APPLY
+- aria contains "on company website" → EXTERNAL_LINK
+- role="link" on button → EXTERNAL_LINK
+- text contains "Apply on" → EXTERNAL_LINK
+- Plain "Apply" button without external signals → EASY_APPLY (true LinkedIn modal)
+
+Keep file under 200 lines. Don't change scoring logic, only the classify() method's decision logic.
+
+Write clean, scalable, modular, efficient code. Follow single responsibility principle. Do not repeat yourself. Use consistent naming conventions. No unnecessary comments.
