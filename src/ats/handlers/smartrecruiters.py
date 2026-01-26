@@ -110,18 +110,21 @@ class SmartRecruitersHandler(BaseATSHandler):
             return PageResult(True, page_type, "Application submitted", False)
 
         if page_type == FormPage.JOB_LISTING:
-            if self.click_apply():
-                self._wait(1500)
-                page_type = self.detect_page_state()
-                if page_type == FormPage.CONFIRMATION:
-                    return PageResult(True, page_type, "Application submitted", False)
+            return PageResult(True, page_type, "On job listing page", True)
 
         return self._fill_application_form()
 
     def advance_page(self) -> PageResult:
         """Click next/submit to advance to the next page."""
+        page_type = self.detect_page_state()
+        
+        if page_type == FormPage.JOB_LISTING:
+            if self.click_apply():
+                return PageResult(True, FormPage.PERSONAL_INFO, "Clicked apply", True)
+            return PageResult(False, FormPage.JOB_LISTING, "Could not find apply button", False)
+
         if self.click_submit():
-            return PageResult(True, FormPage.PERSONAL_INFO, "Submitted", True)
+            return PageResult(True, FormPage.CONFIRMATION, "Clicked submit", True)
         if self.click_next():
             return PageResult(True, FormPage.PERSONAL_INFO, "Advanced to next page", True)
         return PageResult(False, FormPage.PERSONAL_INFO, "Could not advance", False)
@@ -169,22 +172,9 @@ class SmartRecruitersHandler(BaseATSHandler):
         self._upload_resume()
         self._check_all_checkboxes()
 
-        if self.click_submit():
-            self._wait(3000)
-            if self.detect_page_state() == FormPage.CONFIRMATION:
-                return PageResult(
-                    True, FormPage.PERSONAL_INFO, "Application submitted", False
-                )
-            return PageResult(
-                True, FormPage.PERSONAL_INFO, f"Filled {filled} fields, submitted", True
-            )
-
-        if self.click_next():
-            return PageResult(
-                True, FormPage.PERSONAL_INFO, f"Filled {filled} fields, advanced", True
-            )
-
-        return PageResult(False, FormPage.PERSONAL_INFO, "Could not advance", False)
+        return PageResult(
+            True, FormPage.PERSONAL_INFO, f"Filled {filled} fields", True
+        )
 
     def _fill_basic_fields(self) -> int:
         """Fill basic contact fields."""

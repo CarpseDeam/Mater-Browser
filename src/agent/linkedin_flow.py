@@ -18,6 +18,8 @@ from .models import (
     MAX_POPUP_WAIT_ATTEMPTS,
 )
 from .form_processor import FormProcessor
+from .answer_engine import AnswerEngine
+from .linkedin_form_filler import LinkedInFormFiller
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +147,59 @@ class LinkedInFlow:
                 self._page.goto(popup_url)
                 self._page.wait(LONG_WAIT_MS)
                 self._tabs.close_extras(keep=1)
+            return self._process_with_claude_fallback(job_url)
 
+        if page_type == PageType.EASY_APPLY:
+            return self._process_easy_apply(job_url)
+
+        return self._process_with_claude_fallback(job_url)
+
+    def _process_easy_apply(self, job_url: str) -> ApplicationResult:
+        """Process LinkedIn Easy Apply using deterministic form filler."""
+        logger.info("Using deterministic form filler for Easy Apply")
+
+        answer_engine = AnswerEngine()
+        filler = LinkedInFormFiller(self._page.raw, answer_engine)
+
+        for page_num in range(self._max_pages):
+            self._page.wait(1000)
+
+            if filler.is_confirmation_page():
+                filler.close_modal()
+                return ApplicationResult(
+                    status=ApplicationStatus.SUCCESS,
+                    message="Application submitted",
+                    pages=page_num + 1,
+                    url=job_url,
+                )
+
+            success, unknown = filler.fill_current_modal()
+
+            if unknown:
+                logger.warning(f"Skipping job - unknown questions: {unknown[:3]}")
+                filler.close_modal()
+                return ApplicationResult(
+                    status=ApplicationStatus.FAILED,
+                    message=f"Unknown questions: {', '.join(unknown[:3])}",
+                    pages=page_num + 1,
+                    url=job_url,
+                )
+
+            if not filler.click_next():
+                logger.warning("Could not find next button")
+                break
+
+            self._page.wait(1000)
+
+        return ApplicationResult(
+            status=ApplicationStatus.FAILED,
+            message="Max pages reached or stuck",
+            pages=self._max_pages,
+            url=job_url,
+        )
+
+    def _process_with_claude_fallback(self, job_url: str) -> ApplicationResult:
+        """Fallback to Claude-based processing for external/unknown pages."""
         dom_service = DomService(self._page)
         runner = ActionRunner(self._page, dom_service)
 

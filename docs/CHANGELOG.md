@@ -2,11 +2,11 @@
 
 All notable changes to this project.
 
-- 2026-01-26: refactor: Standardize ATS handlers and fix naming inconsistencies
+- 2026-01-26: refactor: Standardize ATS handlers and fix naming inconsistencies 
   - Standardized all ATS handlers to use `detect_page_state`, `FormPage`, and `PageResult` to match `BaseATSHandler`
   - Fixed inconsistencies in `LeverHandler`, `PhenomHandler`, and `IndeedHandler` where `PageState` and `HandlerResult` were incorrectly used
   - Renamed `detect_page_type` to `detect_page_state` in `SmartRecruitersHandler` and `ICIMSHandler` for consistency
-
+  - Standardized documentation in `API.md`, `ARCHITECTURE.md`, `CHANGELOG.md`, and `STRUCT.md` to reflect the new handler flow
 - 2026-01-26: fix: Fix ATS enum mismatch by adding SMARTRECRUITERS and TALEO to ATSType
   - Added `SMARTRECRUITERS` and `TALEO` to `ATSType` enum in `src/ats/detector.py`
   - Updated `ATS_URL_PATTERNS` and `ATS_PAGE_SIGNATURES` with patterns for SmartRecruiters and Taleo

@@ -101,6 +101,11 @@ class FormProcessor:
                     ApplicationStatus.FAILED, result.message, pages, job_url
                 )
 
+            advance_result = handler.advance_page()
+            if not advance_result.success:
+                logger.warning(f"Handler failed to advance: {advance_result.message}")
+                # Don't fail immediately if fill was successful, maybe it advanced anyway
+            
             self._page.wait(2000)
 
         return ApplicationResult(

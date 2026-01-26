@@ -118,16 +118,53 @@ class ICIMSHandler(BaseATSHandler):
         handler = handlers.get(page_type, self._handle_unknown)
         return handler()
 
+    def advance_page(self) -> PageResult:
+        """Click next/submit to advance to the next page."""
+        page_type = self.detect_page_state()
+        
+        if page_type == FormPage.JOB_LISTING:
+            return self._click_apply_button()
+
+        if self.click_submit():
+            return PageResult(True, FormPage.CONFIRMATION, "Clicked submit", True)
+        
+        if self.click_next():
+            return PageResult(True, FormPage.PERSONAL_INFO, "Clicked next", True)
+            
+        return PageResult(False, FormPage.PERSONAL_INFO, "Could not advance", False)
+
+    def click_next(self) -> bool:
+        """Click the next button."""
+        for selector in self.NEXT_BUTTON_SELECTORS:
+            try:
+                loc = self._page.locator(selector).first
+                if loc.is_visible(timeout=500):
+                    loc.click()
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def click_submit(self) -> bool:
+        """Click the submit button."""
+        for selector in self.SUBMIT_BUTTON_SELECTORS:
+            try:
+                loc = self._page.locator(selector).first
+                if loc.is_visible(timeout=500):
+                    loc.click()
+                    return True
+            except Exception:
+                continue
+        return False
+
     def _handle_personal_info(self) -> PageResult:
         """Fill personal info page."""
         filled = self._fill_basic_fields()
         self._upload_resume()
 
-        if self.click_next():
-            return PageResult(
-                True, FormPage.PERSONAL_INFO, f"Filled {filled} fields", True
-            )
-        return PageResult(False, FormPage.PERSONAL_INFO, "Could not advance", False)
+        return PageResult(
+            True, FormPage.PERSONAL_INFO, f"Filled {filled} fields", True
+        )
 
     def _fill_basic_fields(self) -> int:
         """Fill basic contact fields."""
@@ -151,31 +188,29 @@ class ICIMSHandler(BaseATSHandler):
         if self._resume_path:
             self._upload_file(self.FIELD_SELECTORS["resume"], self._resume_path)
 
+    def _is_visible(self, selector: str, timeout: int = 500) -> bool:
+        """Check if element is visible."""
+        try:
+            return self._page.locator(selector).first.is_visible(timeout=timeout)
+        except Exception:
+            return False
+
     def _handle_questions(self) -> PageResult:
         """Handle screening questions."""
         self._answer_work_auth_questions()
         self._check_all_consent_boxes()
 
-        if self.click_next():
-            return PageResult(True, FormPage.QUESTIONS, "Answered questions", True)
-        return PageResult(False, FormPage.QUESTIONS, "Could not advance", False)
+        return PageResult(True, FormPage.QUESTIONS, "Answered questions", True)
 
     def _handle_review(self) -> PageResult:
-        """Submit application."""
+        """Prepare to submit application."""
         self._check_all_consent_boxes()
 
-        if self.click_submit():
-            self._wait(3000)
-            return PageResult(True, FormPage.REVIEW, "Submitted", False)
-        return PageResult(False, FormPage.REVIEW, "Could not submit", False)
+        return PageResult(True, FormPage.REVIEW, "Reviewed", True)
 
     def _handle_unknown(self) -> PageResult:
-        """Try to advance unknown page."""
-        if self.click_next():
-            return PageResult(True, FormPage.UNKNOWN, "Advanced", True)
-        if self.click_submit():
-            return PageResult(True, FormPage.UNKNOWN, "Submitted", False)
-        return PageResult(False, FormPage.UNKNOWN, "Stuck", False)
+        """Return unknown result."""
+        return PageResult(True, FormPage.UNKNOWN, "Unknown state", True)
 
     def _answer_work_auth_questions(self) -> None:
         """Answer common work authorization questions."""

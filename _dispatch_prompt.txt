@@ -1,56 +1,558 @@
-# Phase 1: Test Generation
+## Goal: Make LinkedIn Easy Apply Reliable with Config-Driven Answers
 
-## CRITICAL: TRUST THE SPEC
+The bot currently uses Claude to analyze forms and decide what to fill. This is unreliable - LLMs hallucinate, forget buttons, generate wrong answers. Successful LinkedIn bots use pre-defined config files instead.
 
-The specification below is COMPLETE. Do not:
-- Read README, ARCHITECTURE, or documentation files
-- Search for patterns or conventions in the codebase
-- Explore directory structures
-- Read files unrelated to test generation
+## Task 1: Create Answer Configuration
 
-Only read files that:
-1. You need to import from (check the target path's neighbors)
-2. Contain types/classes referenced in the interface
+Create `config/answers.yaml` with this structure:
 
-The spec tells you exactly what to test. Trust it.
+```yaml
+# Personal Info
+personal:
+  first_name: "Kori"
+  last_name: "Mead"
+  email: "your-email@example.com"  # placeholder
+  phone: "your-phone"  # placeholder
+  city: "Lorain, Ohio"
+  state: "Ohio"
+  zip: "44052"
+  linkedin: "https://linkedin.com/in/your-profile"
+  website: ""
 
-## CIRCUIT BREAKER
+# Yes/No Checkbox Questions (fuzzy match question text)
+checkboxes:
+  drivers_license: true
+  require_visa: false
+  legally_authorized: true
+  willing_to_relocate: true
+  background_check: true
+  drug_test: true
+  start_immediately: true
+  comfortable_commuting: true
+  remote_work: true
+  us_citizen: true
+  work_authorization: true
 
-If you have made 8+ file reads without writing any code, STOP.
-You are exploring instead of implementing. The spec is complete.
-Write the tests now with what you know.
+# Years of Experience (technology/skill -> years)
+technology:
+  python: 4
+  fastapi: 3
+  postgresql: 3
+  aws: 3
+  docker: 2
+  kubernetes: 1
+  javascript: 2
+  typescript: 2
+  react: 1
+  sql: 4
+  git: 4
+  linux: 3
+  redis: 2
+  snowflake: 2
+  default: 0
 
-## CRITICAL CONSTRAINT: DO NOT WRITE IMPLEMENTATION CODE
+# Years of Industry Experience
+industry:
+  software_engineering: 4
+  backend_development: 4
+  platform_engineering: 3
+  data_engineering: 2
+  information_technology: 4
+  engineering: 4
+  default: 0
 
-You are FORBIDDEN from writing implementation code in this phase.
-Your ONLY task is to generate the test file.
-Do not create the implementation file.
-Do not write any production code.
-Only write tests.
+# Education
+education:
+  highest_degree: "Some College"
+  degree_completed:
+    - "High School Diploma"
+  gpa: "3.0"
 
-## THE SPECIFICATION
+# Language Proficiency
+languages:
+  english: "Native or bilingual"
 
-# Specification: SmartRecruitersHandler
-Tier: HOTFIX
+# Select/Dropdown defaults
+dropdowns:
+  gender: "Decline to answer"
+  race: "Decline to answer"
+  veteran: "Decline to answer"
+  disability: "Decline to answer"
+```
 
-## Description
+## Task 2: Create Answer Engine
+
+Create `src/agent/answer_engine.py`:
+
+```python
+"""Deterministic answer engine for form questions."""
+import logging
+import re
+from pathlib import Path
+from typing import Optional, Any
+import yaml
+
+logger = logging.getLogger(__name__)
 
 
-## Validation
-- Tests: pytest tests/ -v
+class AnswerEngine:
+    """Config-driven answer lookup for LinkedIn Easy Apply questions."""
+    
+    def __init__(self, config_path: Path | None = None) -> None:
+        if config_path is None:
+            config_path = Path(__file__).parent.parent.parent / "config" / "answers.yaml"
+        self._config = self._load_config(config_path)
+        self._question_patterns = self._build_patterns()
+    
+    def _load_config(self, path: Path) -> dict:
+        """Load answer configuration from YAML."""
+        if not path.exists():
+            logger.warning(f"Answer config not found: {path}")
+            return {}
+        with open(path) as f:
+            return yaml.safe_load(f) or {}
+    
+    def _build_patterns(self) -> list[tuple[re.Pattern, str, str]]:
+        """Build regex patterns for question matching.
+        
+        Returns list of (pattern, category, key) tuples.
+        """
+        patterns = []
+        
+        # Personal info patterns
+        personal_patterns = [
+            (r"first\s*name", "personal", "first_name"),
+            (r"last\s*name", "personal", "last_name"),
+            (r"email", "personal", "email"),
+            (r"phone|mobile|cell", "personal", "phone"),
+            (r"city|location", "personal", "city"),
+            (r"state|province", "personal", "state"),
+            (r"zip|postal", "personal", "zip"),
+            (r"linkedin", "personal", "linkedin"),
+            (r"website|portfolio|github", "personal", "website"),
+        ]
+        
+        # Checkbox patterns (yes/no questions)
+        checkbox_patterns = [
+            (r"driver.?s?\s*licen[sc]e", "checkboxes", "drivers_license"),
+            (r"(require|need)\s*(visa|sponsorship)", "checkboxes", "require_visa"),
+            (r"legally\s*(authorized|able)", "checkboxes", "legally_authorized"),
+            (r"(willing|open)\s*to\s*relocate", "checkboxes", "willing_to_relocate"),
+            (r"background\s*check", "checkboxes", "background_check"),
+            (r"drug\s*(test|screen)", "checkboxes", "drug_test"),
+            (r"start\s*(immediately|right\s*away|asap)", "checkboxes", "start_immediately"),
+            (r"(comfortable|able)\s*(commuting|to\s*commute)", "checkboxes", "comfortable_commuting"),
+            (r"remote\s*(work|position)", "checkboxes", "remote_work"),
+            (r"(us|u\.s\.?|united\s*states)\s*citizen", "checkboxes", "us_citizen"),
+            (r"(authorized|eligible)\s*to\s*work", "checkboxes", "work_authorization"),
+            (r"(18|eighteen)\s*(years|yrs)\s*(old|of\s*age|or\s*older)", "checkboxes", "over_18"),
+        ]
+        
+        # Experience patterns - years of X
+        experience_patterns = [
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*python", "technology", "python"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*fastapi", "technology", "fastapi"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*(aws|amazon)", "technology", "aws"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*docker", "technology", "docker"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*kubernetes", "technology", "kubernetes"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*(postgres|postgresql)", "technology", "postgresql"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*sql", "technology", "sql"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*javascript", "technology", "javascript"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*typescript", "technology", "typescript"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*react", "technology", "react"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*git", "technology", "git"),
+            (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*linux", "technology", "linux"),
+        ]
+        
+        for pattern_str, category, key in personal_patterns + checkbox_patterns + experience_patterns:
+            patterns.append((re.compile(pattern_str, re.IGNORECASE), category, key))
+        
+        return patterns
+    
+    def get_answer(self, question: str, field_type: str = "text") -> Optional[Any]:
+        """Look up answer for a question.
+        
+        Args:
+            question: The question text (label, placeholder, aria-label)
+            field_type: Type of field (text, checkbox, select, radio, number)
+            
+        Returns:
+            Answer value or None if no match found
+        """
+        question_lower = question.lower().strip()
+        
+        # Try pattern matching first
+        for pattern, category, key in self._question_patterns:
+            if pattern.search(question_lower):
+                value = self._config.get(category, {}).get(key)
+                if value is not None:
+                    logger.info(f"AnswerEngine: '{question[:50]}' -> {category}.{key} = {value}")
+                    return self._format_answer(value, field_type)
+        
+        # Try fuzzy matching for technology/industry experience
+        experience_match = self._match_experience_question(question_lower)
+        if experience_match is not None:
+            return self._format_answer(experience_match, field_type)
+        
+        logger.warning(f"AnswerEngine: No match for '{question[:80]}'")
+        return None
+    
+    def _match_experience_question(self, question: str) -> Optional[int]:
+        """Try to match 'years of X experience' questions dynamically."""
+        # Extract the technology/skill from question
+        exp_pattern = r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*(\w+)"
+        match = re.search(exp_pattern, question)
+        if not match:
+            return None
+        
+        skill = match.group(4).lower()
+        
+        # Check technology config
+        tech_config = self._config.get("technology", {})
+        if skill in tech_config:
+            return tech_config[skill]
+        
+        # Check industry config
+        industry_config = self._config.get("industry", {})
+        if skill in industry_config:
+            return industry_config[skill]
+        
+        # Return default
+        return tech_config.get("default", 0)
+    
+    def _format_answer(self, value: Any, field_type: str) -> Any:
+        """Format answer for field type."""
+        if field_type == "checkbox":
+            return bool(value)
+        if field_type == "number":
+            return int(value) if isinstance(value, (int, float)) else 0
+        if field_type == "radio" and isinstance(value, bool):
+            return "Yes" if value else "No"
+        return str(value)
+    
+    def has_answer(self, question: str) -> bool:
+        """Check if we have an answer for this question."""
+        return self.get_answer(question) is not None
+```
 
-## YOUR TASK
+## Task 3: Create Simplified LinkedIn Form Filler
 
-Create a pytest test suite at: `tests/test_smartrecruitershandler.py`
+Create `src/agent/linkedin_form_filler.py`:
 
-Test Generation Rules:
-1. Create one test per 'Must Do' requirement
-2. Create one test per edge case
-3. Create tests for precondition violations
-4. Create tests for postcondition verification
-5. Create tests verifying 'Must Not Do' constraints
+```python
+"""Deterministic form filler for LinkedIn Easy Apply."""
+import logging
+import re
+from typing import Optional
 
-Write tests that will FAIL until implementation exists.
-Do NOT write any implementation code.
+from playwright.sync_api import Page, Locator
+
+from .answer_engine import AnswerEngine
+
+logger = logging.getLogger(__name__)
+
+
+class LinkedInFormFiller:
+    """Fill LinkedIn Easy Apply forms using config-driven answers."""
+    
+    SUBMIT_BUTTON_PATTERNS = [
+        'button[aria-label*="Submit" i]',
+        'button[aria-label*="Review" i]', 
+        'button[aria-label*="Next" i]',
+        'button:has-text("Submit application")',
+        'button:has-text("Review")',
+        'button:has-text("Next")',
+        'button:has-text("Continue")',
+    ]
+    
+    def __init__(self, page: Page, answer_engine: Optional[AnswerEngine] = None) -> None:
+        self._page = page
+        self._answers = answer_engine or AnswerEngine()
+        self._unknown_questions: list[str] = []
+    
+    def fill_current_modal(self) -> tuple[bool, list[str]]:
+        """Fill all fields in the current Easy Apply modal.
+        
+        Returns:
+            (success, list of unknown questions)
+        """
+        self._unknown_questions = []
+        
+        # Get all form groups in the modal
+        modal = self._page.locator('.jobs-easy-apply-modal, [data-test-modal]').first
+        if not modal.is_visible(timeout=2000):
+            logger.warning("No Easy Apply modal found")
+            return False, []
+        
+        # Fill text inputs
+        self._fill_text_inputs(modal)
+        
+        # Fill dropdowns/selects
+        self._fill_selects(modal)
+        
+        # Fill radio buttons
+        self._fill_radios(modal)
+        
+        # Fill checkboxes
+        self._fill_checkboxes(modal)
+        
+        return len(self._unknown_questions) == 0, self._unknown_questions
+    
+    def _fill_text_inputs(self, container: Locator) -> None:
+        """Fill text input fields."""
+        inputs = container.locator('input[type="text"], input[type="email"], input[type="tel"], input[type="number"], input:not([type])').all()
+        
+        for inp in inputs:
+            if not inp.is_visible() or not inp.is_editable():
+                continue
+            
+            # Skip if already filled
+            current_value = inp.input_value()
+            if current_value and len(current_value) > 0:
+                continue
+            
+            question = self._get_question_text(inp)
+            if not question:
+                continue
+            
+            field_type = inp.get_attribute("type") or "text"
+            answer = self._answers.get_answer(question, field_type)
+            
+            if answer is not None:
+                inp.fill(str(answer))
+                logger.info(f"Filled: {question[:40]} = {answer}")
+            else:
+                self._unknown_questions.append(question)
+    
+    def _fill_selects(self, container: Locator) -> None:
+        """Fill select dropdowns."""
+        selects = container.locator('select').all()
+        
+        for select in selects:
+            if not select.is_visible():
+                continue
+            
+            question = self._get_question_text(select)
+            if not question:
+                continue
+            
+            answer = self._answers.get_answer(question, "select")
+            if answer is not None:
+                try:
+                    select.select_option(label=str(answer))
+                    logger.info(f"Selected: {question[:40]} = {answer}")
+                except Exception:
+                    # Try value instead of label
+                    try:
+                        select.select_option(value=str(answer))
+                    except Exception as e:
+                        logger.warning(f"Could not select {answer} for {question}: {e}")
+            else:
+                self._unknown_questions.append(question)
+    
+    def _fill_radios(self, container: Locator) -> None:
+        """Fill radio button groups."""
+        # LinkedIn uses fieldset for radio groups
+        fieldsets = container.locator('fieldset').all()
+        
+        for fieldset in fieldsets:
+            if not fieldset.is_visible():
+                continue
+            
+            legend = fieldset.locator('legend').first
+            question = legend.text_content() if legend.count() > 0 else ""
+            if not question:
+                continue
+            
+            answer = self._answers.get_answer(question, "radio")
+            if answer is None:
+                self._unknown_questions.append(question)
+                continue
+            
+            # Find matching radio
+            answer_str = str(answer).lower()
+            radios = fieldset.locator('input[type="radio"]').all()
+            
+            for radio in radios:
+                label = self._get_radio_label(radio)
+                if label and answer_str in label.lower():
+                    if not radio.is_checked():
+                        radio.check()
+                        logger.info(f"Radio: {question[:40]} = {label}")
+                    break
+    
+    def _fill_checkboxes(self, container: Locator) -> None:
+        """Fill checkboxes."""
+        checkboxes = container.locator('input[type="checkbox"]').all()
+        
+        for cb in checkboxes:
+            if not cb.is_visible():
+                continue
+            
+            question = self._get_question_text(cb)
+            if not question:
+                continue
+            
+            answer = self._answers.get_answer(question, "checkbox")
+            if answer is not None:
+                should_check = bool(answer)
+                if cb.is_checked() != should_check:
+                    if should_check:
+                        cb.check()
+                    else:
+                        cb.uncheck()
+                    logger.info(f"Checkbox: {question[:40]} = {should_check}")
+    
+    def _get_question_text(self, element: Locator) -> str:
+        """Extract question text from element's label, aria-label, or placeholder."""
+        # Try aria-label
+        aria = element.get_attribute("aria-label")
+        if aria:
+            return aria.strip()
+        
+        # Try associated label
+        elem_id = element.get_attribute("id")
+        if elem_id:
+            label = self._page.locator(f'label[for="{elem_id}"]').first
+            if label.count() > 0:
+                return (label.text_content() or "").strip()
+        
+        # Try parent label
+        parent_label = element.locator('xpath=ancestor::label').first
+        if parent_label.count() > 0:
+            return (parent_label.text_content() or "").strip()
+        
+        # Try placeholder
+        placeholder = element.get_attribute("placeholder")
+        if placeholder:
+            return placeholder.strip()
+        
+        # Try preceding text/label
+        prev_label = element.locator('xpath=preceding-sibling::label[1]').first
+        if prev_label.count() > 0:
+            return (prev_label.text_content() or "").strip()
+        
+        return ""
+    
+    def _get_radio_label(self, radio: Locator) -> str:
+        """Get label text for a radio button."""
+        radio_id = radio.get_attribute("id")
+        if radio_id:
+            label = self._page.locator(f'label[for="{radio_id}"]').first
+            if label.count() > 0:
+                return (label.text_content() or "").strip()
+        
+        # Try parent label
+        parent = radio.locator('xpath=ancestor::label').first
+        if parent.count() > 0:
+            return (parent.text_content() or "").strip()
+        
+        return ""
+    
+    def click_next(self) -> bool:
+        """Click the next/submit/review button."""
+        for selector in self.SUBMIT_BUTTON_PATTERNS:
+            try:
+                btn = self._page.locator(selector).first
+                if btn.is_visible(timeout=1000):
+                    btn.click()
+                    self._page.wait_for_timeout(500)
+                    return True
+            except Exception:
+                continue
+        return False
+    
+    def is_confirmation_page(self) -> bool:
+        """Check if we're on the confirmation/success page."""
+        indicators = [
+            'text="Application sent"',
+            'text="Your application was sent"',
+            '[data-test-modal-close-btn]',  # Close button appears on success
+            '.artdeco-modal__header:has-text("Application sent")',
+        ]
+        for indicator in indicators:
+            try:
+                if self._page.locator(indicator).first.is_visible(timeout=500):
+                    return True
+            except Exception:
+                continue
+        return False
+    
+    def close_modal(self) -> None:
+        """Close the Easy Apply modal."""
+        close_btn = self._page.locator('[data-test-modal-close-btn], button[aria-label="Dismiss"]').first
+        if close_btn.is_visible(timeout=1000):
+            close_btn.click()
+```
+
+## Task 4: Update LinkedInFlow to Use New Form Filler
+
+Modify `src/agent/linkedin_flow.py` - replace Claude-based processing with deterministic filling:
+
+In the `apply()` method, after clicking the Easy Apply button and detecting EASY_APPLY page type:
+
+```python
+# After clicking Easy Apply button for EASY_APPLY type
+from .linkedin_form_filler import LinkedInFormFiller
+from .answer_engine import AnswerEngine
+
+# ... existing code up to clicking apply button ...
+
+if page_type == PageType.EASY_APPLY:
+    answer_engine = AnswerEngine()
+    filler = LinkedInFormFiller(self._page.raw, answer_engine)
+    
+    max_pages = 10
+    for page_num in range(max_pages):
+        self._page.wait(1000)
+        
+        # Check for success
+        if filler.is_confirmation_page():
+            filler.close_modal()
+            return ApplicationResult(
+                status=ApplicationStatus.SUCCESS,
+                message="Application submitted",
+                url=job_url,
+            )
+        
+        # Fill current page
+        success, unknown = filler.fill_current_modal()
+        
+        # If we have unknown questions, skip this job
+        if unknown:
+            logger.warning(f"Skipping job - unknown questions: {unknown[:3]}")
+            filler.close_modal()
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message=f"Unknown questions: {', '.join(unknown[:3])}",
+                url=job_url,
+            )
+        
+        # Click next
+        if not filler.click_next():
+            logger.warning("Could not find next button")
+            break
+    
+    return ApplicationResult(
+        status=ApplicationStatus.FAILED,
+        message="Max pages reached or stuck",
+        url=job_url,
+    )
+```
+
+## Summary
+
+This creates a deterministic, config-driven form filling system:
+
+1. `config/answers.yaml` - All answers pre-defined
+2. `AnswerEngine` - Fuzzy matches questions to config keys
+3. `LinkedInFormFiller` - Fills forms using AnswerEngine, no AI
+4. Unknown question = skip job (don't guess)
+
+The bot will be MUCH more reliable because:
+- No LLM latency or hallucination
+- Consistent answers every time
+- Unknown questions are logged for you to add later
+- Simple, predictable code path
 
 Write clean, scalable, modular, efficient code. Follow single responsibility principle. Do not repeat yourself. Use consistent naming conventions. No unnecessary comments.

@@ -160,6 +160,6 @@ class IndeedHandler(BaseATSHandler):
         self._click_checkbox("[data-testid='agree-checkbox']")
         self._click_checkbox("input[type='checkbox'][required]")
 
-    def advance_page(self) -> HandlerResult:
+    def advance_page(self) -> PageResult:
         """Click continue/submit button."""
         return self._click_next_button()
