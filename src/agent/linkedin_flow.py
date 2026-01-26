@@ -44,7 +44,7 @@ class LinkedInFlow:
         self._max_pages = max_pages
 
     def _wait_for_external_popup(
-        self, max_attempts: int = 5, delay_ms: int = 1000
+        self, max_attempts: int = MAX_POPUP_WAIT_ATTEMPTS, delay_ms: int = MEDIUM_WAIT_MS
     ) -> Optional[str]:
         """Poll for captured popup URL with retries.
 
@@ -74,27 +74,14 @@ class LinkedInFlow:
         """
         logger.info("Using LinkedIn Easy Apply flow")
 
-        try:
-            self._page.goto(job_url)
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "err_aborted" in error_msg or "aborted" in error_msg:
-                logger.warning(f"Navigation aborted (LinkedIn SPA behavior): {e}")
-                self._page.wait(2000)
+        if not self._page.goto(job_url):
+            return ApplicationResult(
+                status=ApplicationStatus.ERROR,
+                message="Navigation to job page failed",
+                url=job_url,
+            )
 
-                current_url = self._page.url.lower()
-                if "linkedin.com/jobs" not in current_url:
-                    logger.error(f"Navigation failed - not on LinkedIn jobs: {current_url}")
-                    return ApplicationResult(
-                        status=ApplicationStatus.ERROR,
-                        message="Navigation to job page failed",
-                        url=job_url
-                    )
-                logger.info(f"SPA navigation succeeded, now at: {self._page.url}")
-            else:
-                raise
-
-        self._page.wait(2000)
+        self._page.wait(LONG_WAIT_MS)
 
         try:
             self._page.raw.wait_for_load_state("networkidle", timeout=5000)
