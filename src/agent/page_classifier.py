@@ -146,7 +146,7 @@ class PageClassifier:
 
     def _dismiss_overlays(self) -> None:
         try:
-            self._page.evaluate('''() => { document.querySelector('.msg-overlay-list-bubble')?.remove(); document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(el => el.offsetParent && el.remove()); document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach(d => { const text = (d.textContent || '').toLowerCase(); if (!text.includes('easy apply') && !text.includes('application') && d.offsetParent) d.remove(); }); document.querySelectorAll('.artdeco-toast-item, .notification-badge').forEach(n => n.remove()); }''')
+            self._page.evaluate('''() => { document.querySelector('.msg-overlay-list-bubble')?.remove(); document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(el => el.offsetParent && el.remove()); document.querySelectorAll('[role="dialog"], [role="alertdialog"]').forEach(d => { const text = (d.textContent || '').toLowerCase(); if (!text.includes('easy apply') && !text.includes('application') && d.offsetParent) d.remove(); }); document.querySelectorAll('.artdeco-toast-item, .notification-badge').forEach(n => n.remove()); document.querySelectorAll('[class*="z-modal"][class*="bg-opacity"], [class*="bg-black"][class*="bg-opacity-50"]').forEach(el => { if (el.classList.contains('fixed') && el.offsetParent) el.remove(); }); }''')
         except Exception:
             pass
 
@@ -192,10 +192,7 @@ class PageClassifier:
             return True
         try:
             phrases_js = "[" + ", ".join(f'"{p}"' for p in ACCOUNT_CREATION_CONTENT_PHRASES) + "]"
-            if self._page.evaluate(f'''() => {{
-                if ({phrases_js}.some(p => document.body.innerText.toLowerCase().includes(p))) return true;
-                return !!document.querySelector('input[name*="confirm"], input[name*="retype"], input[placeholder*="confirm"], input[placeholder*="retype"]');
-            }}'''):
+            if self._page.evaluate(f'() => {phrases_js}.some(p => document.body.innerText.toLowerCase().includes(p)) || !!document.querySelector(\'input[name*="confirm"], input[name*="retype"], input[placeholder*="confirm"], input[placeholder*="retype"]\')'):
                 logger.warning(f"ACCOUNT CREATION CONTENT DETECTED: {self._page.url}")
                 return True
         except Exception:

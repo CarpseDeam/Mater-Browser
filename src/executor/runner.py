@@ -119,6 +119,13 @@ class ActionRunner:
             case UploadAction():
                 selector = self._dom.get_selector(action.ref)
                 loc = self._page.raw.locator(selector).first
+                tag = loc.evaluate("el => el.tagName.toLowerCase()")
+                if tag == "label":
+                    for_attr = loc.get_attribute("for")
+                    if for_attr:
+                        loc = self._page.raw.locator(f"input#{for_attr}").first
+                    else:
+                        loc = loc.locator('input[type="file"]').first
                 loc.set_input_files(action.file)
             case WaitAction():
                 self._page.wait(action.ms)

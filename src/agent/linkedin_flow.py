@@ -121,6 +121,14 @@ class LinkedInFlow:
 
         self._page.wait(1500)
 
+        if page_type == PageType.EXTERNAL_LINK:
+            popup_url = self._tabs.get_captured_popup_url()
+            if popup_url and popup_url != "about:blank":
+                logger.info(f"External job: navigating to popup {popup_url}")
+                self._page.goto(popup_url)
+                self._page.wait(2000)
+                self._tabs.close_extras(keep=1)
+
         dom_service = DomService(self._page)
         runner = ActionRunner(self._page, dom_service)
 
