@@ -28,6 +28,8 @@ Uses Claude vision to find elements when DOM detection fails.
 Dedicated success detection for application completion.
 
 - `check() -> CompletionResult`: Evaluates all completion signals (URL, text, form state) and returns the first matching success indicator.
+- `mark_form_filled()`: Marks that a form has been interacted with, enabling the form-disappearance signal.
+- `reset()`: Resets the detection state for a new application session.
 
 ## Scraper API
 

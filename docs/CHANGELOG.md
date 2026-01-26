@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-01-26: feat: Enhance form interaction robustness and success detection
+  - Added rate limiting and click limits to Indeed modal dismissal in IndeedHelpers
+  - Improved SuccessDetector accuracy by tracking if forms were actually filled before detecting disappearance
+  - Enhanced ActionRunner to handle hidden radio and checkbox inputs by clicking associated labels
+  - Added reset logic to FormProcessor to ensure clean state between application attempts
+
 - 2026-01-26: refactor: Centralize filter configuration and enhance JobScorer
   - Introduced `FilterConfig` for externalized and manageable filter rules (YAML-based)
   - Refactored `JobScorer` to use `FilterConfig` for title exclusions, stack exclusions, role exclusions, and scoring weights

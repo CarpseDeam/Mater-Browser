@@ -16,7 +16,13 @@ The `FormProcessor` handles the interaction with web forms. When the analysis mo
 The `SuccessDetector` component is responsible for determining if an application has been successfully submitted. It employs a multi-layered approach:
 1. **URL Signal**: Matches current URL against known success patterns (e.g., `/thank-you`, `/confirmation`).
 2. **Content Signal**: Scans page text for confirmation phrases (e.g., "application submitted").
-3. **State Signal**: Detects when form elements disappear from the page, indicating a successful transition.
+3. **State Signal**: Detects when form elements disappear from the page, indicating a successful transition. Only active if a form has been previously filled during the session to avoid false positives.
+
+## Action Execution
+
+Individual actions are executed via `ActionRunner`, which provides robustness for common web patterns:
+- **Hidden Inputs**: Automatically handles hidden radio and checkbox inputs by attempting to click their associated `<label>` elements or using direct JavaScript execution.
+- **React Select**: Specialized logic for interacting with complex React-based select components.
 
 ## Job Scoring & Filtering
 
