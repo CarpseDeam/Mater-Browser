@@ -7,6 +7,27 @@ from .jobspy_client import JobListing
 
 logger = logging.getLogger(__name__)
 
+ACCOUNT_REQUIRED_DOMAINS: list[str] = [
+    "workday.com",
+    "myworkdayjobs.com",
+    "taleo.net",
+    "brassring.com",
+    "icims.com",
+    "lever.co",
+    "greenhouse.io",
+    "jobvite.com",
+    "ultipro.com",
+    "successfactors.com",
+    "smartrecruiters.com",
+    "paylocity.com",
+    "adp.com",
+    "cornerstoneondemand.com",
+    "pwc.com",
+    "wd1.myworkdaysite.com",
+    "wd3.myworkdaysite.com",
+    "wd5.myworkdaysite.com",
+]
+
 # Tech stacks to exclude - incompatible with Python backend focus
 STACK_EXCLUSIONS: list[str] = [
     # .NET ecosystem
@@ -146,8 +167,20 @@ class JobScorer:
         ]
         self.min_score = min_score
 
+    def _requires_external_account(self, job: JobListing) -> tuple[bool, str]:
+        """Check if job URL points to ATS requiring account creation."""
+        url_lower = job.job_url.lower() if job.job_url else ""
+        for domain in ACCOUNT_REQUIRED_DOMAINS:
+            if domain in url_lower:
+                return True, domain
+        return False, ""
+
     def _check_exclusion(self, job: JobListing) -> Optional[str]:
         """Check if job should be excluded and return the reason, or None if it passes."""
+        requires_account, domain = self._requires_external_account(job)
+        if requires_account:
+            return f"external ATS requires account: {domain}"
+
         title_lower = job.title.lower()
         desc_lower = job.description.lower()
         combined = f"{title_lower} {desc_lower}"
@@ -202,6 +235,11 @@ class JobScorer:
         - Excluded role types in title
         - Missing required keywords
         """
+        requires_account, domain = self._requires_external_account(job)
+        if requires_account:
+            logger.info(f"Skipping {job.title} - external ATS requires account: {domain}")
+            return 0.0
+
         exclusion_reason = self._check_exclusion(job)
         if exclusion_reason:
             logger.debug(f"Excluded '{job.title}' - {exclusion_reason}")

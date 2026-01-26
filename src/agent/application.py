@@ -276,6 +276,14 @@ class ApplicationAgent:
                 url=job_url,
             )
 
+        if page_type == PageType.ACCOUNT_CREATION:
+            logger.warning(f"ACCOUNT CREATION PAGE DETECTED - aborting: {self._page.url}")
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Account creation page detected - safety abort",
+                url=job_url,
+            )
+
         if page_type == PageType.LOGIN_REQUIRED:
             return ApplicationResult(
                 status=ApplicationStatus.NEEDS_LOGIN,
@@ -360,6 +368,14 @@ class ApplicationAgent:
                 url=job_url,
             )
 
+        if page_type == PageType.ACCOUNT_CREATION:
+            logger.warning(f"ACCOUNT CREATION PAGE DETECTED - aborting: {self._page.url}")
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Account creation page detected - safety abort",
+                url=job_url,
+            )
+
         if page_type == PageType.LOGIN_REQUIRED:
             return ApplicationResult(
                 status=ApplicationStatus.NEEDS_LOGIN,
@@ -421,7 +437,11 @@ class ApplicationAgent:
 
         Handles both:
         - Same-tab navigation (URL changes)
-        - New-tab opens (page count increases)
+        - Popup interception (captured URL from closed popup)
+
+        Popups are intercepted by TabManager and their URLs are captured.
+        Instead of switching to a new tab (which steals focus), we navigate
+        the current tab to the captured URL.
 
         Args:
             original_url: URL before clicking apply.
@@ -434,40 +454,50 @@ class ApplicationAgent:
         timeout_sec = EXTERNAL_REDIRECT_TIMEOUT_MS / 1000
 
         while (time.time() - start) < timeout_sec:
-            # Check for new tab
-            current_pages = self._tabs.context.pages
-            if len(current_pages) > original_page_count:
-                # Switch to new tab
-                new_page = current_pages[-1]
-                self._page = Page(new_page)
-                logger.info(f"Switched to new tab: {self._page.url}")
+            popup_url = self._tabs.get_captured_popup_url()
+            if popup_url and popup_url != "about:blank":
+                logger.info(f"Popup captured, navigating to: {popup_url}")
+                try:
+                    self._page.goto(popup_url)
+                except Exception as e:
+                    error_msg = str(e).lower()
+                    if "err_aborted" in error_msg or "aborted" in error_msg:
+                        logger.warning(f"Navigation aborted (SPA behavior): {e}")
+                        self._page.wait(2000)
+                    else:
+                        raise
                 self._page.wait(2000)
+                self._tabs.close_extras(keep=1)
                 return True
 
-            # Check for same-tab navigation
             current_url = self._page.url
             if current_url != original_url:
                 logger.info(f"Same-tab navigation: {original_url} -> {current_url}")
                 self._page.wait(2000)
                 return True
 
-            # Small wait before next check
             self._page.wait(500)
 
         logger.warning(f"Redirect timeout after {timeout_sec}s")
         return False
 
     def _handle_new_tab(self) -> None:
-        """Check for and switch to new tab (external ATS)."""
-        pages = self._tabs.context.pages
-
-        if len(pages) > 1:
-            new_page = pages[-1]
-            self._page = Page(new_page)
+        """Handle popup URLs by navigating in current tab instead of switching."""
+        popup_url = self._tabs.get_captured_popup_url()
+        if popup_url and popup_url != "about:blank":
+            logger.info(f"Popup captured during form, navigating to: {popup_url}")
+            try:
+                self._page.goto(popup_url)
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "err_aborted" not in error_msg and "aborted" not in error_msg:
+                    raise
+                logger.warning(f"Navigation aborted: {e}")
+                self._page.wait(2000)
             self._dom_service = DomService(self._page)
             self._runner = ActionRunner(self._page, self._dom_service)
-            logger.info(f"Switched to new tab: {self._page.url}")
             self._page.wait(2000)
+            self._tabs.close_extras(keep=1)
 
     def _process_form_pages(self, job_url: str) -> ApplicationResult:
         """Process multi-page application form."""

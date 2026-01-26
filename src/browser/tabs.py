@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Optional
 
-from playwright.sync_api import Browser, BrowserContext
+from playwright.sync_api import Browser, BrowserContext, Page as PlaywrightPage
 
 from .page import Page
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class TabManager:
-    """Manages browser tabs/contexts."""
+    """Manages browser tabs/contexts with popup interception."""
 
     def __init__(self, browser: Browser) -> None:
         """Initialize tab manager.
@@ -21,6 +21,8 @@ class TabManager:
         """
         self._browser = browser
         self._context: Optional[BrowserContext] = None
+        self._popup_url: Optional[str] = None
+        self._popup_handler_installed: bool = False
 
     @property
     def context(self) -> BrowserContext:
@@ -43,8 +45,48 @@ class TabManager:
         """
         pages = self.context.pages
         if index < len(pages):
-            return Page(pages[index])
-        return Page(self.context.new_page())
+            page = Page(pages[index])
+            self._install_popup_handler(pages[index])
+            return page
+        new_page = self.context.new_page()
+        self._install_popup_handler(new_page)
+        return Page(new_page)
+
+    def _install_popup_handler(self, page: PlaywrightPage) -> None:
+        """Install popup handler to capture new tab URLs without focus stealing."""
+        if self._popup_handler_installed:
+            return
+
+        def on_popup(popup: PlaywrightPage) -> None:
+            try:
+                popup.wait_for_load_state("domcontentloaded", timeout=5000)
+                self._popup_url = popup.url
+                logger.info(f"Captured popup URL: {self._popup_url}")
+                popup.close()
+            except Exception as e:
+                logger.debug(f"Popup handling error: {e}")
+                try:
+                    self._popup_url = popup.url
+                    popup.close()
+                except Exception:
+                    pass
+
+        page.on("popup", on_popup)
+        self._popup_handler_installed = True
+
+    def get_captured_popup_url(self) -> Optional[str]:
+        """Get and clear the captured popup URL.
+
+        Returns:
+            The URL that was opened in a popup, or None if no popup was captured.
+        """
+        url = self._popup_url
+        self._popup_url = None
+        return url
+
+    def clear_popup_url(self) -> None:
+        """Clear any captured popup URL."""
+        self._popup_url = None
 
     def new_page(self) -> Page:
         """Create a new page/tab.
@@ -52,7 +94,9 @@ class TabManager:
         Returns:
             New Page wrapper instance.
         """
-        return Page(self.context.new_page())
+        new_page = self.context.new_page()
+        self._install_popup_handler(new_page)
+        return Page(new_page)
 
     def close_extras(self, keep: int = 1) -> None:
         """Close all but first N tabs.

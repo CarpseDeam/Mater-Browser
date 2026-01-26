@@ -19,6 +19,7 @@ class PageType(Enum):
     CLOSED = "closed"
     LOGIN_REQUIRED = "login"
     PAYMENT_DANGER = "payment_danger"
+    ACCOUNT_CREATION = "account_creation"
     UNKNOWN = "unknown"
 
 
@@ -78,6 +79,20 @@ PAYMENT_BUTTON_WORDS: list[str] = [
     "unlock", "pro version", "pricing",
 ]
 
+ACCOUNT_CREATION_URL_PATTERNS: list[str] = [
+    "register", "signup", "sign-up", "sign_up", "create-account",
+    "create_account", "createaccount", "join", "registration",
+    "new-account", "new_account", "newuser", "new-user",
+]
+
+ACCOUNT_CREATION_CONTENT_PHRASES: list[str] = [
+    "create an account", "create your account", "create account",
+    "sign up for", "register for", "join now", "join for free",
+    "create password", "confirm password", "retype password",
+    "already have an account", "have an account? sign in",
+    "create your profile", "set up your account",
+]
+
 NEGATIVE_TEXT_SIGNALS: list[str] = [
     "save",
     "later",
@@ -114,6 +129,9 @@ class PageClassifier:
         """
         if self._is_payment_page():
             return PageType.PAYMENT_DANGER
+
+        if self._is_account_creation_page():
+            return PageType.ACCOUNT_CREATION
 
         try:
             content_lower = self._page.content().lower()[:5000]
@@ -515,5 +533,40 @@ class PageClassifier:
                 return True
         except Exception as e:
             logger.debug(f"Payment content check error: {e}")
+
+        return False
+
+    def _is_account_creation_page(self) -> bool:
+        """Detect account creation/registration pages - ABORT if found."""
+        url_lower = self._page.url.lower()
+        if any(pattern in url_lower for pattern in ACCOUNT_CREATION_URL_PATTERNS):
+            logger.warning(f"ACCOUNT CREATION URL DETECTED: {self._page.url}")
+            return True
+
+        try:
+            phrases_js = "[" + ", ".join(f'"{p}"' for p in ACCOUNT_CREATION_CONTENT_PHRASES) + "]"
+            has_creation_content = self._page.evaluate(f"""
+                () => {{
+                    const text = document.body.innerText.toLowerCase();
+                    const phrases = {phrases_js};
+                    if (phrases.some(p => text.includes(p))) return true;
+
+                    // Check for password confirmation field (strong signal)
+                    const confirmPwd = document.querySelector(
+                        'input[name*="confirm"], input[name*="retype"], ' +
+                        'input[placeholder*="confirm"], input[placeholder*="retype"], ' +
+                        'input[id*="confirm_password"], input[id*="password2"]'
+                    );
+                    if (confirmPwd) return true;
+
+                    return false;
+                }}
+            """)
+
+            if has_creation_content:
+                logger.warning(f"ACCOUNT CREATION CONTENT DETECTED: {self._page.url}")
+                return True
+        except Exception as e:
+            logger.debug(f"Account creation check error: {e}")
 
         return False
