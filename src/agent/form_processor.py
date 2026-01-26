@@ -20,6 +20,7 @@ from .models import (
 from .indeed_helpers import IndeedHelpers
 from .success_detector import SuccessDetector
 from .zero_actions_handler import ZeroActionsHandler, PageState
+from ..ats import get_handler, FormPage, BaseATSHandler
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,67 @@ class FormProcessor:
         self._indeed_helpers.reset()
         self._success_detector.reset()
 
+        handler = get_handler(self._page.raw, self._profile, self._resume_path)
+        if handler:
+            return self._process_with_handler(handler, job_url)
+
+        logger.info("No ATS handler - using Claude fallback")
+        return self._process_with_claude(job_url, source)
+
+    def _process_with_handler(
+        self, handler: BaseATSHandler, job_url: str
+    ) -> ApplicationResult:
+        """Process application using ATS-specific handler."""
+        pages = 0
+        start_time = time.time()
+
+        while pages < self._max_pages:
+            elapsed = time.time() - start_time
+            if elapsed > self._timeout_seconds:
+                logger.warning(f"Handler timed out after {elapsed:.1f}s")
+                return ApplicationResult(
+                    ApplicationStatus.STUCK,
+                    f"Timed out after {elapsed:.1f}s",
+                    pages,
+                    job_url,
+                )
+
+            pages += 1
+            logger.info(f"=== Handler Page {pages} === URL: {self._page.url}")
+
+            result = handler.fill_current_page()
+            logger.info(f"Handler result: {result.message}")
+
+            if not result.success:
+                return ApplicationResult(
+                    ApplicationStatus.FAILED, result.message, pages, job_url
+                )
+
+            if not result.needs_next_page:
+                if result.page_type == FormPage.CONFIRMATION:
+                    return ApplicationResult(
+                        ApplicationStatus.SUCCESS,
+                        "Application submitted via ATS handler",
+                        pages,
+                        job_url,
+                    )
+                return ApplicationResult(
+                    ApplicationStatus.FAILED, result.message, pages, job_url
+                )
+
+            self._page.wait(2000)
+
+        return ApplicationResult(
+            ApplicationStatus.MAX_PAGES_REACHED,
+            f"Handler reached {self._max_pages} pages",
+            pages,
+            job_url,
+        )
+
+    def _process_with_claude(
+        self, job_url: str, source: Optional[JobSource] = None
+    ) -> ApplicationResult:
+        """Original Claude-based processing - now a fallback."""
         pages_processed = 0
         stuck_count = 0
         last_url = ""
