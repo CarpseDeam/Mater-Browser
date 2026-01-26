@@ -116,6 +116,12 @@ class FormProcessor:
                     return ApplicationResult(ApplicationStatus.STUCK, "Failed to analyze form", pages_processed, job_url)
                 continue
 
+            if len(plan.actions) == 0:
+                plan, dom_state = self._scroll_for_apply_button(dom_state)
+                if plan and len(plan.actions) == 0:
+                    if self._try_click_apply_button():
+                        continue
+
             self._indeed_helpers.try_resume_upload(dom_state, self._resume_path, self._dom_service)
             logger.info(f"Executing plan: {plan.reasoning}")
             success = self._runner.execute(plan)
@@ -139,6 +145,47 @@ class FormProcessor:
             last_url = current_url
 
         return ApplicationResult(ApplicationStatus.MAX_PAGES_REACHED, f"Reached max pages ({self._max_pages})", pages_processed, job_url)
+
+    def _is_job_description_page(self, dom_state) -> bool:
+        """Check if page looks like a job description (few form inputs)."""
+        input_count = sum(
+            1 for e in dom_state.elements
+            if e.get('tag') in ('input', 'select', 'textarea')
+        )
+        return input_count < 3
+
+    def _scroll_for_apply_button(self, dom_state):
+        """Scroll down to find Apply button if on job description page."""
+        if not self._is_job_description_page(dom_state):
+            return self._claude.analyze_form(dom_state, self._profile, self._dom_service), dom_state
+
+        for _ in range(2):
+            logger.info("No actions on job page - scrolling to find Apply button")
+            self._page.raw.evaluate("window.scrollBy(0, 800)")
+            self._page.wait(1000)
+            dom_state = self._dom_service.extract()
+            plan = self._claude.analyze_form(dom_state, self._profile, self._dom_service)
+            if plan and len(plan.actions) > 0:
+                return plan, dom_state
+
+        return plan, dom_state
+
+    def _try_click_apply_button(self) -> bool:
+        """Fallback: directly find and click Apply button."""
+        try:
+            apply_btn = self._page.raw.get_by_role(
+                "button", name=re.compile(r"apply", re.IGNORECASE)
+            ).or_(
+                self._page.raw.get_by_role("link", name=re.compile(r"apply", re.IGNORECASE))
+            ).first
+            if apply_btn.is_visible(timeout=2000):
+                logger.info("Found Apply button via fallback - clicking")
+                apply_btn.click()
+                self._page.wait(2000)
+                return True
+        except Exception:
+            pass
+        return False
 
     def _is_account_creation_page(self, url: str, page_text: str) -> bool:
         url_lower = url.lower()
