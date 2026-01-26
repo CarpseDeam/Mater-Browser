@@ -5,6 +5,11 @@
 
 ## Changelog
 
+- **2026-01-26**: Improved external LinkedIn flow and upload action robustness
+  - Updated `LinkedInFlow` for immediate popup handling to prevent timeouts
+  - Enhanced `ActionRunner` to resolve file input labels to their associated inputs
+  - Added Dice modal dismissal to `PageClassifier` overlay cleanup
+
 - **2026-01-26**: Enhanced PageClassifier detection and click robustness
 
   - Refactored `PageClassifier` to improve `EXTERNAL_LINK` vs `EASY_APPLY` classification using ARIA labels and roles

@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-01-26: fix: Handle external LinkedIn popups and improve upload action robustness
+  - Updated `LinkedInFlow` to immediately navigate to captured popups for external jobs, avoiding 30s timeouts
+  - Enhanced `ActionRunner`'s `UploadAction` to correctly resolve `<label>` targets to their associated `<input type="file">`
+  - Added Dice modal dismissal to `PageClassifier`'s overlay cleanup logic
+  - Refactored `PageClassifier` account creation check for better efficiency
+
 - 2026-01-26: refactor: Enhance PageClassifier detection and click robustness
   - Improved `EXTERNAL_LINK` detection by checking ARIA labels, roles, and button text patterns
   - Refactored apply button classification into specialized `_classify_apply_button` logic

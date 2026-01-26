@@ -8,8 +8,8 @@ The `PageClassifier` is responsible for identifying the current state of a job a
 - **Classification Logic**: Uses a combination of URL patterns, page content (e.g., "already applied", "job closed"), and DOM element analysis.
 - **Apply Button Detection**: Employs a Similo-style weighted scoring system to find the most likely "Apply" button. It distinguishes between:
     - **Easy Apply**: Internal application flows (e.g., LinkedIn Easy Apply, Indeed Smart Apply).
-    - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site").
-- **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations.
+    - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site"). External LinkedIn jobs are handled by immediately navigating to captured popups to avoid analysis timeouts.
+- **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays from platforms like LinkedIn and Dice.
 
 ## Form Processing
 
@@ -31,6 +31,7 @@ The `SuccessDetector` component is responsible for determining if an application
 
 Individual actions are executed via `ActionRunner`, which provides robustness for common web patterns:
 - **Hidden Inputs**: Automatically handles hidden radio and checkbox inputs by attempting to click their associated `<label>` elements or using direct JavaScript execution.
+- **Upload Action**: Automatically resolves `<label>` elements to their associated file `<input>` if the model targets the label instead of the input directly.
 - **React Select**: Specialized logic for interacting with complex React-based select components.
 
 ## Job Scoring & Filtering
