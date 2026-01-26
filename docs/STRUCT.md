@@ -5,6 +5,14 @@
 
 ## Changelog
 
+- **2026-01-26**: Centralized filter configuration and enhanced JobScorer
+
+  - Introduced `FilterConfig` for externalized filter rules and weights
+
+  - Added `FilterStats` for detailed rejection breakdown and batch statistics
+
+  - Updated `JobScorer` with `check_filter` and `explain` methods for better debuggability
+
 - **2026-01-26**: Enhanced job scoring and filtering logic
 
   - Added strict title-based exclusions and refined role/stack filters in `JobScorer`
@@ -67,7 +75,9 @@
 
   - `scraper/`
 
-        - `scorer.py` - Evaluates job relevance based on title, description, and technology stack
+        - `scorer.py` - Evaluates job relevance using centralized `FilterConfig`
+
+        - `filter_config.py` - Manages filter rules and configuration
 
 - `assets/` - Static assets
 

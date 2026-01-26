@@ -20,8 +20,9 @@ The `SuccessDetector` component is responsible for determining if an application
 
 ## Job Scoring & Filtering
 
-The `JobScorer` filters and ranks job listings to ensure only relevant Python-based roles are processed:
-- **Hard Exclusions**: Immediately rejects jobs with non-relevant titles (e.g., Staff, Lead, Architect, DevOps, Mobile, QA).
-- **Stack & Role Filtering**: Excludes roles focused on Java, Rust, Cloud Infrastructure, or IoT.
-- **Python-First Requirement**: Enforces that "Python" must appear in the job title or anywhere within the job description.
-- **External ATS Detection**: Detects if a job requires an external account (e.g., Workday) and can filter accordingly.
+The `JobScorer` filters and ranks job listings using a centralized `FilterConfig` system:
+- **Centralized Configuration**: All rules (title/stack/role exclusions, keywords, blocked domains) and scoring weights are managed via `FilterConfig` (loaded from `config/filters.yaml`).
+- **Granular Filtering**: Uses `FilterResult` to provide specific reasons for rejection, classified by `RuleType`.
+- **Statistical Tracking**: Employs `FilterStats` to track rejection breakdowns across job batches.
+- **Python-First Requirement**: Enforces that "Python" must appear in the job title or description based on configurable rules.
+- **External ATS & Domain Blocking**: Automatically filters jobs from blocked domains or external ATS patterns that require account creation.

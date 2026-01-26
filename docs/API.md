@@ -33,7 +33,10 @@ Dedicated success detection for application completion.
 
 ### `JobScorer`
 
-Evaluates and filters job listings based on relevance.
+Evaluates and filters job listings based on relevance using centralized configuration.
 
-- `passes_filter(job: JobListing) -> bool`: Returns `True` if the job listing meets all criteria, including title exclusions and technology stack requirements.
-- `_check_exclusion(job: JobListing) -> Optional[str]`: Internal method that identifies the specific reason for a job's exclusion, if any.
+- `check_filter(job: JobListing) -> FilterResult`: Performs detailed evaluation of a job against all configured rules and returns a result containing pass/fail status and the specific reason.
+- `score(job: JobListing) -> float`: Calculates the relevance score (0.0 to 1.0). Returns 0.0 if the job fails any filter.
+- `explain(job: JobListing) -> str`: Generates a detailed text explanation of why a job passed or failed, including all matched exclusion rules and scoring breakdown.
+- `filter_and_score(jobs: list[JobListing]) -> list[JobListing]`: Processes a batch of jobs, returning those that pass filtering, sorted by score. Logs a summary of filter statistics.
+- `passes_filter(job: JobListing) -> bool`: Convenience method that returns `True` if the job listing meets all criteria.

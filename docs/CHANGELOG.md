@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-26: refactor: Centralize filter configuration and enhance JobScorer
+  - Introduced `FilterConfig` for externalized and manageable filter rules (YAML-based)
+  - Refactored `JobScorer` to use `FilterConfig` for title exclusions, stack exclusions, role exclusions, and scoring weights
+  - Added `FilterStats` and `FilterResult` for detailed tracking and logging of filtering reasons
+  - Updated `AutomationRunner` to use the new `check_filter` API for more descriptive skipping reasons
 - 2026-01-26: feat: Enhance job scoring and filtering logic in JobScorer
   - Added `TITLE_HARD_EXCLUSIONS` for immediate filtering of non-relevant roles (Senior/Lead, Mobile, DevOps, etc.)
   - Expanded `STACK_EXCLUSIONS` to include Cloud, IoT, and non-Python languages (Java, Rust)
