@@ -73,6 +73,16 @@ class ApplicationStatus(Enum):
     NEEDS_LOGIN = "needs_login"
 
 
+class ApplyPageType(Enum):
+    """Classification of job application page type."""
+    EASY_APPLY = "easy_apply"
+    EXTERNAL_LINK = "external_link"
+    ALREADY_APPLIED = "already_applied"
+    CLOSED = "closed"
+    LOGIN_REQUIRED = "login_required"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class ApplicationResult:
     """Result of a job application attempt."""
@@ -221,6 +231,114 @@ class ApplicationAgent:
 
         return None
 
+    def _classify_page(self) -> ApplyPageType:
+        """
+        Classify the current page to determine application strategy.
+
+        Checks in priority order:
+        1. Already applied indicators
+        2. Job closed indicators
+        3. Login required
+        4. Easy apply locators
+        5. External link indicators
+        6. Generic apply button
+        7. Unknown (default)
+        """
+        page = self._page.raw
+
+        # 1. Already applied check
+        already_applied_phrases = [
+            "already applied",
+            "you applied",
+            "you have applied",
+            "application submitted",
+            "previously applied",
+        ]
+        try:
+            content_lower = page.content().lower()[:5000]
+            if any(phrase in content_lower for phrase in already_applied_phrases):
+                logger.debug("Page classification: ALREADY_APPLIED (phrase match)")
+                return ApplyPageType.ALREADY_APPLIED
+        except Exception:
+            pass
+
+        # 2. Job closed check
+        closed_phrases = [
+            "no longer accepting",
+            "position filled",
+            "position has been filled",
+            "job has been filled",
+            "no longer available",
+            "this job is closed",
+            "job is no longer",
+            "posting has expired",
+            "job expired",
+        ]
+        try:
+            if any(phrase in content_lower for phrase in closed_phrases):
+                logger.debug("Page classification: CLOSED (phrase match)")
+                return ApplyPageType.CLOSED
+        except Exception:
+            pass
+
+        # 3. Login required check
+        if self._check_login_required():
+            logger.debug("Page classification: LOGIN_REQUIRED")
+            return ApplyPageType.LOGIN_REQUIRED
+
+        # 4. Easy apply locators
+        easy_apply_locator = (
+            page.locator('[class*="easy-apply" i]')
+            .or_(page.locator('[data-testid*="easyApply" i]'))
+            .or_(page.locator('[data-testid*="easy-apply" i]'))
+            .or_(page.locator('[aria-label*="Easy Apply" i]'))
+            .or_(page.locator('.jobs-apply-button--top-card'))
+            .or_(page.get_by_role("button", name=re.compile(r"easy\s*apply", re.IGNORECASE)))
+        )
+        try:
+            if easy_apply_locator.first.is_visible(timeout=1000):
+                logger.debug("Page classification: EASY_APPLY (locator match)")
+                return ApplyPageType.EASY_APPLY
+        except Exception:
+            pass
+
+        # 5. External link indicators
+        external_link_locator = (
+            page.locator('a[href*="greenhouse"]')
+            .or_(page.locator('a[href*="lever.co"]'))
+            .or_(page.locator('a[href*="workday"]'))
+            .or_(page.locator('a[href*="myworkdayjobs"]'))
+            .or_(page.locator('a[href*="icims"]'))
+            .or_(page.locator('a[href*="smartrecruiters"]'))
+            .or_(page.locator('a[href*="jobvite"]'))
+            .or_(page.get_by_role("link", name=re.compile(r"apply on company", re.IGNORECASE)))
+            .or_(page.get_by_role("link", name=re.compile(r"apply on employer", re.IGNORECASE)))
+            .or_(page.get_by_text(re.compile(r"apply on company site", re.IGNORECASE)))
+        )
+        try:
+            if external_link_locator.first.is_visible(timeout=1000):
+                logger.debug("Page classification: EXTERNAL_LINK (locator match)")
+                return ApplyPageType.EXTERNAL_LINK
+        except Exception:
+            pass
+
+        # 6. Generic apply button visible
+        generic_apply_locator = (
+            page.get_by_role("button", name=re.compile(r"apply", re.IGNORECASE))
+            .or_(page.get_by_role("link", name=re.compile(r"apply", re.IGNORECASE)))
+            .or_(page.locator('[data-testid*="apply" i]'))
+        )
+        try:
+            if generic_apply_locator.first.is_visible(timeout=1000):
+                logger.debug("Page classification: EASY_APPLY (generic apply button)")
+                return ApplyPageType.EASY_APPLY
+        except Exception:
+            pass
+
+        # 7. Default
+        logger.debug("Page classification: UNKNOWN")
+        return ApplyPageType.UNKNOWN
+
     def _apply_linkedin(self, job_url: str) -> ApplicationResult:
         """
         Handle LinkedIn Easy Apply flow.
@@ -258,12 +376,28 @@ class ApplicationAgent:
 
         self._page.wait(2000)
 
-        # Check if we hit a login wall
-        login_platform = self._check_login_required()
-        if login_platform:
+        # Classify page to determine application strategy
+        page_type = self._classify_page()
+        logger.info(f"Page classification: {page_type.value}")
+
+        if page_type == ApplyPageType.LOGIN_REQUIRED:
             return ApplicationResult(
                 status=ApplicationStatus.NEEDS_LOGIN,
-                message=f"Login required for {login_platform.upper()} - please authenticate in browser",
+                message="Login required for LINKEDIN - please authenticate in browser",
+                url=job_url,
+            )
+
+        if page_type == ApplyPageType.ALREADY_APPLIED:
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Already applied to this job",
+                url=job_url,
+            )
+
+        if page_type == ApplyPageType.CLOSED:
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Job is closed or no longer accepting applications",
                 url=job_url,
             )
 
@@ -316,12 +450,28 @@ class ApplicationAgent:
 
         self._page.wait(2000)
 
-        # Check if we hit a login wall immediately
-        login_platform = self._check_login_required()
-        if login_platform:
+        # Classify page to determine application strategy
+        page_type = self._classify_page()
+        logger.info(f"Page classification: {page_type.value}")
+
+        if page_type == ApplyPageType.LOGIN_REQUIRED:
             return ApplicationResult(
                 status=ApplicationStatus.NEEDS_LOGIN,
-                message=f"Login required for {login_platform.upper()} - please authenticate in browser",
+                message=f"Login required for {source.value.upper()} - please authenticate in browser",
+                url=job_url,
+            )
+
+        if page_type == ApplyPageType.ALREADY_APPLIED:
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Already applied to this job",
+                url=job_url,
+            )
+
+        if page_type == ApplyPageType.CLOSED:
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Job is closed or no longer accepting applications",
                 url=job_url,
             )
 

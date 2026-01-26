@@ -33,6 +33,10 @@ src/
 
 ## Changelog
 
+- **2026-01-25**: Added heuristic page classification for job applications
+  - `ApplyPageType` enum - classifies pages as EASY_APPLY, EXTERNAL_LINK, ALREADY_APPLIED, CLOSED, LOGIN_REQUIRED, or UNKNOWN
+  - `_classify_page()` method - priority-ordered checks for page type detection
+  - `_apply_linkedin` / `_apply_external` - early return on ALREADY_APPLIED or CLOSED pages
 - **2026-01-25**: Improved Indeed external apply button detection
   - `_click_apply_button` - Added patterns for "Apply on company website" links (Indeed external applies)
   - `_log_available_buttons()` - New debug helper to dump visible buttons/links when apply button not found
