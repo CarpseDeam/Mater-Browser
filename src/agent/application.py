@@ -357,7 +357,7 @@ class ApplicationAgent:
 
         self._page.wait(1500)
 
-        return self._process_form_pages(job_url)
+        return self._process_form_pages(job_url, source=JobSource.LINKEDIN)
 
     def _apply_external(self, job_url: str, source: JobSource) -> ApplicationResult:
         """
@@ -472,7 +472,7 @@ class ApplicationAgent:
 
         logger.info(f"Now on: {self._page.url}")
 
-        return self._process_form_pages(job_url)
+        return self._process_form_pages(job_url, source=source)
 
     def _wait_for_redirect(self, original_url: str, original_page_count: int) -> bool:
         """
@@ -542,7 +542,7 @@ class ApplicationAgent:
             self._page.wait(2000)
             self._tabs.close_extras(keep=1)
 
-    def _process_form_pages(self, job_url: str) -> ApplicationResult:
+    def _process_form_pages(self, job_url: str, source: Optional[JobSource] = None) -> ApplicationResult:
         """Process multi-page application form."""
         pages_processed = 0
         stuck_count = 0
@@ -561,7 +561,8 @@ class ApplicationAgent:
                 )
             pages_processed += 1
 
-            if self._dismiss_indeed_modal():
+            # Only check for Indeed modals on Indeed jobs
+            if source == JobSource.INDEED and self._dismiss_indeed_modal():
                 logger.info("Dismissed Indeed modal, continuing...")
                 pages_processed -= 1
                 continue
@@ -666,7 +667,9 @@ class ApplicationAgent:
 
             logger.info(f"Executing plan: {plan.reasoning}")
             success = self._runner.execute(plan)
-            self._dismiss_indeed_modal()
+
+            if source == JobSource.INDEED:
+                self._dismiss_indeed_modal()
 
             if not success:
                 logger.warning("Plan execution had errors")

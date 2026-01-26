@@ -279,7 +279,7 @@ class PageClassifier:
             logger.debug(f"PageClassifier: Overlay dismissal error - {e}")
 
     def _scroll_element_into_view(self, locator: Locator) -> bool:
-        """Scroll page to bring element to viewport center."""
+        """Scroll page to bring element to viewport center, accounting for sticky headers."""
         try:
             box = locator.bounding_box(timeout=2000)
             if not box:
@@ -291,13 +291,36 @@ class PageClassifier:
                 locator.scroll_into_view_if_needed(timeout=2000)
                 return True
 
-            target_y = box['y'] - (viewport['height'] / 2) + (box['height'] / 2)
+            header_offset = self._get_sticky_header_height()
+            usable_height = viewport['height'] - header_offset
+            target_y = box['y'] - header_offset - (usable_height / 2) + (box['height'] / 2)
+
             self._page.evaluate(f"window.scrollTo({{top: {target_y}, behavior: 'smooth'}})")
             self._page.wait_for_timeout(500)
             return True
         except Exception as e:
             logger.debug(f"PageClassifier: Scroll error - {e}")
             return False
+
+    def _get_sticky_header_height(self) -> int:
+        """Detect sticky/fixed headers and return their height."""
+        try:
+            return self._page.evaluate('''() => {
+                const headers = document.querySelectorAll('header, nav, [class*="header"], [class*="navbar"]');
+                let maxHeight = 0;
+                for (const el of headers) {
+                    const style = getComputedStyle(el);
+                    if (style.position === 'fixed' || style.position === 'sticky') {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.top <= 10 && rect.height > maxHeight) {
+                            maxHeight = rect.height;
+                        }
+                    }
+                }
+                return Math.ceil(maxHeight) || 60;
+            }''')
+        except Exception:
+            return 60
 
     def _verify_element_visible(self, locator: Locator, max_attempts: int = 3) -> bool:
         """Verify element visibility with retry scrolling."""
