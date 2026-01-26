@@ -99,12 +99,6 @@ class FormProcessor:
             dom_state = self._dom_service.extract()
             logger.info(f"Found {dom_state.elementCount} elements")
 
-            actions_executed = len(plan.actions) if plan else 0
-            self._loop_detector.record_state(current_url, dom_state.elementCount, actions_executed, success if plan else True)
-            if self._loop_detector.is_looping():
-                logger.warning(f"LOOP DETECTED - same state {MAX_SAME_STATE_COUNT} times")
-                return ApplicationResult(ApplicationStatus.FAILED, "Stuck in form loop", pages_processed, job_url)
-
             if dom_state.elementCount == 0:
                 stuck_count += 1
                 if stuck_count >= 3:
@@ -150,6 +144,12 @@ class FormProcessor:
                 self._indeed_helpers.dismiss_modal()
             if not success:
                 logger.warning("Plan execution had errors")
+
+            actions_executed = len(plan.actions)
+            self._loop_detector.record_state(current_url, dom_state.elementCount, actions_executed, success)
+            if self._loop_detector.is_looping():
+                logger.warning(f"LOOP DETECTED - same state {MAX_SAME_STATE_COUNT} times")
+                return ApplicationResult(ApplicationStatus.FAILED, "Stuck in form loop", pages_processed, job_url)
 
             self._page.wait(500)
             self._handle_new_tab()

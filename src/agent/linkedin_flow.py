@@ -8,7 +8,15 @@ from ..extractor.dom_service import DomService
 from .claude import ClaudeAgent
 from ..executor.runner import ActionRunner
 from .page_classifier import PageClassifier, PageType
-from .models import JobSource, ApplicationStatus, ApplicationResult
+from .models import (
+    JobSource,
+    ApplicationStatus,
+    ApplicationResult,
+    MEDIUM_WAIT_MS,
+    LONG_WAIT_MS,
+    PAGE_LOAD_TIMEOUT_MS,
+    MAX_POPUP_WAIT_ATTEMPTS,
+)
 from .form_processor import FormProcessor
 
 logger = logging.getLogger(__name__)
