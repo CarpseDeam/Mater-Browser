@@ -172,7 +172,17 @@ class PageClassifier:
         for attempt in range(2):
             try:
                 locator = self._page.locator(candidate.selector).first
-                locator.scroll_into_view_if_needed()
+
+                locator.evaluate('el => el.scrollIntoView({block: "center", behavior: "instant"})')
+                self._page.wait_for_timeout(500)
+
+                if not locator.is_visible(timeout=2000):
+                    logger.warning(f"PageClassifier: Element not visible after scroll, attempt {attempt + 1}")
+                    if attempt == 1:
+                        locator.click(timeout=timeout, force=True)
+                        return True
+                    continue
+
                 locator.click(timeout=timeout)
                 return True
             except Exception as e:
