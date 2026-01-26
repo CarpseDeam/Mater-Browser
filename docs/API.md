@@ -39,6 +39,31 @@ Dedicated success detection for application completion.
 - `mark_form_filled()`: Marks that a form has been interacted with, enabling the form-disappearance signal.
 - `reset()`: Resets the detection state for a new application session.
 
+### `Prompts`
+
+Functions for generating LLM prompts.
+
+- `build_form_prompt(dom_text: str, profile: dict) -> str`: Constructs a detailed user prompt containing the current page elements and the applicant's profile, instructing the agent to classify the page (returning a `page_type`) and plan actions.
+
+## Data Models
+
+### `ActionPlan`
+
+The structured response from the Claude agent.
+
+- `page_type: PageType`: Classification of the current page (`job_listing`, `form`, `confirmation`, or `unknown`).
+- `reasoning: str`: Brief explanation of the agent's decision.
+- `actions: list[Action]`: Ordered list of actions to execute.
+- `needs_more_pages: bool`: Whether the agent expects more pages to follow.
+
+### `PageType`
+
+A literal string type for page classification:
+- `job_listing`: A page showing job details with an "Apply" button.
+- `form`: An application form with input fields.
+- `confirmation`: A "Thank You" or "Application Submitted" page.
+- `unknown`: State could not be determined.
+
 ## Scraper API
 
 ### `JobScorer`
