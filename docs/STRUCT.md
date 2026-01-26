@@ -6,6 +6,7 @@
 ## Changelog
 
 - **2026-01-26**: Improved external LinkedIn flow and upload action robustness
+  - Refactored `ExternalFlow` and `LinkedInFlow` with standardized wait constants and modular redirection helpers
   - Updated `LinkedInFlow` for immediate popup handling to prevent timeouts
   - Enhanced `ActionRunner` to resolve file input labels to their associated inputs
   - Added Dice modal dismissal to `PageClassifier` overlay cleanup

@@ -2,6 +2,14 @@
 
 All notable changes to this project.
 
+- 2026-01-26: refactor: Replace hardcoded timeout with PAGE_LOAD_TIMEOUT_MS in LinkedInFlow
+- 2026-01-26: feat: Enhance robustness with plan validation, navigation retries, and intercept handling
+  - Added ActionPlan validation in `ClaudeAgent` to ensure AI actions match element types
+  - Implemented retry logic for `Page.goto` with automated error handling for aborted navigations
+  - Enhanced `ActionRunner` to handle intercepted clicks by dismissing overlays and retrying
+  - Centralized and updated timeout and retry constants in `src/agent/models.py`
+  - Improved loop detection logic in `FormProcessor` by recording state after action execution
+
 - 2026-01-26: fix: Handle external LinkedIn popups and improve upload action robustness
   - Updated `LinkedInFlow` to immediately navigate to captured popups for external jobs, avoiding 30s timeouts
   - Enhanced `ActionRunner`'s `UploadAction` to correctly resolve `<label>` targets to their associated `<input type="file">`
@@ -41,4 +49,3 @@ All notable changes to this project.
 - 2026-01-26: feat: Add scrolling and fallback "Apply" button logic to `FormProcessor`
   - Implemented job description page detection and automatic scrolling to reveal hidden "Apply" buttons
   - Added regex-based fallback to click "Apply" buttons as a last resort when structured analysis fails
-
