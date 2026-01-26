@@ -8,6 +8,8 @@ All notable changes to this project.
   - Implemented strict Python keyword check in job title and early description
 - 2026-01-26: feat: Refactor zero-action handling in FormProcessor using ZeroActionsHandler
   - Delegated job description detection, scrolling, and fallback button clicking to `ZeroActionsHandler`
+  - Integrated `VisionFallback` to use Claude's vision capabilities for finding "Apply" buttons when DOM analysis fails
+  - Added support for `ANTHROPIC_API_KEY` to enable vision-based element detection
   - Added specific handling for confirmation pages and error pages during the application flow
   - Improved robustness when Claude returns no actions for a given page state
 - 2026-01-26: feat: Improve form completion detection and payment page filtering

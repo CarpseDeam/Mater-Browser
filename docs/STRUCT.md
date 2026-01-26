@@ -57,7 +57,9 @@
 
         - `form_processor.py` - Orchestrates form filling and multi-page flows      
 
-        - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) when no form actions are found
+        - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) using DOM analysis and vision fallback
+
+        - `vision_fallback.py` - Uses Claude vision to find elements when DOM detection fails
 
         - `success_detector.py` - Detects application completion via URL, text, and form state
 
