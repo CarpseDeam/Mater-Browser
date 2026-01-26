@@ -476,7 +476,7 @@ class ApplicationAgent:
             logger.info(f"=== Page {pages_processed} ===")
             logger.info(f"URL: {current_url}")
 
-            if self._is_complete():
+            if self._is_complete(pages_processed):
                 logger.info("Application complete!")
                 return ApplicationResult(
                     status=ApplicationStatus.SUCCESS,
@@ -490,7 +490,7 @@ class ApplicationAgent:
             if self._handle_indeed_resume_card():
                 logger.info("Handled Indeed resume page - advancing to next step")
                 self._page.wait(1500)
-                if self._is_complete():
+                if self._is_complete(pages_processed):
                     logger.info("Application complete after resume selection!")
                     return ApplicationResult(
                         status=ApplicationStatus.SUCCESS,
@@ -615,61 +615,69 @@ class ApplicationAgent:
         if "resume" not in current_url and "resume" not in page.content().lower()[:2000]:
             return False
 
+        # Quick check if we are on a page with resume cards
+        has_cards = (
+            page.locator('[data-testid*="resume-selection"]').count() > 0 or
+            page.locator('[class*="resume-card"]').count() > 0 or
+            "resume" in current_url
+        )
+        if not has_cards:
+            return False
+
         logger.info("Checking for Indeed resume selection page...")
 
         # FIRST: Check if any resume is already selected (has checkmark)
+        # Improved check: look for aria-checked on the card or input, or selected class
         selected_indicators = (
-            page.locator('[data-testid*="selected" i]')
-            .or_(page.locator('[aria-checked="true"]'))
-            .or_(page.locator('[aria-selected="true"]'))
-            .or_(page.locator('[data-selected="true"]'))
+            page.locator('[aria-checked="true"]')
+            .or_(page.locator('[data-testid*="resume-selection"][aria-checked="true"]'))
+            .or_(page.locator('[class*="resume-card"][aria-checked="true"]'))
+            .or_(page.locator('[class*="selected"][class*="resume-card"]'))
             .or_(page.locator('.ia-Resume-selectedIcon'))
-            .or_(page.locator('[class*="selected"][class*="resume" i]'))
-            .or_(page.locator('[class*="resume"][class*="selected" i]'))
-            .or_(page.locator('.ia-Resume svg[class*="check" i]'))
-            .or_(page.locator('[class*="resume-card"] svg'))
         )
 
         try:
             if selected_indicators.first.is_visible(timeout=2000):
                 logger.info("Resume already selected (found selection indicator) - skipping card click")
                 return self._click_indeed_continue()
-        except Exception as e:
-            logger.debug(f"No selection indicator found: {e}")
+        except Exception:
+            pass
 
         # No resume selected - try to click "Use your Indeed Resume" card
+        # We want to click the CONTAINER, not the hidden input
         logger.info("No resume selected - looking for Indeed resume card to click...")
 
-        resume_card_locator = (
-            page.get_by_text(re.compile(r"use your indeed resume", re.IGNORECASE))
-            .or_(page.get_by_text(re.compile(r"use indeed resume", re.IGNORECASE)))
-            .or_(page.get_by_role("button", name=re.compile(r"indeed resume", re.IGNORECASE)))
-            .or_(page.get_by_role("radio", name=re.compile(r"indeed resume", re.IGNORECASE)))
-            .or_(page.locator('[data-testid*="resume-card" i]'))
-            .or_(page.locator('[data-testid*="indeed-resume" i]'))
-            .or_(page.locator('[class*="resume"][class*="card" i]'))
-            .or_(page.locator('[class*="resume-display-card" i]'))
-            .or_(page.locator('[aria-label*="Indeed Resume" i]'))
-        )
+        # Strategy: Find the container that has the text "Indeed Resume"
+        # 1. Try specific data-testid for the card (best practice)
+        resume_card_locator = page.locator('[data-testid*="resume-selection"][data-testid*="card"]').locator('visible=true')
+
+        # 2. Or the label/text container that wraps the resume info
+        if resume_card_locator.count() == 0:
+            resume_card_locator = page.locator('div').filter(has_text=re.compile(r"use your indeed resume|indeed resume", re.IGNORECASE)).locator('visible=true')
 
         try:
-            first_match = resume_card_locator.first
-            if first_match.is_visible(timeout=3000):
-                try:
-                    tag = first_match.evaluate("el => el.tagName")
-                    text = first_match.evaluate("el => el.textContent?.trim()?.substring(0, 50)")
-                    logger.info(f"Found Indeed resume card: <{tag}> '{text}'")
-                except Exception:
-                    logger.info("Found Indeed resume card (details unavailable)")
-
-                first_match.click()
-                logger.info("Clicked Indeed resume card successfully")
+            count = resume_card_locator.count()
+            if count > 0:
+                # If "Indeed Resume" text is found, click its closest clickable ancestor
+                # We prioritize the one that actually mentions "Indeed Resume" to avoid "Upload" cards
+                target_card = resume_card_locator.first
+                
+                # Refine selection if multiple found
+                for i in range(count):
+                    card = resume_card_locator.nth(i)
+                    text = card.text_content().lower()
+                    if "indeed resume" in text and "upload" not in text:
+                        target_card = card
+                        break
+                
+                logger.info(f"Found Indeed resume card, clicking...")
+                # Force click helps if there are subtle overlays
+                target_card.click(force=True)
                 self._page.wait(1000)
-
                 return self._click_indeed_continue()
-
+                
         except Exception as e:
-            logger.debug(f"Indeed resume card not found: {e}")
+            logger.debug(f"Indeed resume card interaction failed: {e}")
 
         return False
 
@@ -781,19 +789,34 @@ class ApplicationAgent:
 
         return False
 
-    def _is_complete(self) -> bool:
+    def _is_complete(self, pages_processed: int = 0) -> bool:
         """
         Check if application was submitted using semantic locators.
+
+        Args:
+            pages_processed: Number of pages processed in the current session.
 
         Returns:
             True if completion indicators found, False otherwise.
         """
+        # 1. Minimum page requirement - don't match on first page (job listing)
+        if pages_processed < 2:
+            return False
+
         page = self._page.raw
+        current_url = self._page.url.lower()
+
+        # 2. Negative URL signals - if URL looks like a job listing, it's not a success page
+        # unless it explicitly says "success" or "confirmation"
+        negative_signals = ["/job/", "/jobs/", "/careers/", "/viewjob", "/job-detail", "linkedin.com/jobs/view"]
+        if any(sig in current_url for sig in negative_signals):
+            if not any(pos in current_url for pos in ["success", "submitted", "confirmed", "thank"]):
+                return False
 
         # Combined locator for completion indicators
         completion_locator = (
-            # Text-based indicators
-            page.get_by_text(re.compile(r"application submitted|thank you|successfully submitted|application received", re.IGNORECASE))
+            # Text-based indicators - require fuller phrases
+            page.get_by_text(re.compile(r"application submitted|thank you for applying|successfully submitted|application received", re.IGNORECASE))
             # Data attributes
             .or_(page.locator('[data-test="application-complete"]'))
             .or_(page.locator('[data-testid*="success" i]'))
@@ -814,6 +837,7 @@ class ApplicationAgent:
         # Fallback: Check page content for completion phrases
         try:
             content = page.content().lower()
+            # 3. Strict phrase matching - exact phrases only
             completion_phrases = [
                 "thank you for applying",
                 "application submitted",
