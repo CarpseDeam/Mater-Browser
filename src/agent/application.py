@@ -616,59 +616,93 @@ class ApplicationAgent:
         return False
 
     def _click_next_button(self) -> bool:
-        """Try to click Next/Continue/Submit button."""
-        next_selectors = [
-            'button:has-text("Next")',
-            'button:has-text("Continue")',
-            'button:has-text("Review")',
-            'button:has-text("Submit")',
-            'button[type="submit"]',
-            'input[type="submit"]',
-            'button[aria-label*="Continue"]',
-            'button[aria-label*="Next"]',
-        ]
+        """
+        Try to click Next/Continue/Submit button using semantic locators.
 
-        for selector in next_selectors:
-            try:
-                loc = self._page.raw.locator(selector).first
-                if loc.is_visible(timeout=500):
-                    loc.click()
-                    self._page.wait(1500)
-                    logger.info(f"Clicked next button: {selector}")
-                    return True
-            except Exception:
-                continue
+        Uses Playwright's combined locator pattern for resilience and speed.
+
+        Returns:
+            True if button found and clicked, False otherwise.
+        """
+        page = self._page.raw
+
+        # Combined locator - checks all strategies in parallel
+        next_locator = (
+            # Primary: Role-based semantic locators
+            page.get_by_role("button", name=re.compile(r"next|continue|submit|review", re.IGNORECASE))
+            .or_(page.get_by_role("link", name=re.compile(r"next|continue", re.IGNORECASE)))
+            # Secondary: Attribute-based
+            .or_(page.locator('[type="submit"]'))
+            .or_(page.locator('[aria-label*="Next" i]'))
+            .or_(page.locator('[aria-label*="Continue" i]'))
+            .or_(page.locator('[aria-label*="Submit" i]'))
+            # Tertiary: Data attributes (common in React apps)
+            .or_(page.locator('[data-testid*="next" i]'))
+            .or_(page.locator('[data-testid*="submit" i]'))
+        )
+
+        try:
+            first_match = next_locator.first
+            if first_match.is_visible(timeout=3000):
+                try:
+                    tag = first_match.evaluate("el => el.tagName")
+                    text = first_match.evaluate("el => el.textContent?.trim()?.substring(0, 30)")
+                    logger.info(f"Found Next button: <{tag}> '{text}'")
+                except Exception:
+                    logger.info("Found Next button (details unavailable)")
+
+                first_match.click()
+                self._page.wait(1500)
+                logger.info("Clicked Next button successfully")
+                return True
+
+        except Exception as e:
+            logger.debug(f"Next button locator failed: {e}")
 
         return False
 
     def _is_complete(self) -> bool:
-        """Check if application was submitted."""
-        completion_indicators = [
-            'text="Application submitted"',
-            'text="Thank you"',
-            'text="application has been submitted"',
-            'text="successfully submitted"',
-            'text="Application received"',
-            '[data-test="application-complete"]',
-            '.application-complete',
-            '#application-success',
-        ]
+        """
+        Check if application was submitted using semantic locators.
 
-        for indicator in completion_indicators:
-            try:
-                if self._page.raw.locator(indicator).first.is_visible(timeout=500):
-                    return True
-            except Exception:
-                continue
+        Returns:
+            True if completion indicators found, False otherwise.
+        """
+        page = self._page.raw
+
+        # Combined locator for completion indicators
+        completion_locator = (
+            # Text-based indicators
+            page.get_by_text(re.compile(r"application submitted|thank you|successfully submitted|application received", re.IGNORECASE))
+            # Data attributes
+            .or_(page.locator('[data-test="application-complete"]'))
+            .or_(page.locator('[data-testid*="success" i]'))
+            .or_(page.locator('[data-testid*="complete" i]'))
+            # Class/ID based
+            .or_(page.locator('.application-complete'))
+            .or_(page.locator('#application-success'))
+            .or_(page.locator('[class*="success"][class*="message" i]'))
+        )
 
         try:
-            content = self._page.raw.content().lower()
-            if any(phrase in content for phrase in [
+            if completion_locator.first.is_visible(timeout=1000):
+                logger.info("Completion indicator found via locator")
+                return True
+        except Exception:
+            pass
+
+        # Fallback: Check page content for completion phrases
+        try:
+            content = page.content().lower()
+            completion_phrases = [
                 "thank you for applying",
                 "application submitted",
                 "application received",
                 "we have received your application",
-            ]):
+                "your application has been submitted",
+            ]
+            if any(phrase in content for phrase in completion_phrases):
+                logger.info("Completion detected via page content")
                 return True
         except Exception:
             pass
