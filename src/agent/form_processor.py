@@ -48,6 +48,9 @@ class FormProcessor:
 
     def process(self, job_url: str, source: Optional[JobSource] = None) -> ApplicationResult:
         """Process multi-page application form."""
+        self._indeed_helpers.reset()
+        self._success_detector.reset()
+
         pages_processed = 0
         stuck_count = 0
         last_url = ""
@@ -129,6 +132,10 @@ class FormProcessor:
 
             self._indeed_helpers.try_resume_upload(dom_state, self._resume_path, self._dom_service)
             logger.info(f"Executing plan: {plan.reasoning}")
+
+            if any(a.action == "fill" for a in plan.actions):
+                self._success_detector.mark_form_filled()
+
             success = self._runner.execute(plan)
 
             self._page.wait(1000)

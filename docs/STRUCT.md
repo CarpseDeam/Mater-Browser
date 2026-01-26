@@ -63,13 +63,19 @@
 
   - `agent/`
 
-        - `form_processor.py` - Orchestrates form filling and multi-page flows      
+                - `form_processor.py` - Orchestrates form filling and multi-page flows      
 
-        - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) using DOM analysis and vision fallback
+        
 
-        - `vision_fallback.py` - Uses Claude vision to find elements when DOM detection fails
+                - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) using DOM analysis and vision fallback
 
-        - `success_detector.py` - Detects application completion via URL, text, and form state
+        
+
+                - `vision_fallback.py` - Uses Claude vision to find elements when DOM detection fails
+
+        
+
+                - `success_detector.py` - Detects application completion via URL, text, and form state
 
         - `page_classifier.py` - Classifies pages and finds primary action buttons
 

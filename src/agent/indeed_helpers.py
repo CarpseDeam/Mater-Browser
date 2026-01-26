@@ -1,6 +1,7 @@
 """Indeed-specific helpers for resume handling and modal dismissal."""
 import logging
 import re
+import time
 
 from ..browser.page import Page
 from ..extractor.dom_service import DomState
@@ -11,8 +12,18 @@ logger = logging.getLogger(__name__)
 class IndeedHelpers:
     """Handles Indeed-specific UI elements: resume cards, modals, continue buttons."""
 
+    MAX_MODAL_CLICKS = 3
+    MODAL_COOLDOWN = 2.0
+
     def __init__(self, page: Page) -> None:
         self._page = page
+        self._modal_click_count = 0
+        self._last_modal_click_time = 0.0
+
+    def reset(self) -> None:
+        """Reset state for a new application."""
+        self._modal_click_count = 0
+        self._last_modal_click_time = 0.0
 
     def try_resume_upload(self, dom_state: DomState, resume_path: str | None, dom_service) -> bool:
         """Try to upload resume if file input found."""
@@ -186,7 +197,15 @@ class IndeedHelpers:
         return False
 
     def dismiss_modal(self) -> bool:
-        """Check for and dismiss Indeed confirmation modals."""
+        """Check for and dismiss Indeed confirmation modals with rate limiting."""
+        now = time.time()
+        if now - self._last_modal_click_time < self.MODAL_COOLDOWN:
+            return False
+
+        if self._modal_click_count >= self.MAX_MODAL_CLICKS:
+            logger.warning("Modal click limit reached, aborting")
+            return False
+
         page = self._page.raw
 
         modal_dismiss_locator = (
@@ -203,6 +222,8 @@ class IndeedHelpers:
             if button.is_visible(timeout=1000):
                 logger.info("Indeed modal detected - clicking Continue")
                 button.click()
+                self._modal_click_count += 1
+                self._last_modal_click_time = time.time()
                 self._page.wait(1000)
                 return True
         except Exception:

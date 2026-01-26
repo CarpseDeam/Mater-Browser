@@ -38,6 +38,27 @@ class ActionRunner:
             logger.warning(f"React Select fill failed: {e}")
             return False
 
+    def _execute_click(self, locator: Locator) -> None:
+        """Click element, handling hidden radio/checkbox inputs."""
+        if locator.is_visible():
+            locator.click()
+            return
+
+        tag = locator.evaluate("el => el.tagName.toLowerCase()")
+        input_type = locator.evaluate("el => el.type || ''")
+
+        if tag == "input" and input_type in ("radio", "checkbox"):
+            input_id = locator.evaluate("el => el.id")
+            if input_id:
+                label = self._page.raw.locator(f'label[for="{input_id}"]').first
+                if label.count() > 0 and label.is_visible():
+                    label.click()
+                    return
+            locator.evaluate("el => el.click()")
+            return
+
+        locator.click()
+
     def _execute_fill(self, element: Locator, value: str) -> bool:
         """Fill form element, detecting type."""
         tag = element.evaluate("el => el.tagName.toLowerCase()")
@@ -94,7 +115,7 @@ class ActionRunner:
             case ClickAction():
                 selector = self._dom.get_selector(action.ref)
                 loc = self._page.raw.locator(selector).first
-                loc.click()
+                self._execute_click(loc)
             case UploadAction():
                 selector = self._dom.get_selector(action.ref)
                 loc = self._page.raw.locator(selector).first

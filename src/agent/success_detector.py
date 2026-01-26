@@ -56,6 +56,15 @@ class SuccessDetector:
 
     def __init__(self, page: Page) -> None:
         self._page = page
+        self._forms_filled = False
+
+    def mark_form_filled(self) -> None:
+        """Mark that a form has been filled during this application."""
+        self._forms_filled = True
+
+    def reset(self) -> None:
+        """Reset state for a new application."""
+        self._forms_filled = False
 
     def check(self) -> CompletionResult:
         """Check all completion signals. Returns on first match."""
@@ -97,6 +106,9 @@ class SuccessDetector:
 
     def _check_form_disappeared(self) -> CompletionResult:
         """Check if form inputs have disappeared (submitted successfully)."""
+        if not self._forms_filled:
+            return CompletionResult(False, CompletionSignal.NONE, "")
+
         try:
             inputs = self._page.locator("input:not([type='hidden']), select, textarea").count()
             if inputs <= 2:
