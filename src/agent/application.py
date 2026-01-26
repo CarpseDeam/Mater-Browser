@@ -599,8 +599,9 @@ class ApplicationAgent:
         """
         Handle Indeed's resume selection page.
 
-        Indeed shows resume options that must be selected. If a resume is already
-        selected (has checkmark), we skip clicking and just advance to next step.
+        Indeed shows resume options as cards with hidden radio inputs. The visible
+        element is the card container, not the input. If a resume is already
+        selected, we skip clicking and just advance to next step.
 
         Returns:
             True if on resume page and handled (either already selected or clicked),
@@ -615,9 +616,9 @@ class ApplicationAgent:
         if "resume" not in current_url and "resume" not in page.content().lower()[:2000]:
             return False
 
-        # Quick check if we are on a page with resume cards
         has_cards = (
             page.locator('[data-testid*="resume-selection"]').count() > 0 or
+            page.locator('[data-testid*="resume"][data-testid*="card"]').count() > 0 or
             page.locator('[class*="resume-card"]').count() > 0 or
             "resume" in current_url
         )
@@ -626,60 +627,72 @@ class ApplicationAgent:
 
         logger.info("Checking for Indeed resume selection page...")
 
-        # FIRST: Check if any resume is already selected (has checkmark)
-        # Improved check: look for aria-checked on the card or input, or selected class
-        selected_indicators = (
-            page.locator('[aria-checked="true"]')
-            .or_(page.locator('[data-testid*="resume-selection"][aria-checked="true"]'))
-            .or_(page.locator('[class*="resume-card"][aria-checked="true"]'))
-            .or_(page.locator('[class*="selected"][class*="resume-card"]'))
-            .or_(page.locator('.ia-Resume-selectedIcon'))
+        if self._is_indeed_resume_selected(page):
+            logger.info("Resume already selected - skipping card click")
+            return self._click_indeed_continue()
+
+        logger.info("No resume selected - looking for Indeed resume card to click...")
+
+        resume_card = self._find_indeed_resume_card(page)
+        if resume_card:
+            try:
+                logger.info("Found Indeed resume card, clicking...")
+                resume_card.click(force=True)
+                self._page.wait(1000)
+                return self._click_indeed_continue()
+            except Exception as e:
+                logger.debug(f"Indeed resume card click failed: {e}")
+
+        return False
+
+    def _is_indeed_resume_selected(self, page) -> bool:
+        """Check if a resume card is already selected on Indeed."""
+        selected_locator = (
+            page.locator('[data-testid*="resume"][aria-checked="true"]').locator('visible=true')
+            .or_(page.locator('[data-testid*="resume"]:has(input[aria-checked="true"])').locator('visible=true'))
+            .or_(page.locator('[data-testid*="resume"]:has(input:checked)').locator('visible=true'))
+            .or_(page.locator('[aria-checked="true"][data-testid*="card"]').locator('visible=true'))
+            .or_(page.locator('.ia-Resume-selectedIcon').locator('visible=true'))
+            .or_(page.locator('[class*="selected"][class*="resume"]').locator('visible=true'))
         )
 
         try:
-            if selected_indicators.first.is_visible(timeout=2000):
-                logger.info("Resume already selected (found selection indicator) - skipping card click")
-                return self._click_indeed_continue()
+            return selected_locator.first.is_visible(timeout=2000)
         except Exception:
-            pass
+            return False
 
-        # No resume selected - try to click "Use your Indeed Resume" card
-        # We want to click the CONTAINER, not the hidden input
-        logger.info("No resume selected - looking for Indeed resume card to click...")
-
-        # Strategy: Find the container that has the text "Indeed Resume"
-        # 1. Try specific data-testid for the card (best practice)
-        resume_card_locator = page.locator('[data-testid*="resume-selection"][data-testid*="card"]').locator('visible=true')
-
-        # 2. Or the label/text container that wraps the resume info
-        if resume_card_locator.count() == 0:
-            resume_card_locator = page.locator('div').filter(has_text=re.compile(r"use your indeed resume|indeed resume", re.IGNORECASE)).locator('visible=true')
+    def _find_indeed_resume_card(self, page):
+        """Find the visible Indeed Resume card container to click."""
+        resume_card_locator = (
+            page.locator('[data-testid*="structured-resume"][data-testid*="card"]').locator('visible=true')
+            .or_(page.locator('[data-testid*="resume-selection"][data-testid*="card"]').locator('visible=true'))
+            .or_(page.locator('div:has-text("Indeed Resume")').locator('visible=true').first)
+            .or_(page.locator('label:has-text("Indeed Resume")').locator('visible=true'))
+        )
 
         try:
             count = resume_card_locator.count()
-            if count > 0:
-                # If "Indeed Resume" text is found, click its closest clickable ancestor
-                # We prioritize the one that actually mentions "Indeed Resume" to avoid "Upload" cards
-                target_card = resume_card_locator.first
-                
-                # Refine selection if multiple found
-                for i in range(count):
-                    card = resume_card_locator.nth(i)
-                    text = card.text_content().lower()
-                    if "indeed resume" in text and "upload" not in text:
-                        target_card = card
-                        break
-                
-                logger.info(f"Found Indeed resume card, clicking...")
-                # Force click helps if there are subtle overlays
-                target_card.click(force=True)
-                self._page.wait(1000)
-                return self._click_indeed_continue()
-                
-        except Exception as e:
-            logger.debug(f"Indeed resume card interaction failed: {e}")
+            if count == 0:
+                return None
 
-        return False
+            for i in range(count):
+                card = resume_card_locator.nth(i)
+                try:
+                    if not card.is_visible(timeout=500):
+                        continue
+                    text = (card.text_content() or "").lower()
+                    if "indeed resume" in text and "upload" not in text:
+                        return card
+                except Exception:
+                    continue
+
+            first_visible = resume_card_locator.first
+            if first_visible.is_visible(timeout=500):
+                return first_visible
+        except Exception:
+            pass
+
+        return None
 
     def _click_indeed_continue(self) -> bool:
         """
@@ -808,9 +821,9 @@ class ApplicationAgent:
 
         # 2. Negative URL signals - if URL looks like a job listing, it's not a success page
         # unless it explicitly says "success" or "confirmation"
-        negative_signals = ["/job/", "/jobs/", "/careers/", "/viewjob", "/job-detail", "linkedin.com/jobs/view"]
+        negative_signals = ["/job/", "/jobs/", "/careers/", "/viewjob", "/job-detail", "/apply", "linkedin.com/jobs/view"]
         if any(sig in current_url for sig in negative_signals):
-            if not any(pos in current_url for pos in ["success", "submitted", "confirmed", "thank"]):
+            if not any(pos in current_url for pos in ["success", "submitted", "confirmed", "thank", "complete"]):
                 return False
 
         # Combined locator for completion indicators
