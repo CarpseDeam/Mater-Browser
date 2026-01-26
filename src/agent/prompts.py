@@ -111,11 +111,22 @@ page_type must be: "job_listing", "form", "confirmation", or "unknown"
 1. Use ONLY refs from the provided elements — never invent refs
 2. For dropdowns, use the EXACT text of an available option
 3. For file uploads, use "resume" as the file value
-4. Always end with a click on the primary action button
-5. If no form fields exist, just click the Apply button
-6. If page looks like confirmation, return empty actions
-7. Do not click multiple buttons — pick ONE primary action
-8. Do not fill the same field twice"""
+4. **MANDATORY: Your actions list MUST end with a click on Next/Submit/Continue button**
+   - Even if all fields are pre-filled, you MUST click the advancement button
+   - Even if you only check one checkbox, you MUST click Next after
+   - The ONLY exception is page_type "confirmation" (return empty actions)
+   - If you don't click a button, the form will hang forever
+5. If page looks like confirmation, return empty actions with page_type "confirmation"
+6. Do not click multiple buttons — pick ONE primary action button
+7. Do not fill the same field twice
+8. Pre-filled fields do NOT mean you're done — you still need to click Next
+
+## COMMON MISTAKES TO AVOID
+
+- Returning actions without a final button click (causes hang)
+- Thinking pre-filled fields mean the page is complete (it's not until you click Next)
+- Returning 0 actions on a form page (always at least click Next)
+- Clicking "Save" instead of "Next" or "Continue\""""
 
 
 def build_form_prompt(dom_text: str, profile: dict) -> str:

@@ -7,12 +7,12 @@ from typing import Optional
 
 from ..browser.page import Page
 from ..browser.tabs import TabManager
-from ..extractor.dom_service import DomService
+from ..extractor.dom_service import DomService, DomState, DomElement
 from .claude import ClaudeAgent
 from ..executor.runner import ActionRunner
 from .page_classifier import PageClassifier
 from .loop_detector import LoopDetector, MAX_SAME_STATE_COUNT
-from .actions import ActionPlan
+from .actions import ActionPlan, ClickAction
 from .models import (
     JobSource, ApplicationStatus, ApplicationResult,
     ACCOUNT_CREATION_URL_PATTERNS, ACCOUNT_CREATION_CONTENT,
@@ -113,6 +113,8 @@ class FormProcessor:
                 if stuck_count >= 3:
                     return ApplicationResult(ApplicationStatus.STUCK, "Failed to analyze form", pages_processed, job_url)
                 continue
+
+            plan = self._ensure_plan_has_submit(plan, dom_state)
 
             page_type_result = self._handle_page_type(plan, pages_processed, job_url)
             if page_type_result is not None:
@@ -243,3 +245,77 @@ class FormProcessor:
         logger.info("Job listing page - clicking Apply")
         self._runner.execute(plan)
         self._page.wait(1500)
+
+    def _find_submit_button(self, dom_state: DomState) -> Optional[DomElement]:
+        """Find best submit/next button from DOM elements."""
+        keywords_priority = ["submit", "next", "continue", "review", "apply"]
+        best_match: Optional[DomElement] = None
+        best_priority = len(keywords_priority)
+
+        for el in dom_state.elements:
+            if not self._is_clickable_element(el):
+                continue
+            priority = self._get_button_priority(el, keywords_priority)
+            if priority < best_priority:
+                best_priority = priority
+                best_match = el
+
+        return best_match
+
+    def _is_clickable_element(self, el: DomElement) -> bool:
+        """Check if element is a clickable button/link."""
+        if el.disabled:
+            return False
+        if el.tag in ("button", "a", "input"):
+            return True
+        if el.type in ("submit", "button"):
+            return True
+        return False
+
+    def _get_button_priority(
+        self, el: DomElement, keywords: list[str]
+    ) -> int:
+        """Get priority index for button based on keyword match."""
+        text = (el.text or "").lower()
+        label = (el.label or "").lower()
+        btn_text = (el.buttonText or "").lower()
+        combined = f"{text} {label} {btn_text}"
+
+        for i, keyword in enumerate(keywords):
+            if keyword in combined:
+                return i
+        return len(keywords)
+
+    def _ensure_plan_has_submit(
+        self, plan: ActionPlan, dom_state: DomState
+    ) -> ActionPlan:
+        """Ensure plan ends with submit button click."""
+        if plan.page_type == "confirmation":
+            return plan
+        if not plan.actions:
+            return plan
+        if self._plan_ends_with_button_click(plan, dom_state):
+            return plan
+
+        button = self._find_submit_button(dom_state)
+        if button:
+            logger.info(f"Auto-appending click on {self._get_button_text(button)} button")
+            plan.actions.append(ClickAction(ref=button.ref))
+        return plan
+
+    def _plan_ends_with_button_click(
+        self, plan: ActionPlan, dom_state: DomState
+    ) -> bool:
+        """Check if plan's last action is a button click."""
+        last_action = plan.actions[-1]
+        if last_action.action != "click":
+            return False
+
+        for el in dom_state.elements:
+            if el.ref == last_action.ref:
+                return self._is_clickable_element(el)
+        return False
+
+    def _get_button_text(self, el: DomElement) -> str:
+        """Get display text for a button element."""
+        return el.buttonText or el.text or el.label or el.ref

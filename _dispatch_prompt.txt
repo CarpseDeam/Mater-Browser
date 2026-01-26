@@ -1,55 +1,79 @@
-Update ActionPlan model and form_processor to handle the new page_type field from Claude responses.
+Fix the form processor to always advance forms, and strengthen the prompt.
 
 ## Problem
-The prompt now returns a page_type field ("job_listing", "form", "confirmation", "unknown") but the model and processor don't use it.
+Claude returned only 1 action (checkbox) without clicking Next button. Form had pre-filled fields so Claude thought it was done. Bot hung waiting for something that never happened.
 
 ## Files to modify
-- `src/agent/actions.py`
+- `src/agent/prompts.py`
 - `src/agent/form_processor.py`
 
-## actions.py changes
+## prompts.py changes
 
-Add page_type field to ActionPlan:
+In SYSTEM_PROMPT, find the CRITICAL RULES section and make rule about button clicks much stronger:
 
 ```python
-from typing import Literal, Union, Optional
+## CRITICAL RULES
 
-# ... keep all existing action classes unchanged ...
+1. Use ONLY refs from the provided elements — never invent refs
+2. For dropdowns, use the EXACT text of an available option
+3. For file uploads, use "resume" as the file value
+4. **MANDATORY: Your actions list MUST end with a click on Next/Submit/Continue button**
+   - Even if all fields are pre-filled, you MUST click the advancement button
+   - Even if you only check one checkbox, you MUST click Next after
+   - The ONLY exception is page_type "confirmation" (return empty actions)
+   - If you don't click a button, the form will hang forever
+5. If page looks like confirmation, return empty actions with page_type "confirmation"
+6. Do not click multiple buttons — pick ONE primary action button
+7. Do not fill the same field twice
+8. Pre-filled fields do NOT mean you're done — you still need to click Next
+```
 
-class ActionPlan(BaseModel):
-    """Ordered list of actions to execute."""
-    
-    page_type: Literal["job_listing", "form", "confirmation", "unknown"] = "unknown"
-    reasoning: str
-    actions: list[Action]
-    needs_more_pages: bool = False
+Also add a new section after CRITICAL RULES:
+
+```python
+## COMMON MISTAKES TO AVOID
+
+- Returning actions without a final button click (causes hang)
+- Thinking pre-filled fields mean the page is complete (it's not until you click Next)
+- Returning 0 actions on a form page (always at least click Next)
+- Clicking "Save" instead of "Next" or "Continue"
 ```
 
 ## form_processor.py changes
 
-After getting the plan from Claude, add page_type handling. Find where `plan = self._claude.analyze_form(...)` is called and add logic after it:
+Add a failsafe after getting the plan from Claude. If the plan has actions but doesn't end with a click on a likely submit/next button, automatically append one.
 
-1. If page_type == "confirmation":
-   - Log "Claude detected confirmation page"
-   - Return ApplicationResult with SUCCESS status immediately
-   - Don't execute any actions
+1. Add new helper method `_ensure_plan_has_submit(self, plan: ActionPlan, dom_state: DomState) -> ActionPlan`:
+   - If plan.page_type == "confirmation", return plan unchanged
+   - If plan.actions is empty, return plan unchanged (let zero-actions handler deal with it)
+   - Check if last action is a click
+   - If last action is NOT a click, or if it's a click but not on a button element, find the Next/Submit button and append a click action
+   - Use dom_state.elements to find button with text matching: next, continue, submit, review, apply (case insensitive)
+   - If found, append ClickAction(ref=button.ref) to plan.actions
+   - Log when auto-appending: "Auto-appending click on {button_text} button"
 
-2. If page_type == "job_listing" and len(plan.actions) == 1 and plan.actions[0].action == "click":
-   - Log "Job listing page - clicking Apply"
-   - Execute the single click action
-   - Continue loop (expect redirect to actual form)
+2. Add helper method `_find_submit_button(self, dom_state: DomState) -> Optional[DomElement]`:
+   - Look through dom_state.elements for buttons/links with submit-like text
+   - Priority order: "submit" > "next" > "continue" > "review" > "apply"
+   - Check element.tag in ("button", "a", "input") or element.type in ("submit", "button")
+   - Check element.text, element.buttonText, element.label for keywords
+   - Return the best match or None
 
-3. If page_type == "form":
-   - Proceed normally with execution
+3. Call `_ensure_plan_has_submit()` right after getting plan from Claude, before the page_type handling:
+   ```python
+   plan = self._claude.analyze_form(dom_state, self._profile, self._dom_service)
+   if plan:
+       plan = self._ensure_plan_has_submit(plan, dom_state)
+   ```
 
-4. If page_type == "unknown" and len(plan.actions) == 0:
-   - Delegate to ZeroActionsHandler as currently done
-
-Add this logic right after `plan = self._claude.analyze_form(...)` and before the existing zero-actions handling.
+4. Import ClickAction at top of file:
+   ```python
+   from .actions import ActionPlan, ClickAction
+   ```
 
 ## Code standards
 - Static typing everywhere
-- Max 25 lines per function - extract helpers if needed
+- Max 25 lines per function - split into helpers
 - Use logging module
 
 Write clean, scalable, modular, efficient code. Follow single responsibility principle. Do not repeat yourself. Use consistent naming conventions. No unnecessary comments.
