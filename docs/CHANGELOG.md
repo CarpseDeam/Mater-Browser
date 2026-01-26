@@ -2,7 +2,10 @@
 
 All notable changes to this project.
 
-- 2026-01-26: refactor: Replace hardcoded timeout with PAGE_LOAD_TIMEOUT_MS in LinkedInFlow
+- 2026-01-26: refactor: Simplify LinkedIn navigation logic and use centralized wait constants
+  - Refactored `LinkedInFlow` to use `MAX_POPUP_WAIT_ATTEMPTS`, `MEDIUM_WAIT_MS`, and `LONG_WAIT_MS`
+  - Simplified navigation in `LinkedInFlow.run` by leveraging the new `Page.goto` retry logic and removing redundant SPA-specific error handling
+
 - 2026-01-26: feat: Enhance robustness with plan validation, navigation retries, and intercept handling
   - Added ActionPlan validation in `ClaudeAgent` to ensure AI actions match element types
   - Implemented retry logic for `Page.goto` with automated error handling for aborted navigations
