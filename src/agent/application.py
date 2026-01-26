@@ -12,6 +12,7 @@ from ..extractor.dom_service import DomService, DomState
 from .claude import ClaudeAgent
 from .actions import ActionPlan
 from ..executor.runner import ActionRunner
+from .page_classifier import PageClassifier, PageType
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +74,6 @@ class ApplicationStatus(Enum):
     NEEDS_LOGIN = "needs_login"
 
 
-class ApplyPageType(Enum):
-    """Classification of job application page type."""
-    EASY_APPLY = "easy_apply"
-    EXTERNAL_LINK = "external_link"
-    ALREADY_APPLIED = "already_applied"
-    CLOSED = "closed"
-    LOGIN_REQUIRED = "login_required"
-    UNKNOWN = "unknown"
 
 
 @dataclass
@@ -201,7 +194,6 @@ class ApplicationAgent:
         """
         current_url = self._page.url.lower()
 
-        # Check URL patterns
         for platform, patterns in LOGIN_URL_PATTERNS.items():
             if any(pattern in current_url for pattern in patterns):
                 logger.warning(
@@ -209,7 +201,6 @@ class ApplicationAgent:
                 )
                 return platform
 
-        # Check page content for login indicators
         try:
             password_field = self._page.raw.locator('input[type="password"]').first
             if password_field.is_visible(timeout=1000):
@@ -230,114 +221,6 @@ class ApplicationAgent:
             pass
 
         return None
-
-    def _classify_page(self) -> ApplyPageType:
-        """
-        Classify the current page to determine application strategy.
-
-        Checks in priority order:
-        1. Already applied indicators
-        2. Job closed indicators
-        3. Login required
-        4. Easy apply locators
-        5. External link indicators
-        6. Generic apply button
-        7. Unknown (default)
-        """
-        page = self._page.raw
-
-        # 1. Already applied check
-        already_applied_phrases = [
-            "already applied",
-            "you applied",
-            "you have applied",
-            "application submitted",
-            "previously applied",
-        ]
-        try:
-            content_lower = page.content().lower()[:5000]
-            if any(phrase in content_lower for phrase in already_applied_phrases):
-                logger.debug("Page classification: ALREADY_APPLIED (phrase match)")
-                return ApplyPageType.ALREADY_APPLIED
-        except Exception:
-            pass
-
-        # 2. Job closed check
-        closed_phrases = [
-            "no longer accepting",
-            "position filled",
-            "position has been filled",
-            "job has been filled",
-            "no longer available",
-            "this job is closed",
-            "job is no longer",
-            "posting has expired",
-            "job expired",
-        ]
-        try:
-            if any(phrase in content_lower for phrase in closed_phrases):
-                logger.debug("Page classification: CLOSED (phrase match)")
-                return ApplyPageType.CLOSED
-        except Exception:
-            pass
-
-        # 3. Login required check
-        if self._check_login_required():
-            logger.debug("Page classification: LOGIN_REQUIRED")
-            return ApplyPageType.LOGIN_REQUIRED
-
-        # 4. Easy apply locators
-        easy_apply_locator = (
-            page.locator('[class*="easy-apply" i]')
-            .or_(page.locator('[data-testid*="easyApply" i]'))
-            .or_(page.locator('[data-testid*="easy-apply" i]'))
-            .or_(page.locator('[aria-label*="Easy Apply" i]'))
-            .or_(page.locator('.jobs-apply-button--top-card'))
-            .or_(page.get_by_role("button", name=re.compile(r"easy\s*apply", re.IGNORECASE)))
-        )
-        try:
-            if easy_apply_locator.first.is_visible(timeout=1000):
-                logger.debug("Page classification: EASY_APPLY (locator match)")
-                return ApplyPageType.EASY_APPLY
-        except Exception:
-            pass
-
-        # 5. External link indicators
-        external_link_locator = (
-            page.locator('a[href*="greenhouse"]')
-            .or_(page.locator('a[href*="lever.co"]'))
-            .or_(page.locator('a[href*="workday"]'))
-            .or_(page.locator('a[href*="myworkdayjobs"]'))
-            .or_(page.locator('a[href*="icims"]'))
-            .or_(page.locator('a[href*="smartrecruiters"]'))
-            .or_(page.locator('a[href*="jobvite"]'))
-            .or_(page.get_by_role("link", name=re.compile(r"apply on company", re.IGNORECASE)))
-            .or_(page.get_by_role("link", name=re.compile(r"apply on employer", re.IGNORECASE)))
-            .or_(page.get_by_text(re.compile(r"apply on company site", re.IGNORECASE)))
-        )
-        try:
-            if external_link_locator.first.is_visible(timeout=1000):
-                logger.debug("Page classification: EXTERNAL_LINK (locator match)")
-                return ApplyPageType.EXTERNAL_LINK
-        except Exception:
-            pass
-
-        # 6. Generic apply button visible
-        generic_apply_locator = (
-            page.get_by_role("button", name=re.compile(r"apply", re.IGNORECASE))
-            .or_(page.get_by_role("link", name=re.compile(r"apply", re.IGNORECASE)))
-            .or_(page.locator('[data-testid*="apply" i]'))
-        )
-        try:
-            if generic_apply_locator.first.is_visible(timeout=1000):
-                logger.debug("Page classification: EASY_APPLY (generic apply button)")
-                return ApplyPageType.EASY_APPLY
-        except Exception:
-            pass
-
-        # 7. Default
-        logger.debug("Page classification: UNKNOWN")
-        return ApplyPageType.UNKNOWN
 
     def _apply_linkedin(self, job_url: str) -> ApplicationResult:
         """
@@ -376,43 +259,40 @@ class ApplicationAgent:
 
         self._page.wait(2000)
 
-        # Classify page to determine application strategy
-        page_type = self._classify_page()
+        classifier = PageClassifier(self._page.raw)
+        page_type = classifier.classify()
         logger.info(f"Page classification: {page_type.value}")
 
-        if page_type == ApplyPageType.LOGIN_REQUIRED:
+        if page_type == PageType.LOGIN_REQUIRED:
             return ApplicationResult(
                 status=ApplicationStatus.NEEDS_LOGIN,
                 message="Login required for LINKEDIN - please authenticate in browser",
                 url=job_url,
             )
 
-        if page_type == ApplyPageType.ALREADY_APPLIED:
+        if page_type == PageType.ALREADY_APPLIED:
             return ApplicationResult(
                 status=ApplicationStatus.FAILED,
                 message="Already applied to this job",
                 url=job_url,
             )
 
-        if page_type == ApplyPageType.CLOSED:
+        if page_type == PageType.CLOSED:
             return ApplicationResult(
                 status=ApplicationStatus.FAILED,
                 message="Job is closed or no longer accepting applications",
                 url=job_url,
             )
 
-        # Find and click Easy Apply button
-        if not self._click_apply_button():
+        if not classifier.click_apply_button():
             return ApplicationResult(
                 status=ApplicationStatus.NO_APPLY_BUTTON,
                 message="Could not find Easy Apply button",
                 url=job_url
             )
 
-        # Wait for modal to appear
         self._page.wait(1500)
 
-        # Modal is on same page - process forms
         return self._process_form_pages(job_url)
 
     def _apply_external(self, job_url: str, source: JobSource) -> ApplicationResult:
@@ -450,54 +330,50 @@ class ApplicationAgent:
 
         self._page.wait(2000)
 
-        # Classify page to determine application strategy
-        page_type = self._classify_page()
+        classifier = PageClassifier(self._page.raw)
+        page_type = classifier.classify()
         logger.info(f"Page classification: {page_type.value}")
 
-        if page_type == ApplyPageType.LOGIN_REQUIRED:
+        if page_type == PageType.LOGIN_REQUIRED:
             return ApplicationResult(
                 status=ApplicationStatus.NEEDS_LOGIN,
                 message=f"Login required for {source.value.upper()} - please authenticate in browser",
                 url=job_url,
             )
 
-        if page_type == ApplyPageType.ALREADY_APPLIED:
+        if page_type == PageType.ALREADY_APPLIED:
             return ApplicationResult(
                 status=ApplicationStatus.FAILED,
                 message="Already applied to this job",
                 url=job_url,
             )
 
-        if page_type == ApplyPageType.CLOSED:
+        if page_type == PageType.CLOSED:
             return ApplicationResult(
                 status=ApplicationStatus.FAILED,
                 message="Job is closed or no longer accepting applications",
                 url=job_url,
             )
 
-        # Capture current state before clicking
         original_url = self._page.url
         original_page_count = len(self._tabs.context.pages)
 
         logger.info(f"Original URL: {original_url}")
         logger.info(f"Original page count: {original_page_count}")
 
-        # Find and click apply button
-        if not self._click_apply_button():
+        if not classifier.click_apply_button():
             return ApplicationResult(
                 status=ApplicationStatus.NO_APPLY_BUTTON,
                 message=f"Could not find Apply button on {source.value}",
                 url=job_url
             )
 
-        # Wait for either: new tab opens OR current page navigates
         logger.info("Waiting for redirect to ATS...")
         redirected = self._wait_for_redirect(original_url, original_page_count)
 
         if not redirected:
             logger.warning("No redirect detected - may be on application page already")
 
-        # Check if redirect landed on a login page
         login_platform = self._check_login_required()
         if login_platform:
             return ApplicationResult(
@@ -506,13 +382,11 @@ class ApplicationAgent:
                 url=job_url,
             )
 
-        # Reinitialize DOM service for new page context
         self._dom_service = DomService(self._page)
         self._runner = ActionRunner(self._page, self._dom_service)
 
         logger.info(f"Now on: {self._page.url}")
 
-        # NOW we can process the actual application form
         return self._process_form_pages(job_url)
 
     def _wait_for_redirect(self, original_url: str, original_page_count: int) -> bool:
@@ -556,94 +430,6 @@ class ApplicationAgent:
 
         logger.warning(f"Redirect timeout after {timeout_sec}s")
         return False
-
-    def _click_apply_button(self) -> bool:
-        """
-        Find and click the Apply button using semantic locators.
-
-        Uses Playwright's combined locator pattern for resilience:
-        1. Role-based (button/link with "apply" text) - most resilient
-        2. Attribute-based (data-testid, aria-label) - platform-specific fallback
-        3. Text content fallback - last resort
-
-        Returns:
-            True if button found and clicked, False otherwise.
-        """
-        logger.info("Looking for Apply button (semantic locator)...")
-
-        page = self._page.raw
-
-        apply_locator = (
-            # Primary: Role-based semantic locators (most resilient to HTML changes)
-            page.get_by_role("button", name=re.compile(r"easy\s*apply|apply\s*now|apply", re.IGNORECASE))
-            .or_(page.get_by_role("link", name=re.compile(r"easy\s*apply|apply\s*now|apply", re.IGNORECASE)))
-            # Indeed external apply patterns (company website redirects)
-            .or_(page.get_by_role("link", name=re.compile(r"apply on|apply at|company site", re.IGNORECASE)))
-            .or_(page.locator('a[href*="apply"]'))
-            .or_(page.locator('[data-testid="indeedApplyButton"]'))
-            .or_(page.locator('[data-testid*="applyButton" i]'))
-            # Secondary: Attribute-based (platform-specific)
-            .or_(page.locator('[data-testid*="apply" i]'))
-            .or_(page.locator('[aria-label*="apply" i]'))
-            .or_(page.locator('[id*="apply" i][id*="button" i]'))
-            # Tertiary: Class-based (less stable but common)
-            .or_(page.locator('.jobs-apply-button'))
-            .or_(page.locator('.apply-button'))
-            .or_(page.locator('[class*="apply"][class*="button" i]'))
-        )
-
-        try:
-            first_match = apply_locator.first
-            if first_match.is_visible(timeout=8000):
-                # Log what we're clicking for debugging
-                try:
-                    tag = first_match.evaluate("el => el.tagName")
-                    text = first_match.evaluate("el => el.textContent?.trim()?.substring(0, 50)")
-                    logger.info(f"Found Apply button: <{tag}> '{text}'")
-                except Exception:
-                    logger.info("Found Apply button (details unavailable)")
-
-                first_match.click()
-                logger.info("Clicked Apply button successfully")
-                return True
-
-        except Exception as e:
-            logger.debug(f"Combined locator failed: {e}")
-
-        # Last resort: Text content search (handles weird markup)
-        logger.info("Trying text content fallback...")
-        try:
-            # Look for any clickable element containing "apply"
-            text_locator = page.locator('button, a, [role="button"]').filter(
-                has_text=re.compile(r"apply", re.IGNORECASE)
-            )
-
-            if text_locator.first.is_visible(timeout=2000):
-                text_locator.first.click()
-                logger.info("Clicked Apply via text content fallback")
-                return True
-
-        except Exception as e:
-            logger.debug(f"Text fallback failed: {e}")
-
-        logger.warning("Could not find Apply button with any strategy")
-        self._log_available_buttons()
-        return False
-
-    def _log_available_buttons(self) -> None:
-        """Log visible buttons/links on page for debugging apply button detection failures."""
-        logger.debug("Available buttons/links on page:")
-        try:
-            buttons = self._page.raw.locator('button, a[href], [role="button"]').all()
-            for i, btn in enumerate(buttons[:20]):
-                try:
-                    text = btn.text_content()[:50] if btn.text_content() else "(no text)"
-                    tag = btn.evaluate("el => el.tagName")
-                    logger.debug(f"  [{i}] <{tag}> {text}")
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug(f"  Could not enumerate elements: {e}")
 
     def _handle_new_tab(self) -> None:
         """Check for and switch to new tab (external ATS)."""
