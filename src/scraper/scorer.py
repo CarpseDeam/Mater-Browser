@@ -207,6 +207,9 @@ class JobScorer:
             logger.debug(f"Excluded '{job.title}' - {exclusion_reason}")
             return 0.0
 
+        title_lower = job.title.lower()
+        desc_lower = job.description.lower()
+
         score = 0.0
 
         title_matches = sum(1 for kw in self.title_keywords if kw in title_lower)

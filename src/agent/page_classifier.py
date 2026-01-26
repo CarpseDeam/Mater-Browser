@@ -126,14 +126,17 @@ class PageClassifier:
         logger.debug("PageClassifier: UNKNOWN")
         return PageType.UNKNOWN
 
-    def find_apply_button(self) -> Optional[ElementCandidate]:
+    def find_apply_button(self, refresh: bool = False) -> Optional[ElementCandidate]:
         """
         Find the highest-scoring visible apply button candidate.
+
+        Args:
+            refresh: If True, forces a fresh DOM extraction.
 
         Returns:
             Best ElementCandidate if found, None otherwise.
         """
-        if self._candidates is None:
+        if self._candidates is None or refresh:
             self._candidates = self._extract_candidates()
 
         for candidate in self._candidates:
@@ -146,6 +149,8 @@ class PageClassifier:
         """
         Find and click the best apply button candidate.
 
+        Retries once with fresh DOM extraction if first attempt fails.
+
         Args:
             timeout: Click timeout in milliseconds.
 
@@ -153,18 +158,32 @@ class PageClassifier:
             True if clicked successfully, False otherwise.
         """
         candidate = self.find_apply_button()
+
         if not candidate:
-            logger.warning("PageClassifier: No apply button candidate found")
+            logger.debug("PageClassifier: No candidate found, refreshing DOM...")
+            candidate = self.find_apply_button(refresh=True)
+
+        if not candidate:
+            logger.warning("PageClassifier: No apply button candidate found after refresh")
             return False
 
         logger.info(f"PageClassifier: Clicking '{candidate.text}' (score={candidate.score:.2f})")
-        try:
-            locator = self._page.locator(candidate.selector).first
-            locator.click(timeout=timeout)
-            return True
-        except Exception as e:
-            logger.error(f"PageClassifier: Click failed - {e}")
-            return False
+
+        for attempt in range(2):
+            try:
+                locator = self._page.locator(candidate.selector).first
+                locator.scroll_into_view_if_needed()
+                locator.click(timeout=timeout)
+                return True
+            except Exception as e:
+                logger.warning(f"PageClassifier: Click attempt {attempt + 1} failed - {e}")
+                if attempt == 0:
+                    candidate = self.find_apply_button(refresh=True)
+                    if not candidate:
+                        break
+
+        logger.error("PageClassifier: All click attempts failed")
+        return False
 
     def _extract_candidates(self) -> list[ElementCandidate]:
         """
@@ -223,14 +242,15 @@ class PageClassifier:
 
         if raw.get('aria_label'):
             escaped = raw['aria_label'].replace('"', '\\"')
-            return f'[aria-label="{escaped}"]'
+            return f'{raw["tag"]}[aria-label="{escaped}"]'
 
         text = raw.get('text', '').strip()
-        if text:
-            text_pattern = re.escape(text[:30])
-            return f'{raw["tag"]}:text-matches("{text_pattern}", "i")'
+        if text and len(text) < 50:
+            escaped_text = text.replace('"', '\\"')
+            return f'{raw["tag"]}:text-is("{escaped_text}")'
 
-        return f'{raw["tag"]} >> nth={raw["idx"]}'
+        base_query = 'button, a, [role="button"], [role="link"]'
+        return f':is({base_query}) >> nth={raw["idx"]}'
 
     def _score_candidate(self, candidate: ElementCandidate) -> float:
         """

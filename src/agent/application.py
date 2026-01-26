@@ -259,6 +259,11 @@ class ApplicationAgent:
 
         self._page.wait(2000)
 
+        try:
+            self._page.raw.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+
         classifier = PageClassifier(self._page.raw)
         page_type = classifier.classify()
         logger.info(f"Page classification: {page_type.value}")
@@ -329,6 +334,11 @@ class ApplicationAgent:
                 raise
 
         self._page.wait(2000)
+
+        try:
+            self._page.raw.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
 
         classifier = PageClassifier(self._page.raw)
         page_type = classifier.classify()
