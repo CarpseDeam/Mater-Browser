@@ -16,18 +16,9 @@ from .models import (
     ACCOUNT_CREATION_URL_PATTERNS, ACCOUNT_CREATION_CONTENT,
 )
 from .indeed_helpers import IndeedHelpers
+from .success_detector import SuccessDetector
 
 logger = logging.getLogger(__name__)
-
-COMPLETION_PHRASES: list[str] = [
-    "thank you for applying", "application submitted", "application received",
-    "we have received your application", "your application has been submitted",
-    "your application was sent", "application was sent",
-]
-NEGATIVE_URL_SIGNALS: list[str] = [
-    "/job/", "/jobs/", "/careers/", "/viewjob", "/job-detail", "/apply", "linkedin.com/jobs/view"
-]
-POSITIVE_URL_SIGNALS: list[str] = ["success", "submitted", "confirmed", "thank", "complete", "post-apply", "postApplyJobId", "confirmation"]
 
 
 class FormProcessor:
@@ -49,6 +40,7 @@ class FormProcessor:
         self._max_pages = max_pages
         self._loop_detector = LoopDetector()
         self._indeed_helpers = IndeedHelpers(page)
+        self._success_detector = SuccessDetector(page.raw)
 
     def process(self, job_url: str, source: Optional[JobSource] = None) -> ApplicationResult:
         """Process multi-page application form."""
@@ -85,13 +77,15 @@ class FormProcessor:
 
             logger.info(f"=== Page {pages_processed} === URL: {current_url}")
 
-            if self._is_complete(pages_processed):
-                return ApplicationResult(ApplicationStatus.SUCCESS, "Application submitted successfully", pages_processed, job_url)
+            completion = self._success_detector.check()
+            if completion.is_complete:
+                return ApplicationResult(ApplicationStatus.SUCCESS, f"Application submitted ({completion.signal.value}: {completion.details})", pages_processed, job_url)
 
             if self._indeed_helpers.handle_resume_card():
                 self._page.wait(1500)
-                if self._is_complete(pages_processed):
-                    return ApplicationResult(ApplicationStatus.SUCCESS, "Application submitted successfully", pages_processed, job_url)
+                completion = self._success_detector.check()
+                if completion.is_complete:
+                    return ApplicationResult(ApplicationStatus.SUCCESS, f"Application submitted ({completion.signal.value}: {completion.details})", pages_processed, job_url)
                 continue
 
             dom_state = self._dom_service.extract()
@@ -126,12 +120,17 @@ class FormProcessor:
             logger.info(f"Executing plan: {plan.reasoning}")
             success = self._runner.execute(plan)
 
+            self._page.wait(1000)
+            completion = self._success_detector.check()
+            if completion.is_complete:
+                return ApplicationResult(ApplicationStatus.SUCCESS, f"Application submitted ({completion.signal.value}: {completion.details})", pages_processed, job_url)
+
             if source == JobSource.INDEED:
                 self._indeed_helpers.dismiss_modal()
             if not success:
                 logger.warning("Plan execution had errors")
 
-            self._page.wait(1500)
+            self._page.wait(500)
             self._handle_new_tab()
 
             new_url = self._page.url
@@ -227,35 +226,4 @@ class FormProcessor:
                 return True
         except Exception as e:
             logger.debug(f"Next button locator failed: {e}")
-        return False
-
-    def _is_complete(self, pages_processed: int = 0) -> bool:
-        if pages_processed < 2:
-            return False
-        page = self._page.raw
-        current_url = self._page.url.lower()
-
-        if any(sig in current_url for sig in NEGATIVE_URL_SIGNALS):
-            if not any(pos in current_url for pos in POSITIVE_URL_SIGNALS):
-                return False
-
-        completion_locator = (
-            page.get_by_text(re.compile(r"application submitted|thank you for applying|successfully submitted|application received|application was sent", re.IGNORECASE))
-            .or_(page.locator('[data-test="application-complete"], [data-testid*="success" i], [data-testid*="complete" i]'))
-            .or_(page.locator('.application-complete, #application-success, [class*="success"][class*="message" i]'))
-        )
-        try:
-            if completion_locator.first.is_visible(timeout=1000):
-                logger.info("Completion indicator found")
-                return True
-        except Exception:
-            pass
-
-        try:
-            content = page.content().lower()
-            if any(phrase in content for phrase in COMPLETION_PHRASES):
-                logger.info("Completion detected via page content")
-                return True
-        except Exception:
-            pass
         return False

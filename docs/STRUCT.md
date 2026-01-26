@@ -5,6 +5,11 @@
 
 ## Changelog
 
+- **2026-01-26**: Improved form completion detection and payment page filtering
+  - Updated `FormProcessor` with additional success URL signals
+  - Refined `PageClassifier` to ignore safe job application domains during payment detection
+- **2026-01-26**: Improved form processing with scrolling and fallback logic
+  - `src/agent/form_processor.py` - Added job description detection, automatic scrolling for "Apply" buttons, and regex-based fallback clicking
 - **2026-01-25**: Implemented Similo-inspired PageClassifier for apply button detection
   - `src/agent/page_classifier.py` - New module with batch DOM extraction and weighted scoring
   - `PageType` enum - Classifies pages as EASY_APPLY, EXTERNAL_LINK, ALREADY_APPLIED, CLOSED, LOGIN_REQUIRED, or UNKNOWN
