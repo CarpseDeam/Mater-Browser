@@ -48,9 +48,16 @@ Orchestrates the complete job application flow:
 **Platform-specific handlers:**
 - `_apply_linkedin()` - LinkedIn Easy Apply modal flow
 - `_apply_external()` - Indeed/Direct with ATS redirect handling
-- `_handle_indeed_resume_card()` - Indeed's pre-uploaded resume selection
+- `_handle_indeed_resume_card()` - Indeed's resume selection page with already-selected detection
+- `_click_indeed_continue()` - Indeed-specific Continue button with scroll support
 
 ## Changelog
+
+### 2026-01-25 (update 2)
+- Fixed `_handle_indeed_resume_card()` to detect already-selected resumes (checkmark indicator)
+- Added `_click_indeed_continue()` for Indeed-specific Continue button patterns
+- Now skips card click if user's PDF is already selected, preventing unwanted selection change
+- Added scroll-to-find logic for Continue button below viewport
 
 ### 2026-01-25
 - Added `ROLE_EXCLUSIONS` to scorer.py - excludes junior, intern, sysadmin, QA, and management roles

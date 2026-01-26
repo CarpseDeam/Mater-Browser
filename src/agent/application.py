@@ -521,9 +521,10 @@ class ApplicationAgent:
                     url=job_url
                 )
 
-            # Try Indeed resume card FIRST (before DOM extraction)
+            # Try Indeed resume page handler FIRST (before DOM extraction)
+            # This handles both selecting a resume AND clicking Continue
             if self._handle_indeed_resume_card():
-                logger.info("Handled Indeed resume card - continuing to next page check")
+                logger.info("Handled Indeed resume page - advancing to next step")
                 self._page.wait(1500)
                 if self._is_complete():
                     logger.info("Application complete after resume selection!")
@@ -533,8 +534,7 @@ class ApplicationAgent:
                         pages_processed=pages_processed,
                         url=job_url
                     )
-                self._click_next_button()
-                self._page.wait(1500)
+                # _handle_indeed_resume_card already clicks Continue, so just continue loop
                 continue
 
             dom_state = self._dom_service.extract()
@@ -633,13 +633,14 @@ class ApplicationAgent:
 
     def _handle_indeed_resume_card(self) -> bool:
         """
-        Handle Indeed's pre-uploaded resume selection.
+        Handle Indeed's resume selection page.
 
-        Indeed shows a "Use your Indeed Resume" card that must be clicked,
-        rather than a traditional file upload input.
+        Indeed shows resume options that must be selected. If a resume is already
+        selected (has checkmark), we skip clicking and just advance to next step.
 
         Returns:
-            True if resume card found and clicked, False otherwise.
+            True if on resume page and handled (either already selected or clicked),
+            False if not on Indeed resume page.
         """
         page = self._page.raw
         current_url = self._page.url.lower()
@@ -647,7 +648,33 @@ class ApplicationAgent:
         if "indeed.com" not in current_url:
             return False
 
-        logger.info("Checking for Indeed resume card...")
+        if "resume" not in current_url and "resume" not in page.content().lower()[:2000]:
+            return False
+
+        logger.info("Checking for Indeed resume selection page...")
+
+        # FIRST: Check if any resume is already selected (has checkmark)
+        selected_indicators = (
+            page.locator('[data-testid*="selected" i]')
+            .or_(page.locator('[aria-checked="true"]'))
+            .or_(page.locator('[aria-selected="true"]'))
+            .or_(page.locator('[data-selected="true"]'))
+            .or_(page.locator('.ia-Resume-selectedIcon'))
+            .or_(page.locator('[class*="selected"][class*="resume" i]'))
+            .or_(page.locator('[class*="resume"][class*="selected" i]'))
+            .or_(page.locator('.ia-Resume svg[class*="check" i]'))
+            .or_(page.locator('[class*="resume-card"] svg'))
+        )
+
+        try:
+            if selected_indicators.first.is_visible(timeout=2000):
+                logger.info("Resume already selected (found selection indicator) - skipping card click")
+                return self._click_indeed_continue()
+        except Exception as e:
+            logger.debug(f"No selection indicator found: {e}")
+
+        # No resume selected - try to click "Use your Indeed Resume" card
+        logger.info("No resume selected - looking for Indeed resume card to click...")
 
         resume_card_locator = (
             page.get_by_text(re.compile(r"use your indeed resume", re.IGNORECASE))
@@ -674,12 +701,75 @@ class ApplicationAgent:
                 first_match.click()
                 logger.info("Clicked Indeed resume card successfully")
                 self._page.wait(1000)
-                return True
+
+                return self._click_indeed_continue()
 
         except Exception as e:
             logger.debug(f"Indeed resume card not found: {e}")
 
         return False
+
+    def _click_indeed_continue(self) -> bool:
+        """
+        Click Indeed's Continue/Next button on resume page.
+
+        Indeed SmartApply uses specific button patterns. May need to scroll
+        to make button visible.
+
+        Returns:
+            True if Continue button found and clicked, False otherwise.
+        """
+        page = self._page.raw
+
+        logger.info("Looking for Indeed Continue button...")
+
+        indeed_continue_locator = (
+            page.locator('[data-testid="ia-continueButton"]')
+            .or_(page.locator('[data-testid*="continue" i]'))
+            .or_(page.locator('[data-tn-element="continueButton"]'))
+            .or_(page.get_by_role("button", name=re.compile(r"^continue$", re.IGNORECASE)))
+            .or_(page.get_by_role("button", name=re.compile(r"continue to", re.IGNORECASE)))
+            .or_(page.locator('.ia-continueButton'))
+            .or_(page.locator('[class*="ia-"][class*="continue" i]'))
+            .or_(page.locator('[class*="continue"][class*="button" i]'))
+            .or_(page.locator('button:has-text("Continue")'))
+            .or_(page.locator('[type="submit"]'))
+        )
+
+        try:
+            first_match = indeed_continue_locator.first
+            if first_match.is_visible(timeout=2000):
+                try:
+                    text = first_match.evaluate("el => el.textContent?.trim()?.substring(0, 30)")
+                    logger.info(f"Found Indeed Continue button: '{text}'")
+                except Exception:
+                    pass
+
+                first_match.click()
+                logger.info("Clicked Indeed Continue button successfully")
+                self._page.wait(1500)
+                return True
+        except Exception as e:
+            logger.debug(f"Continue button not immediately visible: {e}")
+
+        # Scroll down and try again
+        logger.info("Scrolling to find Continue button...")
+        try:
+            page.evaluate("window.scrollBy(0, 500)")
+            self._page.wait(500)
+
+            first_match = indeed_continue_locator.first
+            if first_match.is_visible(timeout=2000):
+                first_match.scroll_into_view_if_needed()
+                first_match.click()
+                logger.info("Clicked Indeed Continue button after scroll")
+                self._page.wait(1500)
+                return True
+        except Exception as e:
+            logger.debug(f"Continue button not found after scroll: {e}")
+
+        logger.info("Falling back to generic next button handler...")
+        return self._click_next_button()
 
     def _click_next_button(self) -> bool:
         """
