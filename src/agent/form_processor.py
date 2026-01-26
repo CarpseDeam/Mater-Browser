@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 COMPLETION_PHRASES: list[str] = [
     "thank you for applying", "application submitted", "application received",
     "we have received your application", "your application has been submitted",
+    "your application was sent", "application was sent",
 ]
 NEGATIVE_URL_SIGNALS: list[str] = [
     "/job/", "/jobs/", "/careers/", "/viewjob", "/job-detail", "/apply", "linkedin.com/jobs/view"
 ]
-POSITIVE_URL_SIGNALS: list[str] = ["success", "submitted", "confirmed", "thank", "complete"]
+POSITIVE_URL_SIGNALS: list[str] = ["success", "submitted", "confirmed", "thank", "complete", "post-apply", "postApplyJobId"]
 
 
 class FormProcessor:
@@ -192,7 +193,7 @@ class FormProcessor:
                 return False
 
         completion_locator = (
-            page.get_by_text(re.compile(r"application submitted|thank you for applying|successfully submitted|application received", re.IGNORECASE))
+            page.get_by_text(re.compile(r"application submitted|thank you for applying|successfully submitted|application received|application was sent", re.IGNORECASE))
             .or_(page.locator('[data-test="application-complete"], [data-testid*="success" i], [data-testid*="complete" i]'))
             .or_(page.locator('.application-complete, #application-success, [class*="success"][class*="message" i]'))
         )

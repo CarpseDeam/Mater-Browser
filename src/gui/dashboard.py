@@ -7,10 +7,12 @@ main thread to avoid Playwright greenlet threading errors.
 
 from __future__ import annotations
 
+import ctypes
 import logging
 import subprocess
 import time
 import tkinter as tk
+from ctypes import wintypes
 from dataclasses import dataclass, field
 from pathlib import Path
 from queue import Empty, Queue
@@ -48,6 +50,46 @@ ACCENT: str = "#4fc3f7"
 SUCCESS_COLOR: str = "#81c784"
 ERROR_COLOR: str = "#e57373"
 WARNING_COLOR: str = "#ffb74d"
+
+HWND_TOP: int = 0
+SWP_NOSIZE: int = 0x0001
+SWP_SHOWWINDOW: int = 0x0040
+
+EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+
+def _bring_chrome_to_desktop() -> bool:
+    """Move Chrome window to visible desktop area at (100, 100)."""
+    user32 = ctypes.windll.user32
+    chrome_hwnd: wintypes.HWND | None = None
+
+    def enum_callback(hwnd: wintypes.HWND, _: wintypes.LPARAM) -> bool:
+        nonlocal chrome_hwnd
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length == 0:
+            return True
+        buffer = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buffer, length + 1)
+        if "Chrome" in buffer.value:
+            chrome_hwnd = hwnd
+            return False
+        return True
+
+    user32.EnumWindows(EnumWindowsProc(enum_callback), 0)
+
+    if chrome_hwnd is None:
+        return False
+
+    user32.SetWindowPos(
+        chrome_hwnd,
+        HWND_TOP,
+        100,
+        100,
+        0,
+        0,
+        SWP_NOSIZE | SWP_SHOWWINDOW,
+    )
+    return True
 
 
 class StatusState:
@@ -276,6 +318,11 @@ class DashboardApp:
             frame, text="Start Chrome", command=self._start_chrome
         )
         self.start_chrome_btn.pack(side=tk.RIGHT, padx=(5, 0))
+
+        self.show_browser_btn = ttk.Button(
+            frame, text="Show Browser", command=self._show_browser
+        )
+        self.show_browser_btn.pack(side=tk.RIGHT, padx=(5, 0))
 
         self.connect_btn = ttk.Button(
             frame, text="Connect to Chrome", command=self._connect_browser
@@ -544,6 +591,12 @@ class DashboardApp:
 
         subprocess.Popen(["cmd", "/c", str(script)], shell=True)
         self._log("Starting Chrome... Wait a few seconds then click Connect.")
+
+    def _show_browser(self) -> None:
+        if _bring_chrome_to_desktop():
+            self._log("Chrome window moved to desktop")
+        else:
+            self._log("Could not find Chrome window")
 
     def _connect_browser(self) -> None:
         if self.connection and self.connection.is_connected:
