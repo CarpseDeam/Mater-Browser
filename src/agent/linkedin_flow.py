@@ -84,7 +84,7 @@ class LinkedInFlow:
         self._page.wait(LONG_WAIT_MS)
 
         try:
-            self._page.raw.wait_for_load_state("networkidle", timeout=5000)
+            self._page.raw.wait_for_load_state("networkidle", timeout=PAGE_LOAD_TIMEOUT_MS)
         except Exception:
             pass
 
