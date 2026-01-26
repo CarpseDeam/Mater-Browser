@@ -27,7 +27,7 @@ COMPLETION_PHRASES: list[str] = [
 NEGATIVE_URL_SIGNALS: list[str] = [
     "/job/", "/jobs/", "/careers/", "/viewjob", "/job-detail", "/apply", "linkedin.com/jobs/view"
 ]
-POSITIVE_URL_SIGNALS: list[str] = ["success", "submitted", "confirmed", "thank", "complete", "post-apply", "postApplyJobId"]
+POSITIVE_URL_SIGNALS: list[str] = ["success", "submitted", "confirmed", "thank", "complete", "post-apply", "postApplyJobId", "confirmation"]
 
 
 class FormProcessor:

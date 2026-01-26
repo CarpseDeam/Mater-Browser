@@ -35,6 +35,11 @@ CLOSED_PHRASES: list[str] = [
 PAYMENT_URL_PATTERNS: list[str] = [
     "premium", "upgrade", "subscribe", "pricing", "checkout", "payment", "billing", "purchase", "cart", "order", "plans",
 ]
+SAFE_URL_PATTERNS: list[str] = [
+    "smartapply.indeed.com",
+    "indeed.com/applystart",
+    "linkedin.com/jobs",
+]
 PAYMENT_CONTENT_PHRASES: list[str] = [
     "enter payment", "credit card", "debit card", "billing information", "purchase now", "buy now",
     "upgrade to premium", "start free trial", "subscription", "per month", "/month", "/year",
@@ -204,6 +209,8 @@ class PageClassifier:
 
     def _is_payment_page(self) -> bool:
         url_lower = self._page.url.lower()
+        if any(safe in url_lower for safe in SAFE_URL_PATTERNS):
+            return False
         if any(p in url_lower for p in PAYMENT_URL_PATTERNS):
             logger.warning(f"PAYMENT URL DETECTED: {self._page.url}")
             return True
