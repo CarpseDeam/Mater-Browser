@@ -471,6 +471,12 @@ class ApplicationAgent:
                     url=job_url,
                 )
             pages_processed += 1
+
+            if self._dismiss_indeed_modal():
+                logger.info("Dismissed Indeed modal, continuing...")
+                pages_processed -= 1
+                continue
+
             current_url = self._page.url
 
             logger.info(f"=== Page {pages_processed} ===")
@@ -538,6 +544,7 @@ class ApplicationAgent:
 
             logger.info(f"Executing plan: {plan.reasoning}")
             success = self._runner.execute(plan)
+            self._dismiss_indeed_modal()
 
             if not success:
                 logger.warning("Plan execution had errors")
@@ -755,6 +762,36 @@ class ApplicationAgent:
 
         logger.info("Falling back to generic next button handler...")
         return self._click_next_button()
+
+    def _dismiss_indeed_modal(self) -> bool:
+        """
+        Check for and dismiss Indeed confirmation modals.
+
+        Returns:
+            True if a modal was found and dismissed, False otherwise.
+        """
+        page = self._page.raw
+
+        modal_dismiss_locator = (
+            page.get_by_role("button", name=re.compile(r"continue applying", re.IGNORECASE))
+            .or_(page.get_by_role("button", name=re.compile(r"continue", re.IGNORECASE)))
+            .or_(page.locator('[data-testid*="continue"]'))
+            .or_(page.locator('button:has-text("Continue Applying")'))
+            .or_(page.locator('[role="dialog"] button:has-text("Continue")'))
+            .or_(page.locator('.modal button:has-text("Continue")'))
+        )
+
+        try:
+            button = modal_dismiss_locator.first
+            if button.is_visible(timeout=1000):
+                logger.info("Indeed modal detected - clicking Continue")
+                button.click()
+                self._page.wait(1000)
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def _click_next_button(self) -> bool:
         """
