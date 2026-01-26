@@ -1,165 +1,126 @@
 """Lever ATS handler."""
 import logging
+from typing import Optional
 
-from ..base_handler import BaseATSHandler, FormPage, PageResult
+from playwright.sync_api import Page
+
+from ..base_handler import BaseATSHandler, HandlerResult, PageState
 
 logger = logging.getLogger(__name__)
 
 
 class LeverHandler(BaseATSHandler):
-    """Handler for Lever ATS applications."""
+    """Handler for Lever ATS."""
 
     ATS_NAME = "lever"
 
     APPLY_BUTTON_SELECTORS = [
-        'a.postings-btn:has-text("Apply")',
-        'button:has-text("Apply for this job")',
-        ".apply-button",
+        ".posting-btn-submit",
+        "a[href*='/apply']",
+        "button:has-text('Apply')",
     ]
 
     NEXT_BUTTON_SELECTORS = [
-        'button[type="submit"]',
-        'button:has-text("Submit application")',
-        'button:has-text("Submit")',
+        "button[type='submit']",
+        "button:has-text('Submit application')",
+        ".submit-application",
     ]
 
-    SUBMIT_BUTTON_SELECTORS = NEXT_BUTTON_SELECTORS
+    SUBMIT_BUTTON_SELECTORS = [
+        "button[type='submit']",
+        "button:has-text('Submit')",
+    ]
 
-    FIELD_SELECTORS = {
-        "name": [
-            'input[name="name"]',
-            "#name",
-        ],
-        "email": [
-            'input[name="email"]',
-            "#email",
-            'input[type="email"]',
-        ],
-        "phone": [
-            'input[name="phone"]',
-            "#phone",
-            'input[type="tel"]',
-        ],
-        "resume": [
-            'input[type="file"][name="resume"]',
-            '.resume-upload input[type="file"]',
-        ],
-        "linkedin": [
-            'input[name="urls[LinkedIn]"]',
-            'input[placeholder*="LinkedIn"]',
-        ],
-        "github": [
-            'input[name="urls[GitHub]"]',
-            'input[placeholder*="GitHub"]',
-        ],
-        "portfolio": [
-            'input[name="urls[Portfolio]"]',
-            'input[name="urls[Other]"]',
-        ],
-        "current_company": [
-            'input[name="org"]',
-            "#current-company",
-        ],
-    }
+    def __init__(
+        self, page: Page, profile: dict, resume_path: Optional[str] = None
+    ) -> None:
+        super().__init__(page, profile, resume_path)
 
-    def detect_page_type(self) -> FormPage:
-        """Detect current Lever page type."""
-        if self._is_visible('text="Thank you"', timeout=500):
-            return FormPage.CONFIRMATION
-        if self._is_visible(".application-form", timeout=500):
-            return FormPage.PERSONAL_INFO
-        if self._is_visible(".postings-btn", timeout=500):
-            return FormPage.JOB_LISTING
-        return FormPage.UNKNOWN
+    def detect_page_state(self) -> PageState:
+        """Detect Lever page state."""
+        url = self._page.url.lower()
 
-    def fill_current_page(self) -> PageResult:
-        """Fill Lever application."""
-        page_type = self.detect_page_type()
+        if self._is_confirmation_page(url):
+            return PageState.CONFIRMATION
 
-        if page_type == FormPage.CONFIRMATION:
-            return PageResult(True, page_type, "Application submitted", False)
+        if self._is_form_page(url):
+            return PageState.FORM
 
-        if page_type == FormPage.JOB_LISTING:
-            if self.click_apply():
-                self._wait(1500)
-                page_type = FormPage.PERSONAL_INFO
+        if self._is_job_listing_page():
+            return PageState.JOB_LISTING
 
-        return self._fill_application_form()
+        return PageState.UNKNOWN
 
-    def _fill_application_form(self) -> PageResult:
-        """Fill the Lever application form."""
-        filled = self._fill_basic_fields()
-        self._fill_url_fields()
-        self._fill_company_field()
+    def _is_confirmation_page(self, url: str) -> bool:
+        """Check if current page is confirmation."""
+        if "/thanks" in url or "confirmation" in url:
+            return True
+        return self._has_element(".thank-you")
+
+    def _is_form_page(self, url: str) -> bool:
+        """Check if current page is a form."""
+        if "/apply" in url:
+            return True
+        return self._has_element(".application-form")
+
+    def _is_job_listing_page(self) -> bool:
+        """Check if current page is job listing."""
+        return self._has_element(".posting-btn-submit")
+
+    def fill_current_page(self) -> HandlerResult:
+        """Fill Lever form."""
+        filled_count = 0
+
+        filled_count += self._fill_name_field()
+        filled_count += self._fill_contact_fields()
+        filled_count += self._fill_url_fields()
         self._upload_resume()
-        self._handle_custom_questions()
 
-        if self.click_submit():
-            self._wait(3000)
-            if self.detect_page_type() == FormPage.CONFIRMATION:
-                return PageResult(
-                    True, FormPage.PERSONAL_INFO, "Application submitted", False
-                )
-            return PageResult(
-                True, FormPage.PERSONAL_INFO, f"Filled {filled} fields", True
-            )
+        logger.info(f"{self.ATS_NAME}: Filled {filled_count} fields")
+        return HandlerResult(
+            True, f"Filled {filled_count} fields", PageState.FORM
+        )
 
-        return PageResult(False, FormPage.PERSONAL_INFO, "Could not submit", False)
+    def _fill_name_field(self) -> int:
+        """Fill the name field (Lever uses single name field)."""
+        first = self._profile.get("first_name", "")
+        last = self._profile.get("last_name", "")
+        name = f"{first} {last}".strip()
 
-    def _fill_basic_fields(self) -> int:
-        """Fill basic required fields."""
+        if self._fill_field("input[name='name']", name):
+            return 1
+        return 0
+
+    def _fill_contact_fields(self) -> int:
+        """Fill email and phone fields."""
         filled = 0
-        full_name = f"{self._profile.get('first_name', '')} {self._profile.get('last_name', '')}".strip()
-        if self._fill_field(self.FIELD_SELECTORS["name"], full_name):
+        if self._fill_field("input[name='email']", self._profile.get("email", "")):
             filled += 1
-
-        if self._fill_field(
-            self.FIELD_SELECTORS["email"], self._profile.get("email", "")
-        ):
-            filled += 1
-        if self._fill_field(
-            self.FIELD_SELECTORS["phone"], self._profile.get("phone", "")
-        ):
+        if self._fill_field("input[name='phone']", self._profile.get("phone", "")):
             filled += 1
         return filled
 
-    def _fill_url_fields(self) -> None:
+    def _fill_url_fields(self) -> int:
         """Fill URL fields."""
-        self._fill_field(
-            self.FIELD_SELECTORS["linkedin"], self._profile.get("linkedin_url", "")
-        )
-        self._fill_field(
-            self.FIELD_SELECTORS["github"], self._profile.get("github_url", "")
-        )
-        self._fill_field(
-            self.FIELD_SELECTORS["portfolio"], self._profile.get("portfolio_url", "")
-        )
+        filled = 0
+        linkedin = self._profile.get("linkedin_url", "")
+        github = self._profile.get("github_url", "")
+        portfolio = self._profile.get("portfolio_url", "")
 
-    def _fill_company_field(self) -> None:
-        """Fill current company field."""
-        self._fill_field(
-            self.FIELD_SELECTORS["current_company"],
-            self._profile.get("current_company", ""),
-        )
+        if linkedin and self._fill_field("input[name*='LinkedIn' i]", linkedin):
+            filled += 1
+        if github and self._fill_field("input[name*='GitHub' i]", github):
+            filled += 1
+        if portfolio and self._fill_field("input[name*='Portfolio' i]", portfolio):
+            filled += 1
+
+        return filled
 
     def _upload_resume(self) -> None:
         """Upload resume if path provided."""
         if self._resume_path:
-            self._upload_file(self.FIELD_SELECTORS["resume"], self._resume_path)
-            self._wait(1500)
+            self._upload_file("input[type='file'][name='resume']", self._resume_path)
 
-    def _handle_custom_questions(self) -> None:
-        """Handle Lever custom questions."""
-        self._check_all_checkboxes()
-        self._select_option(['select[name*="authorized"]'], "Yes")
-        self._select_option(['select[name*="sponsor"]'], "No")
-
-    def _check_all_checkboxes(self) -> None:
-        """Check all visible checkboxes."""
-        try:
-            checkboxes = self._page.locator('input[type="checkbox"]:visible').all()
-            for cb in checkboxes:
-                if not cb.is_checked():
-                    cb.check()
-        except Exception:
-            pass
+    def advance_page(self) -> HandlerResult:
+        """Submit application."""
+        return self._click_next_button()

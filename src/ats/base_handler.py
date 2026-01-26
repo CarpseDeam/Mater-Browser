@@ -10,11 +10,17 @@ from playwright.sync_api import Page, Locator
 logger = logging.getLogger(__name__)
 
 
-class PageState(Enum):
+class FormPage(Enum):
     """Current state of the application flow."""
     JOB_LISTING = "job_listing"
     LOGIN_REQUIRED = "login_required"
+    LOGIN = "login"
     FORM = "form"
+    PERSONAL_INFO = "personal_info"
+    EXPERIENCE = "experience"
+    EDUCATION = "education"
+    DOCUMENTS = "documents"
+    QUESTIONS = "questions"
     REVIEW = "review"
     CONFIRMATION = "confirmation"
     ERROR = "error"
@@ -22,12 +28,12 @@ class PageState(Enum):
 
 
 @dataclass
-class HandlerResult:
+class PageResult:
     """Result from a handler action."""
     success: bool
+    page_type: FormPage
     message: str
-    page_state: PageState
-    needs_login: bool = False
+    needs_next_page: bool = True
 
 
 class BaseATSHandler(ABC):
@@ -47,21 +53,21 @@ class BaseATSHandler(ABC):
         self._resume_path = resume_path
 
     @abstractmethod
-    def detect_page_state(self) -> PageState:
+    def detect_page_state(self) -> FormPage:
         """Detect current page state in the application flow."""
         pass
 
     @abstractmethod
-    def fill_current_page(self) -> HandlerResult:
+    def fill_current_page(self) -> PageResult:
         """Fill all fields on the current page."""
         pass
 
     @abstractmethod
-    def advance_page(self) -> HandlerResult:
+    def advance_page(self) -> PageResult:
         """Click next/submit to advance to the next page."""
         pass
 
-    def apply(self) -> HandlerResult:
+    def apply(self) -> PageResult:
         """Main entry point - run the full application flow."""
         max_pages = 15
         for page_num in range(max_pages):
@@ -70,25 +76,23 @@ class BaseATSHandler(ABC):
             state = self.detect_page_state()
             logger.info(f"{self.ATS_NAME}: Page state: {state.value}")
 
-            if state == PageState.CONFIRMATION:
-                return HandlerResult(True, "Application submitted", state)
+            if state == FormPage.CONFIRMATION:
+                return PageResult(True, state, "Application submitted", False)
 
-            if state == PageState.LOGIN_REQUIRED:
-                return HandlerResult(
-                    False, "Login required", state, needs_login=True
-                )
+            if state == FormPage.LOGIN_REQUIRED:
+                return PageResult(False, state, "Login required", False)
 
-            if state == PageState.ERROR:
-                return HandlerResult(False, "Error page detected", state)
+            if state == FormPage.ERROR:
+                return PageResult(False, state, "Error page detected", False)
 
-            if state == PageState.JOB_LISTING:
+            if state == FormPage.JOB_LISTING:
                 result = self._click_apply_button()
                 if not result.success:
                     return result
                 self._wait(2000)
                 continue
 
-            if state == PageState.FORM:
+            if state == FormPage.FORM:
                 fill_result = self.fill_current_page()
                 if not fill_result.success:
                     logger.warning(
@@ -107,14 +111,14 @@ class BaseATSHandler(ABC):
             )
             advance_result = self.advance_page()
             if not advance_result.success:
-                return HandlerResult(False, "Stuck on unknown page", state)
+                return PageResult(False, state, "Stuck on unknown page", False)
             self._wait(2000)
 
-        return HandlerResult(
-            False, f"Exceeded max pages ({max_pages})", PageState.UNKNOWN
+        return PageResult(
+            False, FormPage.UNKNOWN, f"Exceeded max pages ({max_pages})", False
         )
 
-    def _click_apply_button(self) -> HandlerResult:
+    def _click_apply_button(self) -> PageResult:
         """Click the apply button on job listing page."""
         for selector in self.APPLY_BUTTON_SELECTORS:
             try:
@@ -124,16 +128,16 @@ class BaseATSHandler(ABC):
                     logger.info(
                         f"{self.ATS_NAME}: Clicked apply button: {selector}"
                     )
-                    return HandlerResult(
-                        True, "Clicked apply", PageState.JOB_LISTING
+                    return PageResult(
+                        True, FormPage.JOB_LISTING, "Clicked apply", True
                     )
             except Exception:
                 continue
-        return HandlerResult(
-            False, "Could not find apply button", PageState.JOB_LISTING
+        return PageResult(
+            False, FormPage.JOB_LISTING, "Could not find apply button", False
         )
 
-    def _click_next_button(self) -> HandlerResult:
+    def _click_next_button(self) -> PageResult:
         """Click next/continue button."""
         all_selectors = self.NEXT_BUTTON_SELECTORS + self.SUBMIT_BUTTON_SELECTORS
         for selector in all_selectors:
@@ -144,11 +148,11 @@ class BaseATSHandler(ABC):
                     logger.info(
                         f"{self.ATS_NAME}: Clicked next button: {selector}"
                     )
-                    return HandlerResult(True, "Advanced page", PageState.FORM)
+                    return PageResult(True, FormPage.FORM, "Advanced page", True)
             except Exception:
                 continue
-        return HandlerResult(
-            False, "Could not find next button", PageState.FORM
+        return PageResult(
+            False, FormPage.FORM, "Could not find next button", False
         )
 
     def _fill_field(self, selector: str, value: str) -> bool:

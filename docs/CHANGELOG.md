@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-26: fix: Fix ATS enum mismatch by adding SMARTRECRUITERS and TALEO to ATSType
+  - Added `SMARTRECRUITERS` and `TALEO` to `ATSType` enum in `src/ats/detector.py`
+  - Updated `ATS_URL_PATTERNS` and `ATS_PAGE_SIGNATURES` with patterns for SmartRecruiters and Taleo
+  - Standardized `ATSType` names (e.g., `INDEED_EASY` to `INDEED`)
+
 - 2026-01-26: feat: Build ATS-first architecture with deterministic handlers
   - Replaced "throw everything at Claude" approach with deterministic ATS-specific handlers for Workday, Greenhouse, Lever, iCIMS, and Phenom
   - Implemented `ATSDetector` to identify ATS systems from URL patterns and page signatures

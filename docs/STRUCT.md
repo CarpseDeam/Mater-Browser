@@ -5,6 +5,10 @@
 
 ## Changelog
 
+- **2026-01-26**: Fix ATS enum mismatch by adding SMARTRECRUITERS and TALEO to ATSType
+  - Updated `src/ats/detector.py` and `src/ats/base_handler.py` to support SmartRecruiters and Taleo
+  - Standardized ATS type naming and refactored base handler to use `PageState` and `HandlerResult`
+
 - **2026-01-26**: Strengthened form advancement logic and prompt rules
   - `src/agent/form_processor.py` - Added `_ensure_plan_has_submit` failsafe to automatically append missing Next/Submit clicks
   - `src/agent/prompts.py` - Updated `SYSTEM_PROMPT` with mandatory advancement rules and common mistakes to avoid
@@ -91,7 +95,7 @@
             - `base_handler.py` - Abstract base class for deterministic ATS interaction
             - `field_mapper.py` - Maps generic profile fields to ATS-specific field names
             - `registry.py` - Manages the mapping between detected ATS types and their handlers
-            - `handlers/` - Implementation of specific handlers (Workday, Greenhouse, Lever, iCIMS, Phenom)
+            - `handlers/` - Implementation of specific handlers (Workday, Greenhouse, Lever, iCIMS, Phenom, SmartRecruiters, Taleo)
             - `fallback.py` - Logic for falling back to Claude when no deterministic handler is available
         - `scraper/`        - `scorer.py` - Evaluates job relevance using centralized `FilterConfig`
         - `filter_config.py` - Manages filter rules and configuration

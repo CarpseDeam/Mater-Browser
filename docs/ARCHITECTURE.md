@@ -14,7 +14,7 @@ The `PageClassifier` is responsible for identifying the current state of a job a
 ## ATS-First Architecture
 
 The system utilizes an ATS-first approach to handle job applications deterministically whenever possible. This replaces the reliance on AI for well-known Applicant Tracking Systems (ATS).
-- **ATS Detection**: The `ATSDetector` identifies the ATS being used (e.g., Workday, Greenhouse, Lever, iCIMS, Phenom) by analyzing URL patterns and unique DOM signatures.
+- **ATS Detection**: The `ATSDetector` identifies the ATS being used (e.g., Workday, Greenhouse, Lever, iCIMS, Phenom, SmartRecruiters, Taleo) by analyzing URL patterns and unique DOM signatures.
 - **Deterministic Handlers**: Each supported ATS has a specialized handler (inheriting from `BaseATSHandler`) that uses pre-built selectors and logic to navigate and fill forms reliably.
 - **Field Mapping**: The `FieldMapper` ensures that profile data is correctly mapped to the specific field names and IDs used by different ATS platforms.
 - **Hybrid Strategy**: The system first attempts to use a deterministic handler. If no handler is found for the detected ATS, or if the ATS is unknown, it falls back to the Claude-based agent.
