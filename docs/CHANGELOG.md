@@ -2,6 +2,13 @@
 
 All notable changes to this project.
 
+- 2026-01-26: feat: Build ATS-first architecture with deterministic handlers
+  - Replaced "throw everything at Claude" approach with deterministic ATS-specific handlers for Workday, Greenhouse, Lever, iCIMS, and Phenom
+  - Implemented `ATSDetector` to identify ATS systems from URL patterns and page signatures
+  - Created `BaseATSHandler` and specific implementations for major ATS platforms to provide reliable, non-AI application filling
+  - Added `FieldMapper` for consistent mapping of profile data to ATS-specific fields
+  - Integrated ATS handlers into `FormProcessor`, with Claude remaining as a robust fallback for unknown systems
+
 - 2026-01-26: fix: Strengthen form advancement logic in FormProcessor and prompts
   - Added `_ensure_plan_has_submit` failsafe to automatically append Next/Submit button clicks if missing from agent plan
   - Overhauled `SYSTEM_PROMPT` with mandatory rules for clicking advancement buttons even for pre-filled forms

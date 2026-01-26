@@ -16,7 +16,26 @@ Classifies job pages and finds primary action buttons.
 
 Handles multi-page application flows.
 
-- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process, including page classification, action execution, and automated recovery via `ZeroActionsHandler`. Includes a failsafe to ensure forms always advance by auto-appending clicks to submit/next buttons if the AI plan is incomplete. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.
+- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process. It first attempts to use a deterministic `BaseATSHandler` (via `get_handler`). If no handler is available, it falls back to the Claude-based processing, including automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.
+
+## ATS API
+
+### `ATSDetector`
+
+Identifies ATS systems from URL patterns and page content.
+
+- `detect() -> ATSType`: Analyzes the current page URL and DOM signatures to return the detected `ATSType` (e.g., `WORKDAY`, `GREENHOUSE`, `LEVER`).
+
+### `get_handler`
+
+- `get_handler(page: Page, profile: dict, resume_path: Optional[str] = None) -> Optional[BaseATSHandler]`: Factory function that returns the appropriate `BaseATSHandler` implementation if an ATS is detected and a handler exists.
+
+### `BaseATSHandler`
+
+Abstract base class for all ATS-specific handlers.
+
+- `detect_page_type() -> FormPage`: Identifies the current application step (e.g., `PERSONAL_INFO`, `EXPERIENCE`, `REVIEW`).
+- `fill_current_page() -> PageResult`: Executes the logic to fill fields and advance the form for the current page type.
 
 ### `ZeroActionsHandler`
 

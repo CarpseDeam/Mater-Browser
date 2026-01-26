@@ -11,11 +11,20 @@ The `PageClassifier` is responsible for identifying the current state of a job a
     - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site"). Handling involves modularized redirection logic to capture both popup-based and same-tab navigations, with immediate transitions to captured URLs to avoid analysis timeouts.
 - **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays from platforms like LinkedIn and Dice.
 
+## ATS-First Architecture
+
+The system utilizes an ATS-first approach to handle job applications deterministically whenever possible. This replaces the reliance on AI for well-known Applicant Tracking Systems (ATS).
+- **ATS Detection**: The `ATSDetector` identifies the ATS being used (e.g., Workday, Greenhouse, Lever, iCIMS, Phenom) by analyzing URL patterns and unique DOM signatures.
+- **Deterministic Handlers**: Each supported ATS has a specialized handler (inheriting from `BaseATSHandler`) that uses pre-built selectors and logic to navigate and fill forms reliably.
+- **Field Mapping**: The `FieldMapper` ensures that profile data is correctly mapped to the specific field names and IDs used by different ATS platforms.
+- **Hybrid Strategy**: The system first attempts to use a deterministic handler. If no handler is found for the detected ATS, or if the ATS is unknown, it falls back to the Claude-based agent.
+
 ## Form Processing
 
-The `FormProcessor` handles the interaction with web forms. It utilizes a multi-stage prompting strategy defined in `prompts.py` to guide the LLM agent:
-- **Page State Detection**: The agent first classifies the page as a `job_listing`, `form`, or `confirmation` page to determine the appropriate course of action.
-- **Element Filtering**: Actively ignores non-functional elements like headers, footers, and social links to reduce noise and token usage.
+The `FormProcessor` orchestrates the interaction with web forms using a hybrid strategy:
+1. **ATS Handler Attempt**: It first tries to identify the ATS and use a deterministic handler from the `src/ats/` module.
+2. **Claude Fallback**: If no deterministic handler is available, it utilizes a multi-stage prompting strategy defined in `prompts.py` to guide the LLM agent.        
+- **Page State Detection**: The agent first classifies the page as a `job_listing`, `form`, or `confirmation` page to determine the appropriate course of action.- **Element Filtering**: Actively ignores non-functional elements like headers, footers, and social links to reduce noise and token usage.
 - **Prioritized Filling**: Enforces a strict order of operations (e.g., required fields and contact info before optional fields) and ensures the primary action button is clicked last.
 - **Form Advancement Failsafe**: Automatically detects if the agent's plan fails to include a terminal click action on a multi-page form and appends a click to the most likely 'Submit' or 'Next' button to prevent execution hangs.
 - **Recovery from Edge Cases**: When the analysis model returns no actionable elements, it delegates to `ZeroActionsHandler` to:    - **Classify Page State**: Distinguish between job descriptions, confirmation pages, loading states, and error pages.

@@ -1,102 +1,131 @@
-"""Maps profile fields to ATS-specific field names."""
-from typing import Any
+"""Maps user profile fields to ATS-specific field names."""
+from typing import Any, Optional
+
+
+# Standard profile field names
+PROFILE_FIELDS = [
+    "first_name", "last_name", "email", "phone", "location",
+    "city", "state", "zip", "country", "linkedin_url", "github_url",
+    "portfolio_url", "years_experience", "current_title",
+    "work_authorization", "requires_sponsorship", "willing_to_relocate",
+]
+
+# ATS-specific field mappings: profile_field -> ats_field_name
+WORKDAY_FIELDS: dict[str, str] = {
+    "first_name": "firstName",
+    "last_name": "lastName",
+    "email": "email",
+    "phone": "phone",
+    "city": "city",
+    "state": "state",
+    "zip": "postalCode",
+    "country": "country",
+    "linkedin_url": "linkedInUrl",
+}
+
+GREENHOUSE_FIELDS: dict[str, str] = {
+    "first_name": "first_name",
+    "last_name": "last_name",
+    "email": "email",
+    "phone": "phone",
+    "location": "location",
+    "linkedin_url": "linkedin_url",
+}
+
+LEVER_FIELDS: dict[str, str] = {
+    "first_name": "name",  # Lever uses single name field sometimes
+    "email": "email",
+    "phone": "phone",
+    "linkedin_url": "urls[LinkedIn]",
+    "github_url": "urls[GitHub]",
+    "portfolio_url": "urls[Portfolio]",
+}
+
+ICIMS_FIELDS: dict[str, str] = {
+    "first_name": "FirstName",
+    "last_name": "LastName",
+    "email": "Email",
+    "phone": "Phone",
+    "city": "City",
+    "state": "State",
+    "zip": "PostalCode",
+    "country": "Country",
+}
+
+PHENOM_FIELDS: dict[str, str] = {
+    "first_name": "firstName",
+    "last_name": "lastName",
+    "email": "email",
+    "phone": "phoneNumber",
+    "city": "city",
+    "state": "state",
+    "zip": "zipCode",
+    "country": "country",
+}
+
+INDEED_FIELDS: dict[str, str] = {
+    "first_name": "firstName",
+    "last_name": "lastName",
+    "email": "email",
+    "phone": "phone",
+    "city": "city",
+    "state": "state",
+    "zip": "postalCode",
+}
 
 
 class FieldMapper:
-    """Maps generic profile fields to ATS-specific field names."""
+    """Maps profile data to ATS-specific field names and values."""
 
-    FIELD_MAPPINGS: dict[str, dict[str, list[str]]] = {
-        "first_name": {
-            "workday": ["firstName", "legalNameSection_firstName"],
-            "greenhouse": ["first_name", "firstName"],
-            "lever": ["name", "first_name"],
-            "icims": ["firstName", "Contact_Information_firstname"],
-            "phenom": ["firstName", "first-name"],
-            "default": ["first_name", "firstName", "fname", "first"],
-        },
-        "last_name": {
-            "workday": ["lastName", "legalNameSection_lastName"],
-            "greenhouse": ["last_name", "lastName"],
-            "lever": ["name", "last_name"],
-            "icims": ["lastName", "Contact_Information_lastname"],
-            "phenom": ["lastName", "last-name"],
-            "default": ["last_name", "lastName", "lname", "last"],
-        },
-        "email": {
-            "workday": ["email", "emailAddress"],
-            "greenhouse": ["email"],
-            "lever": ["email"],
-            "icims": ["email", "Contact_Information_email"],
-            "phenom": ["email", "emailAddress"],
-            "default": ["email", "emailAddress", "e-mail"],
-        },
-        "phone": {
-            "workday": ["phone", "phoneNumber", "mobilePhone"],
-            "greenhouse": ["phone"],
-            "lever": ["phone"],
-            "icims": ["phone", "Contact_Information_phone"],
-            "phenom": ["phone", "phoneNumber"],
-            "default": ["phone", "phoneNumber", "telephone", "mobile"],
-        },
-        "city": {
-            "workday": ["city", "addressSection_city"],
-            "greenhouse": ["city"],
-            "icims": ["city", "Contact_Information_city"],
-            "phenom": ["city"],
-            "default": ["city"],
-        },
-        "state": {
-            "workday": ["state", "addressSection_state", "region"],
-            "greenhouse": ["state"],
-            "icims": ["state"],
-            "phenom": ["state", "region"],
-            "default": ["state", "region", "province"],
-        },
-        "zip": {
-            "workday": ["postalCode", "addressSection_postalCode"],
-            "greenhouse": ["zip", "postal_code"],
-            "icims": ["postalCode", "zip"],
-            "phenom": ["postalCode", "zipCode"],
-            "default": ["zip", "zipCode", "postalCode", "postal"],
-        },
-        "country": {
-            "workday": ["country", "addressSection_country"],
-            "greenhouse": ["country"],
-            "icims": ["country"],
-            "phenom": ["country"],
-            "default": ["country"],
-        },
-        "linkedin_url": {
-            "workday": ["linkedIn", "linkedInUrl"],
-            "greenhouse": ["linkedin_url", "linkedin"],
-            "lever": ["urls[LinkedIn]", "linkedin"],
-            "icims": ["linkedIn"],
-            "phenom": ["linkedIn", "linkedin"],
-            "default": ["linkedin", "linkedIn", "linkedin_url"],
-        },
-        "resume": {
-            "workday": ["resume", "uploadedResume"],
-            "greenhouse": ["resume", "resume_file"],
-            "lever": ["resume"],
-            "icims": ["resume", "resumeUpload"],
-            "phenom": ["resume", "resumeFile"],
-            "default": ["resume", "cv", "resumeUpload"],
-        },
-    }
+    def __init__(self, profile: dict[str, Any]) -> None:
+        self._profile = profile
+        self._mappings = {
+            "workday": WORKDAY_FIELDS,
+            "greenhouse": GREENHOUSE_FIELDS,
+            "lever": LEVER_FIELDS,
+            "icims": ICIMS_FIELDS,
+            "phenom": PHENOM_FIELDS,
+            "indeed": INDEED_FIELDS,
+        }
 
-    def __init__(self, ats_type: str) -> None:
-        self._ats_type = ats_type.lower()
+    def get_value(self, ats_type: str, profile_field: str) -> Optional[str]:
+        """Get profile value for a standard field name."""
+        value = self._profile.get(profile_field)
+        if value is None and profile_field in ["city", "state", "zip"]:
+            value = self._extract_from_location(profile_field)
+        return str(value) if value else None
 
-    def get_field_names(self, generic_name: str) -> list[str]:
-        """Get ATS-specific field names for a generic field."""
-        mapping = self.FIELD_MAPPINGS.get(generic_name, {})
-        return mapping.get(self._ats_type, mapping.get("default", [generic_name]))
+    def get_ats_field_name(
+        self, ats_type: str, profile_field: str
+    ) -> Optional[str]:
+        """Get the ATS-specific field name for a profile field."""
+        mapping = self._mappings.get(ats_type, {})
+        return mapping.get(profile_field)
 
-    def map_profile(self, profile: dict[str, Any]) -> dict[str, Any]:
-        """Map entire profile to ATS-specific field names."""
-        mapped: dict[str, Any] = {}
-        for key, value in profile.items():
-            field_names = self.get_field_names(key)
-            for name in field_names:
-                mapped[name] = value
-        return mapped
+    def get_mapped_data(self, ats_type: str) -> dict[str, str]:
+        """Get all profile data mapped to ATS field names."""
+        mapping = self._mappings.get(ats_type, {})
+        result = {}
+        for profile_field, ats_field in mapping.items():
+            value = self.get_value(ats_type, profile_field)
+            if value:
+                result[ats_field] = value
+        return result
+
+    def _extract_from_location(self, field: str) -> Optional[str]:
+        """Extract city/state/zip from location string."""
+        location = self._profile.get("location", "")
+        if not location:
+            return None
+
+        # Try to parse "City, ST ZIP" or "City, State"
+        parts = [p.strip() for p in location.split(",")]
+        if field == "city" and parts:
+            return parts[0]
+        if field == "state" and len(parts) > 1:
+            state_zip = parts[-1].strip().split()
+            return state_zip[0] if state_zip else None
+        if field == "zip" and len(parts) > 1:
+            state_zip = parts[-1].strip().split()
+            return state_zip[1] if len(state_zip) > 1 else None
+        return None
