@@ -4,10 +4,11 @@ System architecture documentation.
 
 ## Form Processing
 
-The `FormProcessor` handles the interaction with web forms. It includes logic to:
-- Detect if a page is a job description vs. an actual application form.
-- Automatically scroll to reveal "Apply" buttons if no form actions are initially detected.
-- Fallback to regex-based button matching (e.g., "Apply") if structured analysis fails.
+The `FormProcessor` handles the interaction with web forms. When the analysis model returns no actionable elements, it delegates to `ZeroActionsHandler` to:
+- **Classify Page State**: Distinguish between job descriptions, confirmation pages, loading states, and error pages.
+- **Recover from JD Pages**: Automatically scroll and search for "Apply" buttons if on a job description.
+- **Handle Loading**: Wait for network idle or timeouts when loading spinners are detected.
+- **Fallback Action**: Attempt to find generic "Next" or "Continue" buttons via scrolling as a last resort.
 
 ## Success Detection
 

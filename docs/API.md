@@ -8,7 +8,13 @@ API documentation.
 
 Handles multi-page application flows.
 
-- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process, including page classification, action execution, and scrolling fallbacks for job description pages.
+- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process, including page classification, action execution, and automated recovery via `ZeroActionsHandler`.
+
+### `ZeroActionsHandler`
+
+Handles edge cases when no form actions are detected.
+
+- `classify_and_handle(input_count: int) -> Tuple[PageState, bool]`: Classifies the current page (e.g., JD, confirmation, loading) and attempts automated recovery (scrolling, clicking fallback buttons).
 
 ### `SuccessDetector`
 

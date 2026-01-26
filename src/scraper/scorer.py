@@ -53,6 +53,12 @@ STACK_EXCLUSIONS: list[str] = [
     # Data Science (different from Data Engineering)
     "machine learning engineer", "ml engineer", "ai engineer",
     "data scientist", "research scientist",
+    # Cloud/IoT/Embedded (not Python backend)
+    "cloud developer", "cloud dev", "iot developer", "iot engineer",
+    "embedded developer", "embedded engineer", "firmware",
+    "azure developer", "gcp developer", "aws developer",
+    # Java/Rust when primary (in title)
+    "java", "rust developer", "rust engineer",
 ]
 
 # Role types to exclude
@@ -79,10 +85,26 @@ ROLE_EXCLUSIONS: list[str] = [
     "devops engineer", "site reliability", "sre",
     "cloud engineer", "cloud architect",
     # Over-senior
-    "staff engineer", "principal engineer", "distinguished engineer",
-    "senior staff", "architect",
+    "staff ", "staff,", "principal", "distinguished",
+    "senior staff", "lead engineer", "lead developer", "architect",
     # Full Stack (often means frontend-heavy or jack-of-all-trades)
     "full stack", "fullstack", "full-stack",
+]
+
+TITLE_HARD_EXCLUSIONS: list[str] = [
+    "staff", "principal", "distinguished", "lead", "architect",
+    "director", "vp", "head of", "chief",
+    "manager", "management",
+    "junior", "jr", "entry", "intern", "graduate", "apprentice",
+    "ios", "android", "mobile", "frontend", "front-end", "front end",
+    "devops", "sre", "site reliability", "cloud engineer", "cloud developer",
+    "security", "infosec", "cyber",
+    "data scientist", "ml engineer", "machine learning", "ai engineer",
+    "qa", "quality assurance", "test engineer", "sdet",
+    "support", "helpdesk",
+    "salesforce", "servicenow", "sap",
+    ".net", "c#", "java developer", "java engineer", "php", "ruby", "golang", "go developer",
+    "iot", "embedded", "firmware",
 ]
 
 # Positive signals that boost score - these indicate good fit
@@ -177,11 +199,16 @@ class JobScorer:
 
     def _check_exclusion(self, job: JobListing) -> Optional[str]:
         """Check if job should be excluded and return the reason, or None if it passes."""
+        title_lower = job.title.lower()
+
+        for excl in TITLE_HARD_EXCLUSIONS:
+            if excl in title_lower:
+                return f"title contains excluded term '{excl}'"
+
         requires_account, domain = self._requires_external_account(job)
         if requires_account:
             return f"external ATS requires account: {domain}"
 
-        title_lower = job.title.lower()
         desc_lower = job.description.lower()
         combined = f"{title_lower} {desc_lower}"
 
@@ -200,6 +227,9 @@ class JobScorer:
         if self.required_keywords:
             if not any(kw in combined for kw in self.required_keywords):
                 return f"missing required keywords {self.required_keywords}"
+
+        if "python" not in title_lower and "python" not in desc_lower[:500]:
+            return "python not in title or early description"
 
         return None
 

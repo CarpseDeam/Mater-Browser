@@ -5,6 +5,9 @@
 
 ## Changelog
 
+- **2026-01-26**: Refactored zero-action handling in FormProcessor
+  - `src/agent/zero_actions_handler.py` - New component to handle job descriptions, loading states, and error pages when no form actions are detected
+  - `FormProcessor` now uses `ZeroActionsHandler` for automated recovery and state classification
 - **2026-01-26**: Improved form completion detection and payment page filtering
   - Updated `FormProcessor` with additional success URL signals
   - Refined `PageClassifier` to ignore safe job application domains during payment detection
@@ -24,9 +27,9 @@
 - `scripts/` - Scripts
 - `src/` - Source code
   - `agent/`
-    - `form_processor.py` - Orchestrates form filling and multi-page flows
-    - `success_detector.py` - Detects application completion via URL, text, and form state
-    - `page_classifier.py` - Classifies pages and finds primary action buttons
+        - `form_processor.py` - Orchestrates form filling and multi-page flows      
+        - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) when no form actions are found
+        - `success_detector.py` - Detects application completion via URL, text, and form state    - `page_classifier.py` - Classifies pages and finds primary action buttons
 - `assets/` - Static assets
 
 - files: 1844
