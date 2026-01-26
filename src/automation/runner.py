@@ -36,6 +36,11 @@ MAX_CONSECUTIVE_FAILURES: int = 5
 FAILURE_COOLDOWN_SECONDS: float = 60.0
 APPLY_TIMEOUT_SECONDS: float = 300.0
 
+BLOCKED_URL_PATTERNS: list[str] = [
+    "premium", "upgrade", "pricing", "subscribe",
+    "checkout", "billing", "payment",
+]
+
 
 @dataclass
 class ApplyRequest:
@@ -322,6 +327,11 @@ class AutomationRunner:
         term = self._stats.current_search
         self._emit("cycle_complete", {"search_term": term})
 
+    def _is_blocked_url(self, url: str) -> bool:
+        """Check if URL contains blocked payment/upgrade patterns."""
+        url_lower = url.lower()
+        return any(pattern in url_lower for pattern in BLOCKED_URL_PATTERNS)
+
     def _apply_to_job(self, job: JobListing) -> bool:
         """Request application via queue and wait for result from main thread.
 
@@ -335,6 +345,12 @@ class AutomationRunner:
         Returns:
             True if application succeeded, False otherwise.
         """
+        if self._is_blocked_url(job.url):
+            reason = "Blocked URL pattern detected - potential payment page"
+            logger.warning(f"BLOCKING {job.url}: {reason}")
+            self._queue.mark_skipped(job.url, reason)
+            return True
+
         if not self._scorer.passes_filter(job):
             reason = f"Failed re-validation: {self._scorer.get_exclusion_reason(job)}"
             logger.info(f"Skipping {job.title} at {job.company}: {reason}")

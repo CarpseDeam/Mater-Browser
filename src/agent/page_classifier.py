@@ -18,6 +18,7 @@ class PageType(Enum):
     ALREADY_APPLIED = "applied"
     CLOSED = "closed"
     LOGIN_REQUIRED = "login"
+    PAYMENT_DANGER = "payment_danger"
     UNKNOWN = "unknown"
 
 
@@ -57,6 +58,26 @@ CLOSED_PHRASES: list[str] = [
     "job closed",
 ]
 
+PAYMENT_URL_PATTERNS: list[str] = [
+    "premium", "upgrade", "subscribe", "pricing",
+    "checkout", "payment", "billing", "purchase",
+    "cart", "order", "plans",
+]
+
+PAYMENT_CONTENT_PHRASES: list[str] = [
+    "enter payment", "credit card", "debit card",
+    "billing information", "purchase now", "buy now",
+    "upgrade to premium", "start free trial",
+    "subscription", "per month", "/month", "/year",
+    "indeed premium", "linkedin premium", "recruiter lite",
+]
+
+PAYMENT_BUTTON_WORDS: list[str] = [
+    "buy", "purchase", "upgrade", "premium", "subscribe",
+    "checkout", "pay now", "start trial", "get premium",
+    "unlock", "pro version", "pricing",
+]
+
 NEGATIVE_TEXT_SIGNALS: list[str] = [
     "save",
     "later",
@@ -84,12 +105,16 @@ class PageClassifier:
         Classify the current page type.
 
         Priority-ordered checks:
-        1. Already applied indicators
-        2. Job closed indicators
-        3. Login required (password field visible)
-        4. Apply button analysis
-        5. Unknown (default)
+        1. Payment/purchase danger (ABORT)
+        2. Already applied indicators
+        3. Job closed indicators
+        4. Login required (password field visible)
+        5. Apply button analysis
+        6. Unknown (default)
         """
+        if self._is_payment_page():
+            return PageType.PAYMENT_DANGER
+
         try:
             content_lower = self._page.content().lower()[:5000]
         except Exception:
@@ -450,6 +475,12 @@ class PageClassifier:
         if any(neg in text_lower for neg in NEGATIVE_TEXT_SIGNALS):
             score -= 2.0
 
+        aria_lower = (candidate.aria_label or "").lower()
+        for word in PAYMENT_BUTTON_WORDS:
+            if word in text_lower or word in aria_lower:
+                score -= 10.0
+                break
+
         if not candidate.is_visible:
             score -= 3.0
 
@@ -462,3 +493,27 @@ class PageClassifier:
             return password_field.is_visible(timeout=1000)
         except Exception:
             return False
+
+    def _is_payment_page(self) -> bool:
+        """Detect payment/upgrade/purchase pages - ABORT if found."""
+        url_lower = self._page.url.lower()
+        if any(pattern in url_lower for pattern in PAYMENT_URL_PATTERNS):
+            logger.warning(f"PAYMENT URL DETECTED: {self._page.url}")
+            return True
+
+        try:
+            phrases_js = "[" + ", ".join(f'"{p}"' for p in PAYMENT_CONTENT_PHRASES) + "]"
+            has_payment_content = self._page.evaluate(f"""
+                () => {{
+                    const text = document.body.innerText.toLowerCase();
+                    const dangerPhrases = {phrases_js};
+                    return dangerPhrases.some(phrase => text.includes(phrase));
+                }}
+            """)
+            if has_payment_content:
+                logger.warning(f"PAYMENT CONTENT DETECTED on page: {self._page.url}")
+                return True
+        except Exception as e:
+            logger.debug(f"Payment content check error: {e}")
+
+        return False

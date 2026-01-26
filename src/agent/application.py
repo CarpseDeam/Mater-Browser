@@ -268,6 +268,14 @@ class ApplicationAgent:
         page_type = classifier.classify()
         logger.info(f"Page classification: {page_type.value}")
 
+        if page_type == PageType.PAYMENT_DANGER:
+            logger.warning(f"PAYMENT PAGE DETECTED - aborting application: {self._page.url}")
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Payment page detected - safety abort",
+                url=job_url,
+            )
+
         if page_type == PageType.LOGIN_REQUIRED:
             return ApplicationResult(
                 status=ApplicationStatus.NEEDS_LOGIN,
@@ -343,6 +351,14 @@ class ApplicationAgent:
         classifier = PageClassifier(self._page.raw)
         page_type = classifier.classify()
         logger.info(f"Page classification: {page_type.value}")
+
+        if page_type == PageType.PAYMENT_DANGER:
+            logger.warning(f"PAYMENT PAGE DETECTED - aborting application: {self._page.url}")
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Payment page detected - safety abort",
+                url=job_url,
+            )
 
         if page_type == PageType.LOGIN_REQUIRED:
             return ApplicationResult(
@@ -478,6 +494,16 @@ class ApplicationAgent:
                 continue
 
             current_url = self._page.url
+
+            classifier = PageClassifier(self._page.raw)
+            if classifier._is_payment_page():
+                logger.warning(f"PAYMENT PAGE DETECTED during form flow - aborting: {current_url}")
+                return ApplicationResult(
+                    status=ApplicationStatus.FAILED,
+                    message="Payment page detected during application - safety abort",
+                    pages_processed=pages_processed,
+                    url=job_url,
+                )
 
             logger.info(f"=== Page {pages_processed} ===")
             logger.info(f"URL: {current_url}")
