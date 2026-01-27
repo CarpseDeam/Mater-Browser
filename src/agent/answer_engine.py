@@ -87,7 +87,40 @@ class AnswerEngine:
             (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*pytest", "technology", "pytest"),
         ]
 
-        for pattern_str, category, key in personal_patterns + checkbox_patterns + experience_patterns:
+        eeo_patterns = [
+            (r"gender\s*identity|gender|sex", "dropdowns", "gender"),
+            (r"race|ethnicity|racial\s*background", "dropdowns", "race"),
+            (r"veteran\s*status|protected\s*veteran|veteran", "dropdowns", "veteran_status"),
+            (r"disability\s*status|disability|accommodation", "dropdowns", "disability_status"),
+        ]
+
+        salary_patterns = [
+            (r"salary\s*expectation|desired\s*salary|expected\s*compensation", "salary", "expected"),
+            (r"minimum\s*salary|salary\s*requirement", "salary", "minimum"),
+            (r"hourly\s*rate|rate\s*expectation", "salary", "hourly_rate"),
+        ]
+
+        language_patterns = [
+            (r"english\s*proficiency|english\s*fluency|language\s*proficiency", "languages", "english"),
+        ]
+
+        preference_patterns = [
+            (r"notice\s*period|how\s*much\s*notice|when\s*can\s*you\s*start", "preferences", "notice_period"),
+            (r"available\s*to\s*start|start\s*date|earliest\s*start", "preferences", "available_start"),
+            (r"work\s*type|remote.?hybrid.?onsite", "preferences", "work_type"),
+        ]
+
+        all_patterns = (
+            personal_patterns
+            + checkbox_patterns
+            + experience_patterns
+            + eeo_patterns
+            + salary_patterns
+            + language_patterns
+            + preference_patterns
+        )
+
+        for pattern_str, category, key in all_patterns:
             patterns.append((re.compile(pattern_str, re.IGNORECASE), category, key))
 
         return patterns
@@ -187,6 +220,8 @@ class AnswerEngine:
             return int(value) if isinstance(value, (int, float)) else 0
         if field_type == "radio" and isinstance(value, bool):
             return "Yes" if value else "No"
+        if field_type == "select":
+            return str(value)
         return str(value)
 
     def has_answer(self, question: str) -> bool:

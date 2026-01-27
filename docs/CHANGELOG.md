@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Resolve critical bugs in self-healing feedback loop and external job detection
+  - Fixed key name in `FailureSummarizer` to check for both "question" and "question_text" for improved robustness
+  - Updated `AutoRepairer` to send a formatted Markdown spec instead of raw JSON to the bridge server
+  - Refactored `ExternalFlow` and `LinkedInFlow` to detect and skip external-only jobs (non-Easy Apply) earlier in the process
+  - Added `project_path` to `AutoRepairer` dispatch payload for improved system integration
 - 2026-01-27: fix: Add direct LinkedIn Easy Apply selector for improved reliability
   - Implemented `_try_linkedin_direct` in `PageClassifier` to bypass generic DOM scanning for known LinkedIn selectors
   - Prioritized direct matching in `find_apply_button` to increase speed and accuracy on LinkedIn

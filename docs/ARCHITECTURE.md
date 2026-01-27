@@ -8,7 +8,7 @@ The `PageClassifier` is responsible for identifying the current state of a job a
 - **Classification Logic**: Uses a combination of URL patterns, page content (e.g., "already applied", "job closed"), and DOM element analysis.
 - **Apply Button Detection**: Prioritizes direct selector matching for known platforms (e.g., LinkedIn) to ensure high reliability. If no direct match is found, it employs a Similo-style weighted scoring system to find the most likely "Apply" button. It distinguishes between:
     - **Easy Apply**: Internal application flows (e.g., LinkedIn Easy Apply, Indeed Smart Apply).
-    - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site"). Handling involves modularized redirection logic to capture both popup-based and same-tab navigations, with immediate transitions to captured URLs to avoid analysis timeouts.
+    - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site"). The system proactively detects "External-only" jobs (e.g., Indeed's "Apply on company site" or LinkedIn's external links) and skips them early to prioritize Easy Apply flows. For legitimate external transitions, it involves modularized redirection logic to capture both popup-based and same-tab navigations, with immediate transitions to captured URLs to avoid analysis timeouts.
 - **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays from platforms like LinkedIn and Dice.
 
 ## ATS-First Architecture
@@ -95,7 +95,7 @@ To enable continuous improvement and automated recovery, the system includes a s
 
 The `AutoRepairer` component provides self-healing capabilities by automatically addressing recurring failures.
 - **Threshold-Based Repair**: Triggers a repair cycle when the number of unaddressed failures reaches a configurable threshold (default: 5).
-- **Automated Dispatch**: When triggered, it generates a failure summary and fix suggestions, then dispatches a "fix spec" to a bridge server (default: `http://localhost:5001/dispatch`) which interfaces with Claude Code.
+- **Automated Dispatch**: When triggered, it generates a failure summary and fix suggestions formatted as a detailed Markdown specification. This spec, along with the local `project_path`, is dispatched to a bridge server (default: `http://localhost:5001/dispatch`) which interfaces with Claude Code.
 - **Cooldown Mechanism**: Prevents redundant repair attempts by enforcing a cooldown period (default: 10 minutes) between dispatches.
 - **Non-Blocking Execution**: Runs repairs asynchronously to ensure that the main automation loop continues uninterrupted.
 
