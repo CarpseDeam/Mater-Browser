@@ -532,6 +532,7 @@ class TestClickContinue:
         mock_button.is_enabled.return_value = True
 
         mock_page.locator.return_value.first = mock_button
+        mock_page.url = "https://smartapply.indeed.com/apply"
 
         filler = IndeedFormFiller(mock_page, mock_answer_engine)
         result = filler.click_continue()
@@ -546,11 +547,29 @@ class TestClickContinue:
         mock_button = create_mock_locator(visible=False)
         mock_button.is_visible.side_effect = Exception("Not found")
         mock_page.locator.return_value.first = mock_button
+        mock_page.url = "https://smartapply.indeed.com/apply"
 
         filler = IndeedFormFiller(mock_page, mock_answer_engine)
         result = filler.click_continue()
 
         assert result is False
+
+    def test_click_continue_on_review_page(
+        self, mock_page: Mock, mock_answer_engine: Mock
+    ) -> None:
+        """Use submit patterns on review page."""
+        mock_button = create_mock_locator()
+        mock_button.is_visible.return_value = True
+        mock_button.is_enabled.return_value = True
+
+        mock_page.locator.return_value.first = mock_button
+        mock_page.url = "https://smartapply.indeed.com/apply/review-module"
+
+        filler = IndeedFormFiller(mock_page, mock_answer_engine)
+        result = filler.click_continue()
+
+        assert result is True
+        mock_button.click.assert_called_once()
 
 
 class TestIsSuccessPage:

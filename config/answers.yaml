@@ -123,6 +123,7 @@ dropdowns:
   veteran_status: "I am not a protected veteran"
   disability: "I do not wish to answer"
   disability_status: "I do not wish to answer"
+  decline_to_identify: "Decline to self-identify"
 
 # Work preferences
 preferences:

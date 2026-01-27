@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: refactor: Complete Easy Apply cleanup by removing all legacy ATS handlers and Claude fallbacks
+  - Deleted `src/agent/form_processor.py` and the entire `src/ats/` directory
+  - Removed `_process_with_claude_fallback` and related Claude/ActionRunner imports from `LinkedInFlow`
+  - Simplified `ExternalFlow` to focus solely on Indeed Easy Apply, removing Claude and FormProcessor fallbacks
+  - Updated tests to remove integration tests for the deleted `FormProcessor`
 - 2026-01-27: refactor: Strip external ATS and Claude fallbacks to focus on LinkedIn and Indeed Easy Apply only
   - Removed `FormProcessor` and Claude fallback from `LinkedInFlow` and `ExternalFlow`
   - Simplified `ApplicationAgent` initialization and flow orchestration

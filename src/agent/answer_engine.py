@@ -38,6 +38,16 @@ class AnswerEngine:
         """
         patterns = []
 
+        # EEO patterns FIRST - must match before personal patterns to avoid
+        # "Voluntary Self-Identification of Disability" matching personal.website
+        eeo_patterns = [
+            (r"self.?identification.*disability|voluntary.*disability|disability\s*status|disability|accommodation", "dropdowns", "disability_status"),
+            (r"self.?identification.*veteran|voluntary.*veteran|veteran\s*status|protected\s*veteran|veteran", "dropdowns", "veteran_status"),
+            (r"self.?identification.*gender|voluntary.*gender|gender\s*identity|gender|sex", "dropdowns", "gender"),
+            (r"self.?identification.*race|voluntary.*race|race|ethnicity|racial\s*background", "dropdowns", "race"),
+            (r"voluntary|self.?identification|demographic|eeo|equal\s*opportunity", "dropdowns", "decline_to_identify"),
+        ]
+
         personal_patterns = [
             (r"first\s*name", "personal", "first_name"),
             (r"last\s*name", "personal", "last_name"),
@@ -87,13 +97,6 @@ class AnswerEngine:
             (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*pytest", "technology", "pytest"),
         ]
 
-        eeo_patterns = [
-            (r"gender\s*identity|gender|sex", "dropdowns", "gender"),
-            (r"race|ethnicity|racial\s*background", "dropdowns", "race"),
-            (r"veteran\s*status|protected\s*veteran|veteran", "dropdowns", "veteran_status"),
-            (r"disability\s*status|disability|accommodation", "dropdowns", "disability_status"),
-        ]
-
         salary_patterns = [
             (r"salary\s*expectation|desired\s*salary|expected\s*compensation", "salary", "expected"),
             (r"minimum\s*salary|salary\s*requirement", "salary", "minimum"),
@@ -111,10 +114,10 @@ class AnswerEngine:
         ]
 
         all_patterns = (
-            personal_patterns
+            eeo_patterns
+            + personal_patterns
             + checkbox_patterns
             + experience_patterns
-            + eeo_patterns
             + salary_patterns
             + language_patterns
             + preference_patterns

@@ -24,6 +24,16 @@ class IndeedFormFiller:
         '.ia-continueButton',
     ]
 
+    SUBMIT_PATTERNS = [
+        '[data-testid="ia-submitButton"]',
+        '[data-testid*="submit"]',
+        '[data-tn-element="submit"]',
+        'button:has-text("Submit your application")',
+        'button:has-text("Submit application")',
+        'button:has-text("Submit")',
+        'button[type="submit"]',
+    ]
+
     SUCCESS_INDICATORS = [
         'text="Application submitted"',
         'text="Your application has been submitted"',
@@ -366,7 +376,9 @@ class IndeedFormFiller:
 
     def click_continue(self) -> bool:
         """Click the Continue/Submit button."""
-        for selector in self.CONTINUE_PATTERNS:
+        patterns = self.SUBMIT_PATTERNS if self.is_review_page() else self.CONTINUE_PATTERNS
+
+        for selector in patterns:
             try:
                 btn = self._page.locator(selector).first
                 if btn.is_visible(timeout=1000):
@@ -383,7 +395,7 @@ class IndeedFormFiller:
             self._page.evaluate("window.scrollBy(0, 500)")
             self._page.wait_for_timeout(500)
 
-            for selector in self.CONTINUE_PATTERNS[:4]:
+            for selector in patterns[:4]:
                 try:
                     btn = self._page.locator(selector).first
                     if btn.is_visible(timeout=1000):

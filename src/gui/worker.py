@@ -233,9 +233,7 @@ class ApplyWorker:
 
             self._agent = ApplicationAgent(
                 tab_manager=self._tabs,
-                profile=self._profile.model_dump(),
-                resume_path=self._profile.resume_path or None,
-                claude_model=self._settings.claude.model,
+                max_pages=15,
             )
 
             logger.info("ApplyWorker connected and agent initialized")

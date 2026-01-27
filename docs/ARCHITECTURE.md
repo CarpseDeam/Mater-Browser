@@ -24,15 +24,7 @@ The `ApplicationAgent` orchestrates the interaction with web forms using platfor
 
 This strategy avoids LLM hallucinations, reduces token costs, and provides consistent results based on the user's `answers.yaml` configuration.
 
-### Legacy Components (Internal Only)
-The following components are maintained for historical context but are no longer active in the primary application flow:
-- **ATS Handlers**: Deterministic handlers for Workday, Greenhouse, Lever, etc.
-- **Claude Fallback**: LLM-based form filling for unknown systems.
-- **FormProcessor**: The original orchestration layer for the hybrid AI/ATS strategy.
-- **Stuck Detection**: Loop prevention for multi-page AI flows.
-
 ### Deterministic LinkedIn Flow
-
 To increase reliability and speed for LinkedIn applications, the system bypasses AI for Easy Apply modals:
 
 - **Direct Button Selection**: Uses optimized CSS selectors to immediately identify the "Easy Apply" button, bypassing generic DOM analysis for faster interaction.
@@ -54,16 +46,6 @@ Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:
 - **State Management**: Detects review and confirmation pages to ensure the application is submitted correctly.
 
 - **Answer Integration**: Leverages the same `AnswerEngine` used by LinkedIn for consistent profile information across platforms.
-
-
-- **Element Filtering**: Actively ignores non-functional elements like headers, footers, and social links to reduce noise and token usage.
-- **Prioritized Filling**: Enforces a strict order of operations (e.g., required fields and contact info before optional fields) and ensures the primary action button is clicked last.
-- **Form Advancement Failsafe**: Automatically detects if the agent's plan fails to include a terminal click action on a multi-page form and appends a click to the most likely 'Submit' or 'Next' button to prevent execution hangs.
-- **Recovery from Edge Cases**: When the analysis model returns no actionable elements, it delegates to `ZeroActionsHandler` to:    - **Classify Page State**: Distinguish between job descriptions, confirmation pages, loading states, and error pages.
-- **Recover from JD Pages**: Automatically scroll and search for "Apply" buttons if on a job description.
-- **Vision Fallback**: Employs `VisionFallback` to use Claude's vision capabilities as a second layer of detection when traditional DOM-based element analysis fails.
-- **Handle Loading**: Wait for network idle or timeouts when loading spinners are detected.
-- **Fallback Action**: Attempt to find generic "Next" or "Continue" buttons via scrolling as a last resort.
 
 ## Success Detection
 
@@ -91,7 +73,7 @@ The `AutoRepairer` component provides self-healing capabilities by automatically
 - **Non-Blocking Execution**: Runs repairs asynchronously to ensure that the main automation loop continues uninterrupted.
 
 ## Loop & Stuck Detection
-The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`). It is integrated directly into the `FormProcessor` loop, capturing page content hashes and sequence patterns to detect and halt when stuck behavior is identified, logging the failure for analysis.
+The system prevents infinite loops using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`). It captures page content hashes and sequence patterns to detect and halt when stuck behavior is identified, logging the failure for analysis.
 
 - **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state.
 - **URL Tracking**: Monitors normalized URL visit counts and element counts to detect repetitions even if content slightly changes.

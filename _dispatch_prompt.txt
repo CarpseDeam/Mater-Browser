@@ -1,40 +1,67 @@
-## Spec: FINISH the Easy Apply Cleanup [CONTINUATION]
+## Spec: Fix Indeed Easy Apply - Review Page Submit + Pattern Matching [CRITICAL]
 
 ### Context
-Previous task ab450992 stopped halfway. Continue and complete ALL remaining work.
+The bot is hitting Indeed Easy Apply pages but failing:
+1. Lands on `smartapply.indeed.com/.../review-module` but can't find submit button
+2. AnswerEngine matched "Voluntary Self-Identification of Disability" to `personal.website` - pattern matching is broken
 
-### Check What's Done, Finish What's Not
+### Problem 1: Review Page Submit Button
 
-#### 1. Verify/Complete `src/agent/linkedin_flow.py`
-- `_process_with_claude_fallback()` should be DELETED
-- All Claude/FormProcessor imports removed
-- `apply()` should ONLY use `_process_easy_apply()` or return SKIPPED
-
-#### 2. Verify/Complete `src/agent/external_flow.py`
-- FormProcessor fallback at end of `apply()` should be DELETED
-- After Indeed Easy Apply check, everything else returns SKIPPED
-- Remove dead imports: `DomService`, `ActionRunner`, `FormProcessor`, `ClaudeAgent`
-
-#### 3. Verify/Complete `src/agent/form_processor.py`
-- Remove `_process_with_handler()` method
-- Remove ATS imports
-- If nothing uses this class anymore, DELETE THE FILE
-
-#### 4. Check for broken imports
-- Search for anything importing `FormProcessor` - update or remove
-- Search for anything importing from `src/ats/` - if nothing, delete the directory
-
-#### 5. Run tests
+In `src/agent/indeed_form_filler.py`, the CONTINUE_PATTERNS are:
+```python
+CONTINUE_PATTERNS = [
+    '[data-testid="ia-continueButton"]',
+    '[data-testid*="continue" i]',
+    '[data-testid*="hp-continue-button"]',
+    'button:has-text("Continue")',
+    'button:has-text("Submit")',
+    'button:has-text("Apply")',
+    'button:has-text("Review")',
+    'button[type="submit"]',
+    '.ia-continueButton',
+]
 ```
-pytest tests/ -x -q
-```
-Fix any import errors or test failures.
 
-### DO NOT STOP UNTIL
-- All Claude fallbacks are removed
-- All ATS handler code is removed or isolated
-- Tests pass
-- The flows are: Easy Apply → deterministic filler → SKIP on unknown
+These don't match the actual Indeed review page submit button. Research Indeed's actual selectors:
+- The review page has "Submit your application" or "Submit application" button
+- May have data-testid like `ia-submitButton` or similar
+- Try: `button:has-text("Submit your application")`, `button:has-text("Submit application")`
+- Try: `[data-testid*="submit"]`, `[data-tn-element="submit"]`
+
+### Fix Required in `src/agent/indeed_form_filler.py`:
+1. Add more submit button selectors to CONTINUE_PATTERNS
+2. Add `is_review_page()` method that checks if URL contains "review"
+3. In `click_continue()`, if on review page, prioritize submit-specific selectors
+
+### Problem 2: Pattern Order in AnswerEngine
+
+In `src/agent/answer_engine.py`, patterns are matched in order. The question "Voluntary Self-Identification of Disability" matched `personal.website` somehow.
+
+The disability pattern should be:
+```python
+(r"disability\s*status|disability|accommodation", "dropdowns", "disability_status"),
+```
+
+But it's in `eeo_patterns` which comes AFTER `personal_patterns`.
+
+### Fix Required in `src/agent/answer_engine.py`:
+1. Move EEO patterns (gender, race, veteran, disability) to the TOP of the pattern list - they need to match before personal info patterns
+2. Make the disability pattern more specific: `r"self.?identification.*disability|disability\s*status|disability|accommodation"`
+3. Add explicit skip for questions containing "self-identification" that should default to "Prefer not to say" or "Decline to answer"
+
+### Additional: Handle EEO/Demographic Questions
+Indeed's demographic questions are voluntary. The bot should:
+1. Detect these questions by keywords: "voluntary", "self-identification", "demographic", "eeo", "equal opportunity"
+2. Select "Decline to self-identify" or "Prefer not to say" option when available
+3. If no decline option, skip the question (don't guess at personal demographics)
+
+### Test
+Run: `pytest tests/ -x -q`
+
+### Code Standards
+- Static typing everywhere
+- Guard clauses
+- logging module only
 
 ## Code Standards
 
