@@ -55,7 +55,7 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 ### Deterministic Indeed Flow
 
-Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:
+Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:  
 
 - **Selector Precision**: Uses Indeed-specific selectors to identify form fields, including support for "rich-text-question-input" areas.
 
@@ -80,11 +80,18 @@ The `SuccessDetector` component is responsible for determining if an application
 2. **Content Signal**: Scans page text for confirmation phrases (e.g., "application submitted").
 3. **State Signal**: Detects when form elements disappear from the page, indicating a successful transition. Only active if a form has been previously filled during the session to avoid false positives.
 
+## Loop & Stuck Detection
+
+The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/stuck_detection.py`):
+- **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state.
+- **URL Tracking**: Monitors normalized URL visit counts and element counts to detect repetitions even if content slightly changes.
+- **Pattern Detection**: Identifies repeating sequences of pages (e.g., A-B-A-B or A-B-C-A-B-C) to break out of circular navigation loops.
+
 ## Action Execution
 
 Individual actions are executed via `ActionRunner`, which provides robustness for common web patterns:
 - **Hidden Inputs**: Automatically handles hidden radio and checkbox inputs by attempting to click their associated `<label>` elements or using direct JavaScript execution.
-- **Upload Action**: Automatically resolves `<label>` elements to their associated file `<input>` if the model targets the label instead of the input directly.
+- **Upload Action**: Automatically resolves `<label>` elements to their associated file `<input>` if the model targets the label instead of the input directly. 
 - **React Select**: Specialized logic for interacting with complex React-based select components.
 
 ## Job Scoring & Filtering

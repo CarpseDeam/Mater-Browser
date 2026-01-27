@@ -38,6 +38,14 @@ Deterministic form filler for Indeed Easy Apply pages.
 - `is_review_page() -> bool`: Checks if the form is on a review step before final submission.
 - `is_resume_page() -> bool`: Detects if the current page is for resume selection/upload.
 
+### `FormProcessorStuckDetection`
+
+Detects when form processing is stuck repeating the same page.
+
+- `record_page(url, element_count, page_content, ...)`: Records a page visit state for analysis.
+- `check_stuck() -> StuckResult`: Evaluates recorded history to determine if a stuck condition (identical content, same URL limit, or repeating pattern) is met.
+- `reset()`: Clears all recorded state for a new session.
+
 ## GUI API
 
 ### `ApplyWorker`
@@ -45,14 +53,16 @@ Deterministic form filler for Indeed Easy Apply pages.
 Background worker for thread-safe browser automation.
 
 - `start()`: Initializes the background thread and establishes the browser connection.
-- `stop()`: Gracefully shuts down the worker and disconnects from the browser.
+- `stop()`: Gracefully shuts down the worker and disconnects from the browser.  
 - `submit_apply(request: ApplyRequest)`: Queues a new job application request for processing.
 - `on_status(status: WorkerStatus)`: Callback for worker state updates (Connecting, Ready, Error, etc.).
 - `on_result(result: ApplyResult)`: Callback for reporting the outcome of an application attempt.
 
-### `FormProcessor`Handles multi-page application flows.
+### `FormProcessor`
 
-- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process. It first attempts to use a deterministic `BaseATSHandler` (via `get_handler`). If no handler is available, it falls back to the Claude-based processing, including automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.
+Handles multi-page application flows.
+
+- `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process. It first attempts to use a deterministic `BaseATSHandler` (via `get_handler`). If no handler is available, it falls back to the Claude-based processing, including automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.   
 
 ## ATS API
 
@@ -72,8 +82,9 @@ Abstract base class for all ATS-specific handlers.
 
 - `detect_page_state() -> FormPage`: Identifies the current application state (e.g., `FORM`, `REVIEW`, `CONFIRMATION`).
 - `fill_current_page() -> PageResult`: Executes the logic to fill fields for the current page.
-- `advance_page() -> PageResult`: Clicks next/submit to advance the form.
-- `apply() -> PageResult`: Main entry point to run the full application flow.
+- `advance_page() -> PageResult`: Clicks next/submit to advance the form.       
+- `apply() -> PageResult`: Main entry point to run the full application flow.   
+
 ### `ZeroActionsHandler`
 
 Handles edge cases when no form actions are detected.
@@ -85,7 +96,7 @@ Handles edge cases when no form actions are detected.
 
 Uses Claude vision to find elements when DOM detection fails.
 
-- `find_and_click_apply() -> bool`: Takes a screenshot, identifies the "Apply" button using Claude, and performs a mouse click at the detected coordinates.
+- `find_and_click_apply() -> bool`: Takes a screenshot, identifies the "Apply" button using Claude, and performs a mouse click at the detected coordinates.     
 
 ### `SuccessDetector`
 
@@ -110,7 +121,7 @@ The structured response from the Claude agent.
 - `page_type: PageType`: Classification of the current page (`job_listing`, `form`, `confirmation`, or `unknown`).
 - `reasoning: str`: Brief explanation of the agent's decision.
 - `actions: list[Action]`: Ordered list of actions to execute.
-- `needs_more_pages: bool`: Whether the agent expects more pages to follow.
+- `needs_more_pages: bool`: Whether the agent expects more pages to follow.     
 
 ### `PageType`
 
