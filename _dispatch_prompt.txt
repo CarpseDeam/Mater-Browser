@@ -22,46 +22,43 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: FailureLogger
+# Specification: FailureSummarizer
 Tier: FEATURE
 
 ## Description
-Capture layer for the failure feedback system. Logs application failures to JSONL for later analysis and auto-fixing.
+Groups and ranks failures from the failure log for analysis. Key feature: fuzzy-groups similar question texts so "Years of Python experience?" and "How many years of Python?" are recognized as the same pattern.
 
 ## Interface
-- `ApplicationFailure` dataclass with fields: timestamp, job_url, job_title, company, failure_type, details, page_snapshot, addressed
-- `FailureLogger.log(failure: ApplicationFailure) -> None` — Append failure to JSONL file
-- `FailureLogger.read_all(include_addressed: bool = False) -> list[ApplicationFailure]` — Read all failures from log
-- `FailureLogger.mark_addressed(timestamps: list[str]) -> None` — Mark failures as addressed by timestamp
+- `FailureSummary` dataclass with: failure_type, count, examples, grouped_questions (for unknown_question type)
+- `FailureSummarizer.__init__(failures: list[ApplicationFailure])` — Initialize with failures to analyze
+- `FailureSummarizer.summarize() -> list[FailureSummary]` — Group by type, rank by frequency, return top summaries
+- `FailureSummarizer.get_top_unknown_questions(n: int = 10) -> list[tuple[str, int, list[str]]]` — Returns (canonical_question, count, [similar_questions])
 
 ## Must Do
-- Use `Literal["unknown_question", "stuck_loop", "validation_error", "timeout", "crash", "react_select_fail"]` for failure_type
-- `details` dict structure varies by failure_type:
-- `unknown_question`: `{question_text, field_type, field_id, field_selector, page_url}`
-- `stuck_loop`: `{repeating_urls, page_hash, iteration_count, last_actions}`
-- `validation_error`: `{error_messages, field_selector, field_value, aria_invalid_fields}`
-- `react_select_fail`: `{selector, attempted_value, available_options, error}`
-- `timeout`: `{page_url, last_action, elapsed_seconds}`
-- `crash`: `{exception_type, exception_message, traceback}`
-- Append-only JSONL (one JSON object per line)
-- Create data directory if not exists
-- Thread-safe file writes (use file locking or append mode)
-- ISO format timestamps
+- Group failures by failure_type first
+- For `unknown_question` type: fuzzy-group similar question texts using difflib.SequenceMatcher (ratio > 0.7 = same group)
+- Pick shortest question in each fuzzy group as canonical representative
+- Sort summaries by count descending
+- Include up to 3 example failures per summary for context
+- Extract question_text from details dict for unknown_question grouping
+- Handle missing/malformed details gracefully (skip, don't crash)
 
 ## Must Not Do
-- No reading entire file into memory for writes (append only)
-- No complex serialization - standard json.dumps with default str handler for non-serializable
+- No external dependencies (use stdlib difflib, not rapidfuzz)
+- Don't load failures from disk - receives list in constructor
+- Don't modify the input failures list
 
 ## Edge Cases
-- File doesn't exist → create it
-- Malformed line in JSONL during read → skip line, log warning
-- details contains non-serializable objects → convert to str
+- Empty failures list → return empty list
+- Failure missing details.question_text → skip from question grouping
+- All failures are same type → single summary returned
+- Single failure → summary with count=1
 
 ## Validation
-- Tests: pytest tests/feedback/test_failure_logger.py -v
+- Tests: pytest tests/feedback/test_failure_summarizer.py -v
 
 ## Target Path
-src/feedback/failure_logger.py
+src/feedback/failure_summarizer.py
 
 ## YOUR TASK
 
@@ -72,7 +69,7 @@ src/feedback/failure_logger.py
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/feedback/failure_logger.py`
+Implementation location: `src/feedback/failure_summarizer.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -83,7 +80,7 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_failurelogger.py`
+Test file location: `tests/test_failuresummarizer.py`
 
 After implementing, write tests that verify contract and behavior:
 
@@ -102,7 +99,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/feedback/test_failure_logger.py -v`
+Run validation: `pytest tests/feedback/test_failure_summarizer.py -v`
 
 Iterate until all tests pass.
 Maximum iterations: 5
