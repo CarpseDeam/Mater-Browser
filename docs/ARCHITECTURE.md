@@ -91,5 +91,11 @@ The `JobScorer` filters and ranks job listings using a centralized `FilterConfig
 - **Centralized Configuration**: All rules (title/stack/role exclusions, keywords, blocked domains) and scoring weights are managed via `FilterConfig` (loaded from `config/filters.yaml`).
 - **Granular Filtering**: Uses `FilterResult` to provide specific reasons for rejection, classified by `RuleType`.
 - **Statistical Tracking**: Employs `FilterStats` to track rejection breakdowns across job batches.
-- **Python-First Requirement**: Enforces that "Python" must appear in the job title or description based on configurable rules.
+- **Flexible Relevance**: Configurable keyword requirements (e.g., "Python") can be set as strict filters or as scoring boosts via `positive_signals` to handle truncated job descriptions.
 - **External ATS & Domain Blocking**: Automatically filters jobs from blocked domains or external ATS patterns that require account creation.
+
+## Platform Support
+
+- **LinkedIn**: Fully supported for Easy Apply flows. Primary target for automated applications.
+- **Indeed**: SmartApply flow implemented but currently disabled for scraping by default due to platform unreliability.
+- **External**: Automatically detected and skipped to maintain high success rates on supported platforms.

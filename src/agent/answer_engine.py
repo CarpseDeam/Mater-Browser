@@ -52,6 +52,7 @@ class AnswerEngine:
             (r"first\s*name", "personal", "first_name"),
             (r"last\s*name", "personal", "last_name"),
             (r"email", "personal", "email"),
+            (r"phone\s*country\s*code|country\s*code.*phone", "personal", "phone_country_code"),
             (r"phone|mobile|cell", "personal", "phone"),
             (r"city|location", "personal", "city"),
             (r"state|province", "personal", "state"),
@@ -73,6 +74,7 @@ class AnswerEngine:
             (r"(us|u\.s\.?|united\s*states)\s*citizen", "checkboxes", "us_citizen"),
             (r"(authorized|eligible)\s*to\s*work", "checkboxes", "work_authorization"),
             (r"(18|eighteen)\s*(years|yrs)\s*(old|of\s*age|or\s*older)", "checkboxes", "over_18"),
+            (r"designed.*application.*end\s*to\s*end|end\s*to\s*end.*application", "checkboxes", "designed_end_to_end"),
         ]
 
         experience_patterns = [
@@ -111,6 +113,7 @@ class AnswerEngine:
             (r"notice\s*period|how\s*much\s*notice|when\s*can\s*you\s*start", "preferences", "notice_period"),
             (r"available\s*to\s*start|start\s*date|earliest\s*start", "preferences", "available_start"),
             (r"work\s*type|remote.?hybrid.?onsite", "preferences", "work_type"),
+            (r"which\s*database|database.*experienced|experienced.*database", "preferences", "databases"),
         ]
 
         all_patterns = (

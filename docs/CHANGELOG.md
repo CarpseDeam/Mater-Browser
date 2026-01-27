@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Loosen job filters to increase application volume
+  - Made `required_keywords` optional in `FilterConfig` to prevent over-filtering on truncated descriptions
+  - Updated `JobScorer` to handle empty required keyword lists gracefully, allowing jobs to pass without strict keyword matches
+  - Added "python" to `positive_signals` in default config to maintain relevance via scoring boost
+  - Disabled Indeed scraping by default in `JobSpyClient` due to SmartApply unreliability
 - 2026-01-27: fix: Update Indeed SmartApply selectors and refine AnswerEngine pattern prioritization
   - Updated `IndeedFormFiller` with researched REAL selectors for continue and submit buttons from live DOM
   - Reordered `AnswerEngine` patterns to ensure EEO/Demographic questions are prioritized over loose personal info patterns

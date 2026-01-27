@@ -32,6 +32,7 @@ checkboxes:
   sponsorship_required: false
   authorized_us: true
   authorized_united_states: true
+  designed_end_to_end: true
 
 # Years of Technology Experience
 technology:
@@ -131,3 +132,4 @@ preferences:
   job_type: "Full-time"
   notice_period: "2 weeks"
   available_start: "Immediately"
+  databases: "PostgreSQL, Snowflake, Redis"

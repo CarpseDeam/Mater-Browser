@@ -166,3 +166,10 @@ Evaluates and filters job listings based on relevance using centralized configur
 - `explain(job: JobListing) -> str`: Generates a detailed text explanation of why a job passed or failed, including all matched exclusion rules and scoring breakdown.
 - `filter_and_score(jobs: list[JobListing]) -> list[JobListing]`: Processes a batch of jobs, returning those that pass filtering, sorted by score. Logs a summary of filter statistics.
 - `passes_filter(job: JobListing) -> bool`: Convenience method that returns `True` if the job listing meets all criteria.
+
+### `JobSpyClient`
+
+Interface for job scraping using the JobSpy library.
+
+- `__init__(sites: list[str] = None, results_wanted: int = 20, hours_old: int = 72, country: str = "USA")`: Initializes the scraper. `sites` defaults to `["linkedin"]` (Indeed is disabled by default due to SmartApply unreliability).
+- `scrape(queries: list[str], location: str) -> list[JobListing]`: Executes job searches across configured sites and returns a list of job listings.

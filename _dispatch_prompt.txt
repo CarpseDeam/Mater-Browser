@@ -1,69 +1,120 @@
-## Task: Loosen Job Filters to Increase Application Volume
+Update `src/agent/linkedin_form_filler.py` to use industry-standard LinkedIn Easy Apply selectors from established GitHub bots.
 
-### Context
-The bot is rejecting 60-90% of jobs with `missing_keyword` reason. The required_keywords filter demands "python" appear in title+description, but LinkedIn scrapes have truncated/empty descriptions. Valid Python jobs get killed.
+## Task: Add comprehensive selector constants and improve form field detection
 
-### File: `config/filters.yaml`
+### 1. Add a SELECTORS class/dict at the top of the file with these proven selectors:
 
-Make these changes:
-
-1. **Remove the required_keywords filter** - Comment out or delete the entire `required:` section:
-```yaml
-# required:
-#   keywords:
-#     - "python"
-#   keyword_in_title: false
-```
-
-2. **Ensure "python" is in title_keywords** so jobs mentioning Python in title get score boost (not required, just boosted). It should already be there, verify it exists:
-```yaml
-title_keywords:
-  - "python"
-  - "backend"
-  # ... rest
-```
-
-3. **Add "python" to positive_signals** if not already there, so description mentions boost score.
-
-### File: `src/scraper/filter_config.py`
-
-Handle the case where `required` section is missing or empty:
-
-Around line 103 where required keywords are loaded:
 ```python
-required = data.get("required", {})
+class LinkedInSelectors:
+    """Industry-standard selectors from established LinkedIn Easy Apply bots."""
+    
+    # Form structure
+    FORM_SECTION = ".jobs-easy-apply-form-section__grouping"
+    FORM_ELEMENT = ".jobs-easy-apply-form-element"
+    
+    # Text inputs
+    TEXT_INPUT = ".artdeco-text-input--input"
+    TEXT_INPUT_ALT = ".fb-single-line-text__input"
+    
+    # Radio buttons
+    RADIO = "input[type='radio']"
+    RADIO_FIELDSET = "fieldset[data-test-form-builder-radio-button-form-component='true']"
+    RADIO_TITLE = "span[data-test-form-builder-radio-button-form-component__title]"
+    
+    # Dropdowns/Selects
+    DROPDOWN = ".fb-dropdown__select"
+    SELECT = "select"
+    
+    # Multi-select / typeahead
+    MULTI_SELECT = "[id*='text-entity-list-form-component']"
+    TEXT_ENTITY_LIST = "div[data-test-text-entity-list-form-component]"
+    SINGLE_LINE_TEXT = "div[data-test-single-line-text-form-component]"
+    
+    # Textarea
+    TEXTAREA = "textarea"
+    
+    # Labels
+    QUESTION_LABEL = ".fb-form-element-label"
+    VISUALLY_HIDDEN = ".visually-hidden"
+    
+    # Buttons
+    EASY_APPLY_BUTTON = "button.jobs-apply-button"
+    REVIEW_BUTTON = "button[aria-label='Review your application']"
+    SUBMIT_BUTTON = "button[aria-label='Submit application']"
+    PRIMARY_BUTTON = ".artdeco-button--primary"
+    NEXT_BUTTON = "button[aria-label='Continue to next step']"
+    
+    # File upload
+    RESUME_INPUT = "[id*='jobs-document-upload-file-input-upload-resume']"
+    COVER_LETTER_INPUT = "[id*='jobs-document-upload-file-input-upload-cover-letter']"
+    FILE_INPUT = "input[name='file']"
+    CHOOSE_RESUME = "[aria-label='Choose Resume']"
+    
+    # Follow checkbox
+    FOLLOW_CHECKBOX = "label[for='follow-company-checkbox']"
+    FOLLOW_LABEL = "text='to stay up to date with their page'"
+    
+    # Errors
+    ERROR_MESSAGE = ".artdeco-inline-feedback__message"
+    
+    # Confirmation/Success
+    APPLICATION_SENT = "text='Application sent'"
+    APPLICATION_SENT_ALT = "text='Your application was sent'"
+    POST_APPLY_MODAL = "[data-test-modal-id='post-apply-modal']"
+    MODAL_HEADER_SENT = ".artdeco-modal__header:has-text('Application sent')"
 ```
 
-Make sure it handles empty/missing gracefully:
+### 2. Update `_fill_text_inputs()` to use multiple selector strategies:
+- Try `.artdeco-text-input--input` first
+- Fallback to `.fb-single-line-text__input`
+- Also check for `input[type="text"]` within form sections
+
+### 3. Update `_fill_dropdowns()` to use multiple selector strategies:
+- Try `select` elements first
+- Then try `.fb-dropdown__select`
+- Skip if already has a value (pre-filled by LinkedIn profile)
+
+### 4. Update `_fill_radio_buttons()` to use:
+- `fieldset[data-test-form-builder-radio-button-form-component='true']` for finding radio groups
+- `input[type='radio']` for individual buttons
+- Get label text from `span[data-test-form-builder-radio-button-form-component__title]` or `.visually-hidden`
+
+### 5. Update `_fill_textareas()` to find textareas within form sections
+
+### 6. Update `is_confirmation_page()` to check for:
+- `text='Application sent'`
+- `text='Your application was sent'`
+- `[data-test-modal-id='post-apply-modal']`
+- `.artdeco-modal__header:has-text('Application sent')`
+- `h2:has-text('Application sent')`
+
+### 7. Add method to uncheck follow checkbox:
 ```python
-required = data.get("required", {})
-required_keywords_raw = required.get("keywords", [])
-# Filter out empty strings, handle None
-required_keywords = [k.lower() for k in required_keywords_raw if k] if required_keywords_raw else []
+async def _uncheck_follow_company(self) -> None:
+    """Uncheck the follow company checkbox if present."""
+    selectors = [
+        "label[for='follow-company-checkbox']",
+        "text='to stay up to date with their page'"
+    ]
+    for selector in selectors:
+        try:
+            el = await self._page.query_selector(selector)
+            if el:
+                # Check if checkbox is checked
+                checkbox = await self._page.query_selector("#follow-company-checkbox")
+                if checkbox and await checkbox.is_checked():
+                    await el.click()
+                    break
+        except Exception:
+            continue
 ```
 
-### File: `src/scraper/scorer.py`
-
-Make the keyword check skip if no keywords configured. Around line 127:
-```python
-if self._config.required_keywords:
-    search_text = title_lower if self._config.keyword_in_title else combined
-    if not any(kw in search_text for kw in self._config.required_keywords):
-        return FilterResult(...)
-```
-
-This already checks `if self._config.required_keywords:` so it should work if the list is empty. Just verify the logic is correct.
-
-### Expected Outcome
-- Jobs no longer rejected for `missing_keyword` when required_keywords is empty
-- Score-based filtering still works (title_keywords, positive_signals boost relevant jobs)
-- min_score threshold (0.5) still filters truly irrelevant jobs
-
-### Testing
-After changes, verify:
-1. Config loads without error
-2. Jobs pass filter when no required_keywords set
-3. Jobs with "python" in title still get higher scores
+### Requirements:
+- Use Playwright async API
+- Add try/except around each selector attempt - don't fail if one selector doesn't work
+- Log which selector succeeded for debugging
+- Keep existing answer_engine integration
+- Maintain existing method signatures
 
 ## Code Standards
 
