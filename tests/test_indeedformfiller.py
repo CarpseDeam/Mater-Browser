@@ -556,10 +556,22 @@ class TestClickContinue:
 class TestIsSuccessPage:
     """Tests for is_success_page method."""
 
-    def test_success_page_detected(
+    def test_success_page_detected_by_url(
         self, mock_page: Mock, mock_answer_engine: Mock
     ) -> None:
-        """Detect success page."""
+        """Detect success page via URL."""
+        mock_page.url = "https://indeed.com/confirmation"
+
+        filler = IndeedFormFiller(mock_page, mock_answer_engine)
+        result = filler.is_success_page()
+
+        assert result is True
+
+    def test_success_page_detected_by_indicator(
+        self, mock_page: Mock, mock_answer_engine: Mock
+    ) -> None:
+        """Detect success page via DOM indicator."""
+        mock_page.url = "https://indeed.com/apply"
         mock_indicator = create_mock_locator()
         mock_indicator.is_visible.return_value = True
         mock_page.locator.return_value.first = mock_indicator
@@ -573,6 +585,7 @@ class TestIsSuccessPage:
         self, mock_page: Mock, mock_answer_engine: Mock
     ) -> None:
         """Return False when not on success page."""
+        mock_page.url = "https://indeed.com/apply"
         mock_indicator = create_mock_locator(visible=False)
         mock_indicator.is_visible.side_effect = Exception("Not found")
         mock_page.locator.return_value.first = mock_indicator
@@ -589,10 +602,8 @@ class TestIsReviewPage:
     def test_review_page_detected(
         self, mock_page: Mock, mock_answer_engine: Mock
     ) -> None:
-        """Detect review page."""
-        mock_indicator = create_mock_locator()
-        mock_indicator.is_visible.return_value = True
-        mock_page.locator.return_value.first = mock_indicator
+        """Detect review page via URL."""
+        mock_page.url = "https://indeed.com/review"
 
         filler = IndeedFormFiller(mock_page, mock_answer_engine)
         result = filler.is_review_page()
@@ -603,9 +614,7 @@ class TestIsReviewPage:
         self, mock_page: Mock, mock_answer_engine: Mock
     ) -> None:
         """Return False when not on review page."""
-        mock_indicator = create_mock_locator(visible=False)
-        mock_indicator.is_visible.side_effect = Exception("Not found")
-        mock_page.locator.return_value.first = mock_indicator
+        mock_page.url = "https://indeed.com/apply"
 
         filler = IndeedFormFiller(mock_page, mock_answer_engine)
         result = filler.is_review_page()

@@ -86,9 +86,9 @@ class TestAutoRepairerSpecFormat:
 
             call_args = mock_client.post.call_args
             payload = call_args[1]["json"]
-            assert "spec" in payload
+            assert "content" in payload
             assert "project_path" in payload
-            assert "# Fix Suggestions" in payload["spec"]
+            assert "# Fix Suggestions" in payload["content"]
             assert "description" not in payload
             assert "suggestions" not in payload
 
@@ -109,10 +109,6 @@ class TestLinkedInFlowExternalLinkOrder:
         flow = LinkedInFlow(
             page=mock_page,
             tabs=MagicMock(),
-            claude=MagicMock(),
-            profile={},
-            resume_path=None,
-            timeout_seconds=60,
             max_pages=10,
         )
 

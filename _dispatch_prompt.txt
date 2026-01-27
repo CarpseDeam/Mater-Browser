@@ -1,74 +1,40 @@
-## Spec: Strip External ATS and Claude Fallbacks - Easy Apply Only [CRITICAL]
+## Spec: FINISH the Easy Apply Cleanup [CONTINUATION]
 
 ### Context
-The bot is supposed to handle LinkedIn and Indeed Easy Apply ONLY. External jobs get SKIPPED. But currently:
-- `form_processor.py` tries ATS handlers (Workday, Greenhouse, etc.) then falls back to Claude
-- `linkedin_flow.py` has `_process_with_claude_fallback()` 
-- `external_flow.py` falls through to `FormProcessor` which uses Claude
+Previous task ab450992 stopped halfway. Continue and complete ALL remaining work.
 
-This makes the bot unreliable. We need deterministic config-driven form filling ONLY.
+### Check What's Done, Finish What's Not
 
-### Requirements
+#### 1. Verify/Complete `src/agent/linkedin_flow.py`
+- `_process_with_claude_fallback()` should be DELETED
+- All Claude/FormProcessor imports removed
+- `apply()` should ONLY use `_process_easy_apply()` or return SKIPPED
 
-#### 1. Clean up `src/agent/linkedin_flow.py`
-- Remove `_process_with_claude_fallback()` method entirely
-- In `apply()`: after clicking Easy Apply button, ALWAYS use `_process_easy_apply()`
-- If page_type is not EASY_APPLY after button click, return SKIPPED (not use Claude)
-- Remove imports: `DomService`, `ActionRunner`, `FormProcessor` if no longer needed
+#### 2. Verify/Complete `src/agent/external_flow.py`
+- FormProcessor fallback at end of `apply()` should be DELETED
+- After Indeed Easy Apply check, everything else returns SKIPPED
+- Remove dead imports: `DomService`, `ActionRunner`, `FormProcessor`, `ClaudeAgent`
 
-#### 2. Clean up `src/agent/external_flow.py`  
-- Remove the `FormProcessor` fallback at the end of `apply()`
-- After `_is_indeed_easy_apply()` check, if NOT Indeed Easy Apply, return SKIPPED
-- The flow should be: check external → skip, check Indeed Easy Apply → use `IndeedFormFiller`, else → skip
-- Remove imports: `DomService`, `ActionRunner`, `FormProcessor`, `ClaudeAgent` if no longer needed
+#### 3. Verify/Complete `src/agent/form_processor.py`
+- Remove `_process_with_handler()` method
+- Remove ATS imports
+- If nothing uses this class anymore, DELETE THE FILE
 
-#### 3. Clean up `src/agent/form_processor.py`
-- Remove `get_handler()` call and `_process_with_handler()` method
-- Remove ATS imports: `from ..ats import get_handler, FormPage, BaseATSHandler`
-- The `process()` method should just return SKIPPED or delegate to the appropriate flow
-- Actually, this class may not be needed at all now - check if anything still uses it
+#### 4. Check for broken imports
+- Search for anything importing `FormProcessor` - update or remove
+- Search for anything importing from `src/ats/` - if nothing, delete the directory
 
-#### 4. Remove unused ATS system (if nothing uses it)
-- Check if anything imports from `src/ats/`
-- If nothing does, the entire `src/ats/` directory can be deleted
-- Keep the detector if needed for classification, but remove handlers
-
-#### 5. Update answer logging
-- When `LinkedInFormFiller` or `IndeedFormFiller` encounters unknown questions, log them properly
-- Both fillers already return `(success, unknown_questions)` - make sure the flows log failures
-
-### Flow After Changes
-
-**LinkedIn:**
+#### 5. Run tests
 ```
-linkedin_flow.apply() 
-  → classify page
-  → if EASY_APPLY: click button → _process_easy_apply() → LinkedInFormFiller
-  → if unknown questions: log failure, return FAILED
-  → else: return SKIPPED
+pytest tests/ -x -q
 ```
+Fix any import errors or test failures.
 
-**Indeed:**
-```
-external_flow.apply()
-  → check _is_external_only_job() → return SKIPPED
-  → classify page  
-  → click apply button
-  → check _is_indeed_easy_apply() → _process_indeed_easy_apply() → IndeedFormFiller
-  → if unknown questions: log failure, return FAILED
-  → else: return SKIPPED (not Indeed Easy Apply)
-```
-
-### Test Requirements
-- Run existing tests: `pytest tests/ -x -q`
-- Ensure no imports break
-- The feedback system tests should still pass
-
-### Code Standards
-- Static typing everywhere
-- Use logging module, never print()
-- Guard clauses, fail fast
-- Remove dead code completely
+### DO NOT STOP UNTIL
+- All Claude fallbacks are removed
+- All ATS handler code is removed or isolated
+- Tests pass
+- The flows are: Easy Apply → deterministic filler → SKIP on unknown
 
 ## Code Standards
 
