@@ -1,5 +1,6 @@
 """Deterministic form filler for Indeed Easy Apply."""
 import logging
+import re
 
 from playwright.sync_api import Page, Locator
 
@@ -11,29 +12,25 @@ logger = logging.getLogger(__name__)
 class IndeedFormFiller:
     """Fill Indeed Easy Apply forms using config-driven answers."""
 
-    CONTINUE_BUTTON_PATTERNS = [
-        'button[data-testid="continueButton"]',
-        'button[data-testid="submitButton"]',
+    CONTINUE_PATTERNS = [
+        '[data-testid="ia-continueButton"]',
+        '[data-testid*="continue" i]',
+        '[data-testid*="hp-continue-button"]',
         'button:has-text("Continue")',
         'button:has-text("Submit")',
         'button:has-text("Apply")',
-        'button:has-text("Next")',
-        '[type="submit"]',
+        'button:has-text("Review")',
+        'button[type="submit"]',
+        '.ia-continueButton',
     ]
 
-    SUCCESS_PAGE_INDICATORS = [
-        '[data-testid="ia-success"]',
+    SUCCESS_INDICATORS = [
         'text="Application submitted"',
         'text="Your application has been submitted"',
-        '[class*="success"]',
-        'h1:has-text("Application submitted")',
-    ]
-
-    REVIEW_PAGE_INDICATORS = [
-        '[data-testid="review-page"]',
-        'text="Review your application"',
-        'h1:has-text("Review")',
-        '[class*="review"]',
+        'text="Thank you for applying"',
+        'text="Successfully applied"',
+        '[data-testid*="confirmation"]',
+        '[data-testid*="success"]',
     ]
 
     def __init__(self, page: Page, answer_engine: AnswerEngine | None = None) -> None:
@@ -42,7 +39,7 @@ class IndeedFormFiller:
         self._unknown_questions: list[str] = []
 
     def fill_current_page(self) -> tuple[bool, list[str]]:
-        """Fill all fields on the current page.
+        """Fill all fields on the current Indeed page.
 
         Returns:
             (success, list of unknown questions)
@@ -59,7 +56,7 @@ class IndeedFormFiller:
         return len(self._unknown_questions) == 0, self._unknown_questions
 
     def _fill_text_inputs(self) -> None:
-        """Fill text input fields."""
+        """Fill standard text input fields."""
         inputs = self._page.locator(
             'input[type="text"], input[type="email"], input[type="tel"], input:not([type])'
         ).all()
@@ -68,8 +65,10 @@ class IndeedFormFiller:
             self._fill_input(inp, "text")
 
     def _fill_number_inputs(self) -> None:
-        """Fill number input fields."""
-        inputs = self._page.locator('input[type="number"]').all()
+        """Fill number input fields (experience questions)."""
+        inputs = self._page.locator(
+            'input[type="number"], input[id*="number-input"]'
+        ).all()
 
         for inp in inputs:
             self._fill_input(inp, "number")
@@ -77,18 +76,10 @@ class IndeedFormFiller:
     def _fill_input(self, inp: Locator, field_type: str) -> None:
         """Fill a single input field."""
         try:
-            if not inp.is_visible() or not inp.is_editable():
+            if not inp.is_visible(timeout=500) or not inp.is_editable(timeout=500):
                 return
         except Exception:
             return
-
-        try:
-            if inp.get_attribute("type") == "hidden":
-                return
-            if inp.is_disabled():
-                return
-        except Exception:
-            pass
 
         try:
             current_value = inp.input_value()
@@ -108,42 +99,32 @@ class IndeedFormFiller:
                 inp.fill(str(answer))
                 logger.info(f"Filled: {question[:40]} = {answer}")
             except Exception as e:
-                logger.warning(f"Could not fill {question[:40]}: {e}")
+                logger.warning(f"Fill failed for {question[:40]}: {e}")
         else:
             self._unknown_questions.append(question)
+            logger.warning(f"Unknown question: {question[:60]}")
 
     def _fill_textareas(self) -> None:
         """Fill textarea fields (open-ended questions)."""
         textareas = self._page.locator(
-            'textarea, [data-testid="rich-text-question-input"], .rich-text-question-input'
+            'textarea, [id*="rich-text-question-input"]'
         ).all()
 
-        for textarea in textareas:
+        for ta in textareas:
             try:
-                if not textarea.is_visible() or not textarea.is_editable():
+                if not ta.is_visible(timeout=500):
                     continue
             except Exception:
                 continue
 
             try:
-                if textarea.is_disabled():
+                current = ta.input_value()
+                if current and len(current.strip()) > 0:
                     continue
             except Exception:
                 pass
 
-            try:
-                current_value = textarea.input_value()
-                if current_value and len(current_value.strip()) > 0:
-                    continue
-            except Exception:
-                try:
-                    current_text = textarea.text_content()
-                    if current_text and len(current_text.strip()) > 0:
-                        continue
-                except Exception:
-                    pass
-
-            question = self._get_question_text(textarea)
+            question = self._get_question_text(ta)
             if not question:
                 continue
 
@@ -151,10 +132,10 @@ class IndeedFormFiller:
 
             if answer is not None:
                 try:
-                    textarea.fill(str(answer))
-                    logger.info(f"Filled textarea: {question[:40]} = {str(answer)[:50]}")
+                    ta.fill(str(answer))
+                    logger.info(f"Filled textarea: {question[:40]}")
                 except Exception as e:
-                    logger.warning(f"Could not fill textarea {question[:40]}: {e}")
+                    logger.warning(f"Textarea fill failed: {e}")
             else:
                 self._unknown_questions.append(question)
 
@@ -164,16 +145,10 @@ class IndeedFormFiller:
 
         for select in selects:
             try:
-                if not select.is_visible():
+                if not select.is_visible(timeout=500):
                     continue
             except Exception:
                 continue
-
-            try:
-                if select.is_disabled():
-                    continue
-            except Exception:
-                pass
 
             question = self._get_question_text(select)
             if not question:
@@ -188,17 +163,17 @@ class IndeedFormFiller:
                     try:
                         select.select_option(value=str(answer))
                     except Exception as e:
-                        logger.warning(f"Could not select {answer} for {question}: {e}")
+                        logger.warning(f"Select failed for {question[:40]}: {e}")
             else:
                 self._unknown_questions.append(question)
 
     def _fill_radios(self) -> None:
         """Fill radio button groups."""
-        fieldsets = self._page.locator('fieldset').all()
+        fieldsets = self._page.locator('fieldset, [role="radiogroup"]').all()
 
         for fieldset in fieldsets:
             try:
-                if not fieldset.is_visible():
+                if not fieldset.is_visible(timeout=500):
                     continue
             except Exception:
                 continue
@@ -207,33 +182,21 @@ class IndeedFormFiller:
             if not question:
                 continue
 
-            radios = fieldset.locator('input[type="radio"]').all()
-            if not radios:
-                continue
-
-            already_checked = any(
-                r.is_checked() for r in radios
-                if self._is_visible_and_enabled(r)
-            )
-            if already_checked:
-                continue
-
             answer = self._answers.get_answer(question, "radio")
             if answer is None:
                 self._unknown_questions.append(question)
                 continue
 
             answer_str = str(answer).lower()
+            radios = fieldset.locator('input[type="radio"]').all()
 
             for radio in radios:
-                if not self._is_visible_and_enabled(radio):
-                    continue
-
                 label = self._get_radio_label(radio)
-                if label and answer_str in label.lower():
+                if label and self._matches_answer(label, answer_str):
                     try:
-                        radio.check()
-                        logger.info(f"Radio: {question[:40]} = {label}")
+                        if not radio.is_checked():
+                            radio.check(force=True)
+                            logger.info(f"Radio: {question[:40]} = {label}")
                     except Exception:
                         pass
                     break
@@ -244,16 +207,10 @@ class IndeedFormFiller:
 
         for cb in checkboxes:
             try:
-                if not cb.is_visible():
+                if not cb.is_visible(timeout=500):
                     continue
             except Exception:
                 continue
-
-            try:
-                if cb.is_disabled():
-                    continue
-            except Exception:
-                pass
 
             question = self._get_question_text(cb)
             if not question:
@@ -265,78 +222,75 @@ class IndeedFormFiller:
                 try:
                     if cb.is_checked() != should_check:
                         if should_check:
-                            cb.check()
+                            cb.check(force=True)
                         else:
-                            cb.uncheck()
+                            cb.uncheck(force=True)
                         logger.info(f"Checkbox: {question[:40]} = {should_check}")
                 except Exception:
                     pass
 
     def _get_question_text(self, element: Locator) -> str:
-        """Extract question text from element's label, aria-label, or placeholder."""
+        """Extract question text from element's context."""
+        # Try aria-label first
         try:
             aria = element.get_attribute("aria-label")
-            if aria:
+            if aria and len(aria.strip()) > 2:
                 return aria.strip()
         except Exception:
             pass
 
+        # Try associated label via for attribute
         try:
             elem_id = element.get_attribute("id")
             if elem_id:
                 label = self._page.locator(f'label[for="{elem_id}"]').first
                 if label.count() > 0:
                     text = label.text_content()
-                    if text:
+                    if text and len(text.strip()) > 2:
                         return text.strip()
         except Exception:
             pass
 
+        # Try parent label
         try:
             parent_label = element.locator('xpath=ancestor::label').first
             if parent_label.count() > 0:
                 text = parent_label.text_content()
-                if text:
+                if text and len(text.strip()) > 2:
                     return text.strip()
         except Exception:
             pass
 
+        # Try placeholder
         try:
             placeholder = element.get_attribute("placeholder")
-            if placeholder:
+            if placeholder and len(placeholder.strip()) > 2:
                 return placeholder.strip()
         except Exception:
             pass
 
+        # Try preceding label or text
         try:
-            parent = element.locator('xpath=..').first
-            if parent.count() > 0:
-                prev_text = parent.locator('xpath=preceding-sibling::*[1]').first
-                if prev_text.count() > 0:
-                    text = prev_text.text_content()
-                    if text:
-                        return text.strip()
+            container = element.locator('xpath=ancestor::div[contains(@class, "question")]').first
+            if container.count() > 0:
+                text = container.locator('label, .label, [class*="label"]').first.text_content()
+                if text and len(text.strip()) > 2:
+                    return text.strip()
         except Exception:
             pass
 
+        # Try name attribute as last resort
         try:
             name = element.get_attribute("name")
-            if name:
-                return name.replace("_", " ").replace("-", " ").strip()
+            if name and len(name) > 2:
+                return name.replace("_", " ").replace("-", " ")
         except Exception:
             pass
 
         return ""
 
     def _get_fieldset_question(self, fieldset: Locator) -> str:
-        """Extract question from fieldset legend or aria-label."""
-        try:
-            aria = fieldset.get_attribute("aria-label")
-            if aria:
-                return aria.strip()
-        except Exception:
-            pass
-
+        """Get question text for a fieldset/radiogroup."""
         try:
             legend = fieldset.locator('legend').first
             if legend.count() > 0:
@@ -347,11 +301,18 @@ class IndeedFormFiller:
             pass
 
         try:
-            header = fieldset.locator('h1, h2, h3, h4, h5, h6, .question-text, [class*="question"]').first
-            if header.count() > 0:
-                text = header.text_content()
+            label = fieldset.locator('label').first
+            if label.count() > 0:
+                text = label.text_content()
                 if text:
                     return text.strip()
+        except Exception:
+            pass
+
+        try:
+            aria = fieldset.get_attribute("aria-label")
+            if aria:
+                return aria.strip()
         except Exception:
             pass
 
@@ -382,52 +343,82 @@ class IndeedFormFiller:
         try:
             value = radio.get_attribute("value")
             if value:
-                return value.strip()
+                return value
         except Exception:
             pass
 
         return ""
 
-    def _is_visible_and_enabled(self, element: Locator) -> bool:
-        """Check if element is visible and enabled."""
-        try:
-            if not element.is_visible():
-                return False
-            if element.is_disabled():
-                return False
+    def _matches_answer(self, label: str, answer: str) -> bool:
+        """Check if label matches expected answer."""
+        label_lower = label.lower().strip()
+        answer_lower = answer.lower().strip()
+
+        if answer_lower in label_lower:
             return True
-        except Exception:
-            return False
+
+        if answer_lower in ("yes", "true", "1"):
+            return label_lower in ("yes", "true", "y")
+        if answer_lower in ("no", "false", "0"):
+            return label_lower in ("no", "false", "n")
+
+        return False
 
     def click_continue(self) -> bool:
         """Click the Continue/Submit button."""
-        for selector in self.CONTINUE_BUTTON_PATTERNS:
+        for selector in self.CONTINUE_PATTERNS:
             try:
                 btn = self._page.locator(selector).first
-                if btn.is_visible(timeout=1000) and btn.is_enabled():
+                if btn.is_visible(timeout=1000):
+                    btn.scroll_into_view_if_needed()
                     btn.click()
                     self._page.wait_for_timeout(500)
+                    logger.info(f"Clicked continue: {selector}")
                     return True
             except Exception:
                 continue
+
+        # Fallback: scroll and try again
+        try:
+            self._page.evaluate("window.scrollBy(0, 500)")
+            self._page.wait_for_timeout(500)
+
+            for selector in self.CONTINUE_PATTERNS[:4]:
+                try:
+                    btn = self._page.locator(selector).first
+                    if btn.is_visible(timeout=1000):
+                        btn.click()
+                        logger.info(f"Clicked continue after scroll: {selector}")
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
         return False
 
     def is_success_page(self) -> bool:
-        """Check if on confirmation/success page."""
-        for indicator in self.SUCCESS_PAGE_INDICATORS:
+        """Check if on success/confirmation page."""
+        current_url = self._page.url.lower()
+
+        if any(x in current_url for x in ["confirmation", "success", "thank"]):
+            return True
+
+        for indicator in self.SUCCESS_INDICATORS:
             try:
                 if self._page.locator(indicator).first.is_visible(timeout=500):
                     return True
             except Exception:
                 continue
+
         return False
 
     def is_review_page(self) -> bool:
-        """Check if on review page before submit."""
-        for indicator in self.REVIEW_PAGE_INDICATORS:
-            try:
-                if self._page.locator(indicator).first.is_visible(timeout=500):
-                    return True
-            except Exception:
-                continue
-        return False
+        """Check if on review page (last step before submit)."""
+        current_url = self._page.url.lower()
+        return "review" in current_url
+
+    def is_resume_page(self) -> bool:
+        """Check if on resume selection page."""
+        current_url = self._page.url.lower()
+        return "resume" in current_url

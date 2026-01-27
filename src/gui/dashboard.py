@@ -1,8 +1,8 @@
 """Simplified autonomous dashboard for job application automation.
 
 This module provides a single-button GUI for controlling the automation loop.
-The dashboard owns the ApplicationAgent and processes apply requests on the
-main thread to avoid Playwright greenlet threading errors.
+All Playwright operations run in a dedicated background worker thread (ApplyWorker)
+to keep the GUI responsive. The worker owns its own browser connection and agent.
 """
 
 from __future__ import annotations
@@ -19,13 +19,10 @@ from queue import Empty, Queue
 from tkinter import scrolledtext, ttk
 from typing import TYPE_CHECKING, Optional
 
-from src.agent.application import ApplicationAgent
-from src.agent.models import ApplicationStatus
 from src.automation.runner import ApplyRequest, ApplyResult, AutomationRunner
-from src.browser.connection import BrowserConnection
-from src.browser.tabs import TabManager
 from src.core.config import Settings
 from src.core.logging import setup_logging
+from src.gui.worker import ApplyWorker, WorkerState, WorkerStatus
 from src.profile.manager import load_profile
 
 if TYPE_CHECKING:
@@ -147,7 +144,6 @@ class DashboardApp:
         self.root.geometry(WINDOW_GEOMETRY)
         self.root.minsize(*WINDOW_MIN_SIZE)
 
-        self.connection: Optional[BrowserConnection] = None
         self.runner: Optional[AutomationRunner] = None
         self.message_queue: Queue = Queue()
         self.stats = DashboardStats()
@@ -155,7 +151,7 @@ class DashboardApp:
 
         self._apply_queue: Queue[ApplyRequest] = Queue()
         self._result_queue: Queue[ApplyResult] = Queue()
-        self._agent: Optional[ApplicationAgent] = None
+        self._worker: Optional[ApplyWorker] = None
         self._log_expanded = False
 
         self.settings = Settings.from_yaml(Path("config/settings.yaml"))
@@ -599,57 +595,43 @@ class DashboardApp:
             self._log("Could not find Chrome window")
 
     def _connect_browser(self) -> None:
-        if self.connection and self.connection.is_connected:
+        if self._worker and self._worker.is_running:
             if self.runner and self.runner.is_running:
                 self._log("Stop automation before disconnecting")
                 return
 
-            self._agent = None
-            self.connection.disconnect()
-            self.connection = None
+            self._worker.stop()
+            self._worker.wait(timeout=5.0)
+            self._worker = None
             self._update_connection_status(False)
             self._log("Disconnected from Chrome")
             return
 
         self._log("Connecting to Chrome...")
+        self._start_worker()
 
-        self.connection = BrowserConnection(
-            cdp_port=self.settings.browser.cdp_port,
-            max_retries=3,
-            retry_delay=1.0,
+    def _start_worker(self) -> None:
+        """Start the background worker that handles browser operations."""
+        self._worker = ApplyWorker(
+            profile=self.profile,
+            settings=self.settings,
+            on_status=self._on_worker_status,
+            on_result=self._on_worker_result,
         )
 
-        if self.connection.connect():
-            self._update_connection_status(True)
-            self._log("Connected to Chrome!")
-            self._init_agent()
+        if self._worker.start():
+            self._log("Starting background worker...")
         else:
-            self._log(
-                "Failed to connect. Make sure Chrome is running with --remote-debugging-port"
-            )
-            self.connection = None
+            self._log("Failed to start worker")
+            self._worker = None
 
-    def _init_agent(self) -> None:
-        if not self.connection or not self.connection.is_connected:
-            logger.error("Cannot init agent: browser not connected")
-            return
+    def _on_worker_status(self, status: WorkerStatus) -> None:
+        """Handle status updates from worker thread (thread-safe via queue)."""
+        self.message_queue.put(("worker_status", status))
 
-        try:
-            tab_manager = TabManager(self.connection.browser)
-            tab_manager.close_extras(keep=1)
-            logger.info("Closed extra tabs from previous session")
-            self._agent = ApplicationAgent(
-                tab_manager=tab_manager,
-                profile=self.profile.model_dump(),
-                resume_path=self.profile.resume_path or None,
-                claude_model=self.settings.claude.model,
-            )
-            logger.info("ApplicationAgent initialized on main thread")
-            self._log("Application agent ready")
-        except Exception as e:
-            logger.exception("Failed to initialize ApplicationAgent")
-            self._agent = None
-            self._log(f"Warning: Agent init failed - {e}")
+    def _on_worker_result(self, result: ApplyResult) -> None:
+        """Handle apply results from worker thread (thread-safe via queue)."""
+        self._result_queue.put(result)
 
     def _toggle_automation(self) -> None:
         if self.runner and self.runner.is_running:
@@ -658,13 +640,9 @@ class DashboardApp:
             self._start_automation()
 
     def _start_automation(self) -> None:
-        if not self.connection or not self.connection.is_connected:
+        if not self._worker or not self._worker.is_ready:
             self._log("Connect to Chrome first")
             return
-
-        if self._agent is None:
-            self._log("Reinitializing application agent...")
-            self._init_agent()
 
         self.state.session_start = time.time()
         self.stats = DashboardStats()
@@ -698,6 +676,7 @@ class DashboardApp:
         self.message_queue.put((event, data))
 
     def _process_apply_queue(self) -> None:
+        """Forward apply requests from runner to worker (non-blocking)."""
         if not self.runner or not self.runner.is_running:
             logger.debug("Runner not active, stopping apply queue processor")
             return
@@ -709,43 +688,18 @@ class DashboardApp:
             return
 
         job = request.job
-        logger.info(f"Processing apply request for {job.title} at {job.company}")
+        logger.info(f"Forwarding apply request for {job.title} at {job.company}")
 
-        if self._agent is None:
-            logger.error("Agent not initialized, cannot process apply request")
+        if not self._worker or not self._worker.is_ready:
+            logger.error("Worker not ready, cannot process apply request")
             result = ApplyResult(
                 job=job,
                 success=False,
-                error="Application agent not initialized",
+                error="Background worker not ready",
             )
+            self._result_queue.put(result)
         else:
-            try:
-                app_result = self._agent.apply(job.url)
-                success = app_result.status == ApplicationStatus.SUCCESS
-
-                if app_result.status == ApplicationStatus.NEEDS_LOGIN:
-                    logger.error(f"[STOPPING] {app_result.message}")
-                    self._on_login_required(app_result.message)
-
-                result = ApplyResult(
-                    job=job,
-                    success=success,
-                    error=None if success else app_result.message,
-                )
-                logger.info(
-                    f"Apply result for {job.company}: "
-                    f"{'success' if success else app_result.message}"
-                )
-            except Exception as e:
-                logger.exception(f"Apply error for {job.url}")
-                result = ApplyResult(
-                    job=job,
-                    success=False,
-                    error=str(e),
-                )
-
-        self._result_queue.put(result)
-        logger.debug(f"ApplyResult sent to result_queue for {job.url}")
+            self._worker.submit_apply(request)
 
         self.root.after(APPLY_QUEUE_POLL_MS, self._process_apply_queue)
 
@@ -762,6 +716,9 @@ class DashboardApp:
     def _handle_message(self, msg_type: str, data) -> None:
         if msg_type == "log":
             self._log(data)
+
+        elif msg_type == "worker_status":
+            self._handle_worker_status(data)
 
         elif msg_type == "started":
             self._update_status("Searching...", ACCENT)
@@ -890,6 +847,31 @@ class DashboardApp:
         if self.runner and self.runner.is_running:
             self.runner.stop()
 
+    def _handle_worker_status(self, status: WorkerStatus) -> None:
+        """Handle status updates from the background worker."""
+        if status.state == WorkerState.CONNECTING:
+            self._log("Worker connecting to browser...")
+
+        elif status.state == WorkerState.READY:
+            self._update_connection_status(True)
+            self._log("Connected to Chrome!")
+
+        elif status.state == WorkerState.PROCESSING:
+            pass
+
+        elif status.state == WorkerState.LOGIN_REQUIRED:
+            self._on_login_required(status.message)
+
+        elif status.state == WorkerState.ERROR:
+            self._update_connection_status(False)
+            error_msg = status.error or "Unknown error"
+            self._log(f"Worker error: {error_msg}")
+
+        elif status.state == WorkerState.STOPPED:
+            if self._worker:
+                self._worker = None
+            self._update_connection_status(False)
+
     def run(self) -> None:
         self._log("Mater-Browser Dashboard started")
         self._log(f"Profile: {self.profile.first_name} {self.profile.last_name}")
@@ -902,5 +884,6 @@ class DashboardApp:
             self.runner.stop()
             self.runner.wait(timeout=10.0)
 
-        if self.connection:
-            self.connection.disconnect()
+        if self._worker and self._worker.is_running:
+            self._worker.stop()
+            self._worker.wait(timeout=10.0)

@@ -21,6 +21,9 @@ from .models import (
     SHORT_WAIT_MS,
 )
 from .form_processor import FormProcessor
+from .answer_engine import AnswerEngine
+from .indeed_form_filler import IndeedFormFiller
+from .indeed_helpers import IndeedHelpers
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +145,10 @@ class ExternalFlow:
 
         logger.info(f"Now on: {self._page.url}")
 
+        # Use deterministic filler for Indeed Easy Apply
+        if self._is_indeed_easy_apply():
+            return self._process_indeed_easy_apply(job_url)
+
         processor = FormProcessor(
             page=self._page,
             dom_service=dom_service,
@@ -155,6 +162,66 @@ class ExternalFlow:
         )
 
         return processor.process(job_url, source=source)
+
+    def _is_indeed_easy_apply(self) -> bool:
+        """Check if current page is Indeed Easy Apply flow."""
+        url = self._page.url.lower()
+        return "smartapply.indeed.com" in url or "indeedapply" in url
+
+    def _process_indeed_easy_apply(self, job_url: str) -> ApplicationResult:
+        """Process Indeed Easy Apply using deterministic form filler."""
+        logger.info("Using deterministic form filler for Indeed Easy Apply")
+
+        answer_engine = AnswerEngine()
+        filler = IndeedFormFiller(self._page.raw, answer_engine)
+        helpers = IndeedHelpers(self._page)
+
+        for page_num in range(self._max_pages):
+            self._page.wait(1000)
+
+            # Check for success
+            if filler.is_success_page():
+                return ApplicationResult(
+                    status=ApplicationStatus.SUCCESS,
+                    message="Application submitted",
+                    pages=page_num + 1,
+                    url=job_url,
+                )
+
+            # Handle resume selection page
+            if filler.is_resume_page():
+                helpers.handle_resume_card()
+                self._page.wait(1000)
+                continue
+
+            # Fill form fields
+            success, unknown = filler.fill_current_page()
+
+            if unknown:
+                logger.warning(f"Skipping job - unknown questions: {unknown[:3]}")
+                return ApplicationResult(
+                    status=ApplicationStatus.FAILED,
+                    message=f"Unknown questions: {', '.join(unknown[:3])}",
+                    pages=page_num + 1,
+                    url=job_url,
+                )
+
+            # Handle modals
+            helpers.dismiss_modal()
+
+            # Click continue
+            if not filler.click_continue():
+                logger.warning("Could not find continue button")
+                break
+
+            self._page.wait(1000)
+
+        return ApplicationResult(
+            status=ApplicationStatus.FAILED,
+            message="Max pages reached or stuck",
+            pages=self._max_pages,
+            url=job_url,
+        )
 
     def _wait_for_redirect(self, original_url: str, original_page_count: int) -> bool:
         """Wait for navigation to complete after clicking apply."""

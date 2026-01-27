@@ -1,111 +1,27 @@
-# Spec-Driven Implementation
+Fix GUI freezing issue in Mater-Browser. The GUI becomes unresponsive during job applications and scraping operations.
 
-## CRITICAL: TRUST THE SPEC
+## Context
+- GUI is in `src/gui/dashboard.py` and `src/gui/app.py`
+- Entry point is `gui.py` in project root
+- The automation runner and application agent are doing blocking Playwright operations on the main thread
+- This causes the GUI to freeze while jobs are being processed
 
-The specification below is COMPLETE. Do not:
-- Read README, ARCHITECTURE, or documentation files
-- Search for patterns or conventions in the codebase
-- Explore directory structures
-- Read files unrelated to your implementation
+## Requirements
+1. Move all blocking operations (job scraping, application flow, browser automation) to background threads/workers
+2. Use Qt's QThread or Python's threading with proper signal/slot communication back to the GUI
+3. Keep the GUI responsive - user should be able to see progress, stop the bot, scroll logs, etc.
+4. Ensure thread safety - Playwright page objects should only be accessed from their creating thread
+5. Use signals/callbacks to update the GUI from background workers
 
-Only read files that:
-1. You need to import from (check the target path's neighbors)
-2. Contain types/classes referenced in the interface
+## Key files to examine
+- `src/gui/dashboard.py` - main dashboard UI
+- `src/gui/app.py` - app initialization
+- `src/automation/runner.py` - automation loop that processes jobs
+- `gui.py` - entry point
 
-The spec tells you exactly what to build. Trust it.
-
-## CIRCUIT BREAKER
-
-If you have made 8+ file reads without writing any code, STOP.
-You are exploring instead of implementing. The spec is complete.
-Write the implementation now with what you know.
-
-## THE SPECIFICATION
-
-# Specification: IndeedFormFiller
-Tier: FEATURE
-
-## Description
-Create deterministic form filler for Indeed Easy Apply - mirrors LinkedInFormFiller but with Indeed-specific selectors.
-
-## Interface
-- `IndeedFormFiller.__init__(page: Page, answer_engine: AnswerEngine | None)` — Initialize with Playwright page
-- `IndeedFormFiller.fill_current_page() -> tuple[bool, list[str]]` — Fill all fields, return (success, unknown_questions)
-- `IndeedFormFiller.click_continue() -> bool` — Click Continue/Submit button
-- `IndeedFormFiller.is_success_page() -> bool` — Check if on confirmation page
-- `IndeedFormFiller.is_review_page() -> bool` — Check if on review page before submit
-
-## Must Do
-- Fill text inputs (name, email, phone, city, etc.) using AnswerEngine
-- Fill number inputs (years of experience questions)
-- Fill textareas (open-ended questions - use AnswerEngine or skip if no match)
-- Fill radio buttons (Yes/No questions)
-- Fill checkboxes
-- Fill select dropdowns
-- Extract question text from: label, aria-label, placeholder, preceding text
-- Log unknown questions so user can add to config/answers.yaml later
-- Return list of unknown questions (don't fail silently)
-
-## Must Not Do
-- Call Claude API
-- Guess answers - if no match, add to unknown list and skip field
-- Use CSS selectors from LinkedInFormFiller - Indeed has different DOM
-
-## Edge Cases
-- Field already filled → skip it
-- Hidden/disabled field → skip it
-- No visible form → return (True, []) - might be loading
-- Multiple forms on page → fill all visible fields
-- Indeed "rich-text-question-input" textareas → these are the open-ended questions
-
-## Validation
-- Tests: pytest tests/test_indeed_form_filler.py -v
-
-## Target Path
-src/agent/indeed_form_filler.py
-
-## YOUR TASK
-
-**Tier: FEATURE** - Standard feature implementation.
-- Full behavior test coverage
-- All edge cases must be tested
-- Contract tests for public interfaces
-
-### Step 1: Implement the Interface
-
-Implementation location: `src/agent/indeed_form_filler.py`
-
-Implementation Rules:
-1. Follow interface signatures EXACTLY as specified
-2. Handle all edge cases as specified
-3. Ensure preconditions are checked
-4. Ensure postconditions are satisfied
-5. Respect all 'Must Not Do' constraints
-
-### Step 2: Write Tests
-
-Test file location: `tests/test_indeedformfiller.py`
-
-After implementing, write tests that verify contract and behavior:
-
-**Must Do Tests:**
-- Write one test for each item in the 'Must Do' section
-- Tests should verify the behavior/contract, not implementation details
-
-**Edge Case Tests:**
-- Write one test for each edge case specified
-
-Test Code Requirements:
-- Use pytest fixtures for shared setup
-- Include full type hints
-- Use descriptive test names
-- Keep tests focused and independent
-
-### Step 3: Validate
-
-Run validation: `pytest tests/test_indeed_form_filler.py -v`
-
-Iterate until all tests pass.
-Maximum iterations: 5
+## Constraints
+- Don't change the core application logic, just move it off the main thread
+- Maintain existing logging behavior
+- Keep the same user-facing functionality
 
 Write clean, scalable, modular, efficient code. Follow single responsibility principle. Do not repeat yourself. Use consistent naming conventions. No unnecessary comments.
