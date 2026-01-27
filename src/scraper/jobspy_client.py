@@ -96,7 +96,7 @@ class JobSpyClient:
         hours_old: int = 72,
         country: str = "USA",
     ) -> None:
-        self.sites = sites or ["indeed", "linkedin"]  # Glassdoor often fails
+        self.sites = sites or ["linkedin"]  # Indeed disabled - SmartApply flow unreliable
         self.results_wanted = results_wanted
         self.hours_old = hours_old
         self.country = country

@@ -57,7 +57,7 @@ class FilterConfig:
     min_score: float = 0.5
     weights: ScoringWeights = field(default_factory=ScoringWeights)
 
-    required_keywords: list[str] = field(default_factory=lambda: ["python"])
+    required_keywords: list[str] = field(default_factory=list)
     keyword_in_title: bool = False
 
     title_exclusions: list[str] = field(default_factory=list)
@@ -100,11 +100,13 @@ class FilterConfig:
         role_exclusions = _flatten_nested_dict(data.get("role_exclusions", {}))
 
         required = data.get("required", {})
+        required_keywords_raw = required.get("keywords", [])
+        required_keywords = [k.lower() for k in required_keywords_raw if k] if required_keywords_raw else []
 
         config = cls(
             min_score=scoring.get("min_score", 0.5),
             weights=weights,
-            required_keywords=[k.lower() for k in required.get("keywords", ["python"])],
+            required_keywords=required_keywords,
             keyword_in_title=required.get("keyword_in_title", False),
             title_exclusions=[t.lower() for t in title_exclusions],
             description_exclusions=[d.lower() for d in data.get("description_exclusions", [])],

@@ -1,58 +1,69 @@
-## Spec: Fix Indeed Selectors - REAL SELECTORS FROM LIVE DOM [CRITICAL]
+## Task: Loosen Job Filters to Increase Application Volume
 
 ### Context
-User provided actual DOM from live Indeed SmartApply pages.
+The bot is rejecting 60-90% of jobs with `missing_keyword` reason. The required_keywords filter demands "python" appear in title+description, but LinkedIn scrapes have truncated/empty descriptions. Valid Python jobs get killed.
 
-### REAL Indeed SmartApply Selectors
+### File: `config/filters.yaml`
 
-**Continue Button:**
-```html
-<button type="button" data-testid="continue-button" aria-busy="false" class="mosaic-provider-module-apply-resume-selection-6ja1uy e8ju0x50"><span>Continue</span></button>
+Make these changes:
+
+1. **Remove the required_keywords filter** - Comment out or delete the entire `required:` section:
+```yaml
+# required:
+#   keywords:
+#     - "python"
+#   keyword_in_title: false
 ```
-Selector: `[data-testid="continue-button"]`
 
-**Submit Button (Review Page):**
-```html
-<button role="button" type="submit" name="submit-application" data-testid="submit-application-button" class="mosaic-provider-module-apply-preview-6ja1uy e8ju0x50"><span>Submit your application</span></button>
+2. **Ensure "python" is in title_keywords** so jobs mentioning Python in title get score boost (not required, just boosted). It should already be there, verify it exists:
+```yaml
+title_keywords:
+  - "python"
+  - "backend"
+  # ... rest
 ```
-Selectors:
-- `[data-testid="submit-application-button"]`
-- `button[name="submit-application"]`
-- `button[type="submit"]`
 
-### Fix `src/agent/indeed_form_filler.py`
+3. **Add "python" to positive_signals** if not already there, so description mentions boost score.
 
-Replace CONTINUE_PATTERNS with these REAL selectors:
+### File: `src/scraper/filter_config.py`
 
+Handle the case where `required` section is missing or empty:
+
+Around line 103 where required keywords are loaded:
 ```python
-CONTINUE_PATTERNS: list[str] = [
-    # REAL selectors from live Indeed DOM - Jan 2026
-    '[data-testid="submit-application-button"]',  # Final submit on review page
-    'button[name="submit-application"]',           # Alternative submit selector
-    '[data-testid="continue-button"]',             # Continue button on form pages
-    
-    # Fallbacks
-    'button[type="submit"]',
-    'button:has-text("Submit your application")',
-    'button:has-text("Continue")',
-]
+required = data.get("required", {})
 ```
 
-### Also Fix `src/agent/answer_engine.py` Pattern Order
+Make sure it handles empty/missing gracefully:
+```python
+required = data.get("required", {})
+required_keywords_raw = required.get("keywords", [])
+# Filter out empty strings, handle None
+required_keywords = [k.lower() for k in required_keywords_raw if k] if required_keywords_raw else []
+```
 
-The disability question matched `personal.website` because patterns run in order.
+### File: `src/scraper/scorer.py`
 
-Move EEO patterns (disability, gender, race, veteran) to the TOP of the pattern list so they match BEFORE personal info patterns.
+Make the keyword check skip if no keywords configured. Around line 127:
+```python
+if self._config.required_keywords:
+    search_text = title_lower if self._config.keyword_in_title else combined
+    if not any(kw in search_text for kw in self._config.required_keywords):
+        return FilterResult(...)
+```
 
-Current order causes "Voluntary Self-Identification of Disability" to match the loose `r"website|portfolio|github"` pattern before the disability pattern can run.
+This already checks `if self._config.required_keywords:` so it should work if the list is empty. Just verify the logic is correct.
 
-### Test
-Run: `pytest tests/ -x -q`
+### Expected Outcome
+- Jobs no longer rejected for `missing_keyword` when required_keywords is empty
+- Score-based filtering still works (title_keywords, positive_signals boost relevant jobs)
+- min_score threshold (0.5) still filters truly irrelevant jobs
 
-### Code Standards
-- Static typing everywhere
-- Guard clauses
-- logging module only
+### Testing
+After changes, verify:
+1. Config loads without error
+2. Jobs pass filter when no required_keywords set
+3. Jobs with "python" in title still get higher scores
 
 ## Code Standards
 

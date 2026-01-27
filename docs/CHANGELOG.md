@@ -2,6 +2,9 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Update Indeed SmartApply selectors and refine AnswerEngine pattern prioritization
+  - Updated `IndeedFormFiller` with researched REAL selectors for continue and submit buttons from live DOM
+  - Reordered `AnswerEngine` patterns to ensure EEO/Demographic questions are prioritized over loose personal info patterns
 - 2026-01-27: fix: Improve Indeed Easy Apply submit logic and AnswerEngine pattern prioritization
   - Implemented `SUBMIT_PATTERNS` in `IndeedFormFiller` to reliably handle the final review page submission
   - Reordered `AnswerEngine` patterns to prioritize EEO/Demographic questions, preventing false positives with personal info

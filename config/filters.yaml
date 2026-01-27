@@ -9,12 +9,12 @@ scoring:
     remote_bonus: 0.1
     freshness_bonus: 0.1
 
-required:
-  # Job MUST mention at least one of these somewhere in title or description
-  keywords:
-    - "python"
-  # If true, keyword must be in title. If false, anywhere in posting works.
-  keyword_in_title: false
+# required:
+#   # Job MUST mention at least one of these somewhere in title or description
+#   keywords:
+#     - "python"
+#   # If true, keyword must be in title. If false, anywhere in posting works.
+#   keyword_in_title: false
 
 title_exclusions:
   # Instant reject if title contains any of these (case-insensitive)
@@ -148,6 +148,7 @@ blocked_url_patterns:
 
 positive_signals:
   # Boost score if description mentions these
+  - "python"
   - "fastapi"
   - "django"
   - "flask"

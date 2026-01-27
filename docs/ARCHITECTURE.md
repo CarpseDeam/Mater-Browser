@@ -39,14 +39,13 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 ### Deterministic Indeed Flow
 
-Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:
+Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:  
 
-- **Selector Precision**: Uses Indeed-specific selectors to identify form fields, including support for "rich-text-question-input" areas.
+- **Selector Precision**: Uses researched REAL selectors from live Indeed DOM (as of Jan 2026) to identify form fields and navigation buttons, including support for "rich-text-question-input" areas.
 
 - **State Management**: Detects review and confirmation pages to ensure the application is submitted correctly.
 
 - **Answer Integration**: Leverages the same `AnswerEngine` used by LinkedIn for consistent profile information across platforms.
-
 ## Success Detection
 
 The `SuccessDetector` component is responsible for determining if an application has been successfully submitted. It employs a multi-layered approach:

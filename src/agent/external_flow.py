@@ -197,7 +197,7 @@ class ExternalFlow:
             if filler.is_resume_page():
                 helpers.handle_resume_card()
                 self._page.wait(1000)
-                continue
+                # Don't continue - fall through to click_continue() below
 
             # Fill form fields
             success, unknown = filler.fill_current_page()
