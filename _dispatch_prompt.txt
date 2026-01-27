@@ -22,32 +22,55 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: FixIntegrationTests
-Tier: HOTFIX
+# Specification: AutoRepairIntegration
+Tier: FEATURE
 
 ## Description
-Fix the 9 failing tests in test_failureloggerintegration.py. All failures are caused by mock page content triggering payment page detection, which aborts before failure logging happens.
+Add self-healing capability to the automation runner. When failures accumulate, automatically dispatch fixes to Claude Code without manual intervention.
+
+## Interface
+- `AutoRepairer.__init__(threshold: int = 5, cooldown_minutes: int = 10)` — Configure when to trigger repairs
+- `AutoRepairer.record_failure(failure: ApplicationFailure) -> None` — Track a failure
+- `AutoRepairer.maybe_repair() -> bool` — Check threshold, dispatch fix if needed, return True if dispatched
+- `AutoRepairer.reset() -> None` — Clear failure count after successful repair
 
 ## Must Do
-- Fix all 9 failing tests to not trigger payment detection
-- Keep the test intent intact (still testing failure logging)
-- Don't modify production code - only test file
+- Track failure count since last repair
+- Trigger repair when count >= threshold
+- Cooldown period prevents spam (don't repair more than once per cooldown_minutes)
+- Use same logic as `--auto-fix` CLI: read failures, summarize, suggest, POST to bridge
+- POST to `http://localhost:5001/dispatch` with generated spec
+- Log when repair is triggered and result
+- Handle bridge connection errors gracefully (log warning, continue running)
+- Run asynchronously - don't block the main automation loop
+
+## Must Not Do
+- Don't block automation while repair runs
+- Don't crash if bridge unavailable
+- Don't repair on every single failure (respect threshold + cooldown)
+
+## Edge Cases
+- Bridge server not running → log warning, skip repair, continue automation
+- No unaddressed failures → skip repair
+- All failures same type → still generate single fix spec
+- Repair dispatched but fails → log error, reset cooldown anyway (prevent spam)
 
 ## Validation
-- Tests: pytest tests/test_failureloggerintegration.py -v --tb=short
+- Tests: pytest tests/feedback/test_auto_repairer.py -v
 
 ## Target Path
-tests/test_failureloggerintegration.py
+src/feedback/auto_repairer.py (new)
 
 ## YOUR TASK
 
-**Tier: HOTFIX** - Minimal scope, fast iteration.
-- Focus on the specific bug/issue only
-- 1-3 targeted tests maximum
+**Tier: FEATURE** - Standard feature implementation.
+- Full behavior test coverage
+- All edge cases must be tested
+- Contract tests for public interfaces
 
 ### Step 1: Implement the Interface
 
-Implementation location: `tests/test_failureloggerintegration.py`
+Implementation location: `src/feedback/auto_repairer.py (new)`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -58,13 +81,16 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_fixintegrationtests.py`
+Test file location: `tests/test_autorepairintegration.py`
 
 After implementing, write tests that verify contract and behavior:
 
 **Must Do Tests:**
 - Write one test for each item in the 'Must Do' section
 - Tests should verify the behavior/contract, not implementation details
+
+**Edge Case Tests:**
+- Write one test for each edge case specified
 
 Test Code Requirements:
 - Use pytest fixtures for shared setup
@@ -74,7 +100,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/test_failureloggerintegration.py -v --tb=short`
+Run validation: `pytest tests/feedback/test_auto_repairer.py -v`
 
 Iterate until all tests pass.
 Maximum iterations: 5
