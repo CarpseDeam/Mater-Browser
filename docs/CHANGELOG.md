@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Integrate FailureLogger and StuckDetection into core agent flows
+  - Integrated `FailureLogger` into `AnswerEngine` to automatically capture unknown questions with job context and page snapshots
+  - Integrated `FormProcessorStuckDetection` into `FormProcessor` to detect and halt on infinite loops in both ATS and Claude flows
+  - Enhanced `FormProcessor` and `AnswerEngine` to accept job metadata (URL, title, company) for rich failure reporting
+  - Added automated failure logging for timeouts and stuck loops in `FormProcessor`
 - 2026-01-27: feat: Implement ConfigSuggester for automated failure fix generation
   - Introduced `ConfigSuggester` to generate structured fix instructions from failure summaries
   - Supports automated regex pattern generation for `unknown_question` failures

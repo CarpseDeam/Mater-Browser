@@ -16,7 +16,7 @@ Classifies job pages and finds primary action buttons.
 
 Config-driven answer lookup for form questions.
 
-- `get_answer(question: str, field_type: str = "text") -> Optional[Any]`: Looks up an answer for a given question text by matching against `config/answers.yaml` patterns.
+- `get_answer(question: str, field_type: str = "text", *, job_url: str = "", job_title: str = "", company: str = "", page_snapshot: str | None = None) -> Optional[Any]`: Looks up an answer for a given question text by matching against `config/answers.yaml` patterns. Logs unknown questions to `FailureLogger`.
 - `has_answer(question: str) -> bool`: Checks if an answer is available for the specified question.
 
 ### `LinkedInFormFiller`
@@ -62,6 +62,7 @@ Background worker for thread-safe browser automation.
 
 Handles multi-page application flows.
 
+- `__init__(page, dom_service, claude, runner, tabs, profile, resume_path, timeout_seconds, max_pages, job_url="", job_title="", company="")`: Initializes the processor with job metadata for rich failure logging.
 - `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process. It first attempts to use a deterministic `BaseATSHandler` (via `get_handler`). If no handler is available, it falls back to the Claude-based processing, including automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.   
 
 ## ATS API

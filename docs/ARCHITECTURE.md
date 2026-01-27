@@ -45,7 +45,7 @@ The `FormProcessor` orchestrates the interaction with web forms using a hybrid s
 
 To increase reliability and speed for LinkedIn applications, the system bypasses AI for Easy Apply modals:
 
-- **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching.
+- **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
 
 - **Form Filler**: Automatically identifies and fills text inputs, selects, radio buttons, and checkboxes in the LinkedIn modal.
 
@@ -91,7 +91,8 @@ To enable continuous improvement and automated recovery, the system includes a s
 
 ## Loop & Stuck Detection
 
-The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`):
+The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`). It is integrated directly into the `FormProcessor` loop, capturing page content hashes and sequence patterns to detect and halt when stuck behavior is identified, logging the failure for analysis.
+
 - **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state.
 - **URL Tracking**: Monitors normalized URL visit counts and element counts to detect repetitions even if content slightly changes.
 - **Pattern Detection**: Identifies repeating sequences of pages (e.g., A-B-A-B or A-B-C-A-B-C) to break out of circular navigation loops.
