@@ -83,69 +83,36 @@ Dedicated success detection for application completion.
 
 ### `FailureLogger`
 
-
-
 Captures and manages application failures for analysis.
 
-
-
 - `log(failure: ApplicationFailure) -> None`: Appends a structured failure record to the JSONL log file.
-
 - `read_all(include_addressed: bool = False) -> list[ApplicationFailure]`: Retrieves all logged failures, with an option to filter for unaddressed ones.        
-
 - `mark_addressed(timestamps: list[str]) -> None`: Marks specific failures as addressed based on their unique ISO timestamps.
-
-
 
 ### `FailureSummarizer`
 
-
-
 Groups and ranks failures from the failure log for analysis.
 
-
-
 - `__init__(failures: list[ApplicationFailure])`: Initializes with a list of failures to analyze.
-
 - `summarize() -> list[FailureSummary]`: Groups failures by type and ranks them by frequency, returning top summaries.
-
 - `get_top_unknown_questions(n: int = 10) -> list[tuple[str, int, list[str]]]`: Returns fuzzy-grouped unknown questions with their counts and similar variants. 
-
-
 
 ### `ConfigSuggester`
 
-
-
 Generates structured fix instructions from failure summaries.
-
-
 
 - `suggest(summaries: list[FailureSummary]) -> list[FixSuggestion]`: Analyzes failure summaries and generates targeted fix suggestions, including regex patterns for new questions and selectors for React components.
 
-
-
 ### `AutoRepairer`
-
-
 
 Self-healing coordinator for automated failure resolution. Thread-safe implementation.
 
-
-
 - `__init__(threshold: int = 5, cooldown_minutes: int = 10)`: Configures the repair trigger threshold and cooldown period.
-
 - `record_failure(failure: ApplicationFailure) -> None`: Increments the failure count (thread-safe) and checks if a repair should be initiated.
-
 - `maybe_repair() -> bool`: Evaluates if the threshold and cooldown conditions are met (thread-safe), and if so, dispatches a repair request. Returns `True` if a repair was dispatched.
-
 - `reset() -> None`: Resets the failure count (thread-safe), typically called after a successful repair dispatch or manual intervention.
 
-
-
 ## Data Models
-
-
 
 ### `ApplicationStatus`
 
