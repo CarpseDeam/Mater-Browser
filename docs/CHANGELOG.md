@@ -2,6 +2,10 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Add direct LinkedIn Easy Apply selector for improved reliability
+  - Implemented `_try_linkedin_direct` in `PageClassifier` to bypass generic DOM scanning for known LinkedIn selectors
+  - Prioritized direct matching in `find_apply_button` to increase speed and accuracy on LinkedIn
+  - Added support for multiple LinkedIn-specific button selectors and ARIA labels
 - 2026-01-27: feat: Implement AutoRepairer for self-healing automation
   - Added `AutoRepairer` to automatically dispatch fixes to Claude Code when failures accumulate
   - Implemented threshold-based triggering and cooldown periods to prevent spam

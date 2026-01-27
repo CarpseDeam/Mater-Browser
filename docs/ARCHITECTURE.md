@@ -6,7 +6,7 @@ System architecture documentation.
 
 The `PageClassifier` is responsible for identifying the current state of a job application page and locating the primary action buttons.
 - **Classification Logic**: Uses a combination of URL patterns, page content (e.g., "already applied", "job closed"), and DOM element analysis.
-- **Apply Button Detection**: Employs a Similo-style weighted scoring system to find the most likely "Apply" button. It distinguishes between:
+- **Apply Button Detection**: Prioritizes direct selector matching for known platforms (e.g., LinkedIn) to ensure high reliability. If no direct match is found, it employs a Similo-style weighted scoring system to find the most likely "Apply" button. It distinguishes between:
     - **Easy Apply**: Internal application flows (e.g., LinkedIn Easy Apply, Indeed Smart Apply).
     - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site"). Handling involves modularized redirection logic to capture both popup-based and same-tab navigations, with immediate transitions to captured URLs to avoid analysis timeouts.
 - **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays from platforms like LinkedIn and Dice.
@@ -44,6 +44,8 @@ The `FormProcessor` orchestrates the interaction with web forms using a hybrid s
 ### Deterministic LinkedIn Flow
 
 To increase reliability and speed for LinkedIn applications, the system bypasses AI for Easy Apply modals:
+
+- **Direct Button Selection**: Uses optimized CSS selectors to immediately identify the "Easy Apply" button, bypassing generic DOM analysis for faster interaction.
 
 - **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
 
