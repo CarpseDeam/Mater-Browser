@@ -22,55 +22,43 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: P1MissingPatterns
-Tier: FEATURE
+# Specification: P1ThreadSafety
+Tier: HOTFIX
 
 ## Description
-Add missing regex patterns to AnswerEngine for EEO, salary, language, and preference questions.
+Add thread safety to AutoRepairer to prevent race conditions.
 
 ## Interface
-- `AnswerEngine._build_patterns()` - Add new pattern tuples for missing categories
+- `AutoRepairer.__init__()` - Add `self._counter_lock = threading.Lock()`
+- `AutoRepairer.record_failure()` - Use lock when incrementing counter
+- `AutoRepairer.maybe_repair()` - Use lock when checking/resetting counter
 
 ## Must Do
-- Add EEO/demographic patterns to match questions like:
-- "gender", "sex", "gender identity" → dropdowns.gender
-- "race", "ethnicity", "racial background" → dropdowns.race, dropdowns.ethnicity
-- "veteran", "veteran status", "protected veteran" → dropdowns.veteran_status
-- "disability", "disability status", "accommodation" → dropdowns.disability_status
-- Add salary patterns:
-- "salary expectation", "desired salary", "expected compensation" → salary.expected
-- "minimum salary", "salary requirement" → salary.minimum
-- "hourly rate", "rate expectation" → salary.hourly_rate
-- Add language patterns:
-- "english proficiency", "english fluency", "language proficiency" → languages.english
-- Add preference patterns:
-- "notice period", "how much notice", "when can you start" → preferences.notice_period
-- "available to start", "start date", "earliest start" → preferences.available_start
-- "work type", "remote/hybrid/onsite" → preferences.work_type
-- Add select/dropdown handling in `_format_answer()`:
-- If field_type == "select", return str(value) as-is
+- Add `self._counter_lock = threading.Lock()` in `__init__` (note: there's already a `_lock` used by FailureLogger, name this one `_counter_lock`)
+- Wrap `self._failure_count += 1` in `record_failure()` with the lock
+- Wrap the threshold check and counter reset in `maybe_repair()` with the lock
+- Use context manager pattern: `with self._counter_lock:`
 
 ## Must Not Do
-- Modify answers.yaml (patterns already exist there)
-- Change existing patterns
-- Modify test files
+- Hold lock during HTTP request (that would block other threads)
+- Change any other logic
+- Rename or remove existing attributes
 
 ## Validation
-- Tests: pytest tests/ -k "answer" -v
+- Tests: pytest tests/feedback/test_auto_repairer.py -v
 
 ## Target Path
-src/agent/answer_engine.py
+src/feedback/auto_repairer.py
 
 ## YOUR TASK
 
-**Tier: FEATURE** - Standard feature implementation.
-- Full behavior test coverage
-- All edge cases must be tested
-- Contract tests for public interfaces
+**Tier: HOTFIX** - Minimal scope, fast iteration.
+- Focus on the specific bug/issue only
+- 1-3 targeted tests maximum
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/agent/answer_engine.py`
+Implementation location: `src/feedback/auto_repairer.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -79,9 +67,12 @@ Implementation Rules:
 4. Ensure postconditions are satisfied
 5. Respect all 'Must Not Do' constraints
 
+**Handling Conflicts:**
+If a 'Must Not Do' constraint conflicts with a 'Must Do' requirement (e.g., fixing behavior breaks existing tests but you're told not to modify tests), prioritize the 'Must Do'. Note the conflict and make the minimal change needed.
+
 ### Step 2: Write Tests
 
-Test file location: `tests/test_p1missingpatterns.py`
+Test file location: `tests/test_p1threadsafety.py`
 
 After implementing, write tests that verify contract and behavior:
 
@@ -97,7 +88,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/ -k "answer" -v`
+Run validation: `pytest tests/feedback/test_auto_repairer.py -v`
 
 Iterate until all tests pass.
 Maximum iterations: 5

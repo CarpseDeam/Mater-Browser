@@ -34,14 +34,17 @@ class AutoRepairer:
         self._failure_count = 0
         self._last_repair_time: float | None = None
         self._failure_logger = FailureLogger()
+        self._counter_lock = threading.Lock()
 
     def record_failure(self, failure: ApplicationFailure) -> None:
-        self._failure_count += 1
+        with self._counter_lock:
+            self._failure_count += 1
         self._failure_logger.log(failure)
 
     def maybe_repair(self) -> bool:
-        if self._failure_count < self._threshold:
-            return False
+        with self._counter_lock:
+            if self._failure_count < self._threshold:
+                return False
 
         if self._is_in_cooldown():
             return False
@@ -69,7 +72,8 @@ class AutoRepairer:
         return True
 
     def reset(self) -> None:
-        self._failure_count = 0
+        with self._counter_lock:
+            self._failure_count = 0
 
     def _is_in_cooldown(self) -> bool:
         if self._last_repair_time is None:
