@@ -22,24 +22,57 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: MoveStuckDetectionFiles
-Tier: HOTFIX
+# Specification: FailureLogger
+Tier: FEATURE
 
 ## Description
-Move and rename stuck detection files to correct locations.
+Capture layer for the failure feedback system. Logs application failures to JSONL for later analysis and auto-fixing.
+
+## Interface
+- `ApplicationFailure` dataclass with fields: timestamp, job_url, job_title, company, failure_type, details, page_snapshot, addressed
+- `FailureLogger.log(failure: ApplicationFailure) -> None` — Append failure to JSONL file
+- `FailureLogger.read_all(include_addressed: bool = False) -> list[ApplicationFailure]` — Read all failures from log
+- `FailureLogger.mark_addressed(timestamps: list[str]) -> None` — Mark failures as addressed by timestamp
+
+## Must Do
+- Use `Literal["unknown_question", "stuck_loop", "validation_error", "timeout", "crash", "react_select_fail"]` for failure_type
+- `details` dict structure varies by failure_type:
+- `unknown_question`: `{question_text, field_type, field_id, field_selector, page_url}`
+- `stuck_loop`: `{repeating_urls, page_hash, iteration_count, last_actions}`
+- `validation_error`: `{error_messages, field_selector, field_value, aria_invalid_fields}`
+- `react_select_fail`: `{selector, attempted_value, available_options, error}`
+- `timeout`: `{page_url, last_action, elapsed_seconds}`
+- `crash`: `{exception_type, exception_message, traceback}`
+- Append-only JSONL (one JSON object per line)
+- Create data directory if not exists
+- Thread-safe file writes (use file locking or append mode)
+- ISO format timestamps
+
+## Must Not Do
+- No reading entire file into memory for writes (append only)
+- No complex serialization - standard json.dumps with default str handler for non-serializable
+
+## Edge Cases
+- File doesn't exist → create it
+- Malformed line in JSONL during read → skip line, log warning
+- details contains non-serializable objects → convert to str
 
 ## Validation
-- Tests: pytest tests/test_stuck_detection.py -v
+- Tests: pytest tests/feedback/test_failure_logger.py -v
+
+## Target Path
+src/feedback/failure_logger.py
 
 ## YOUR TASK
 
-**Tier: HOTFIX** - Minimal scope, fast iteration.
-- Focus on the specific bug/issue only
-- 1-3 targeted tests maximum
+**Tier: FEATURE** - Standard feature implementation.
+- Full behavior test coverage
+- All edge cases must be tested
+- Contract tests for public interfaces
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/movestuckdetectionfiles.py`
+Implementation location: `src/feedback/failure_logger.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -50,13 +83,16 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_movestuckdetectionfiles.py`
+Test file location: `tests/test_failurelogger.py`
 
 After implementing, write tests that verify contract and behavior:
 
 **Must Do Tests:**
 - Write one test for each item in the 'Must Do' section
 - Tests should verify the behavior/contract, not implementation details
+
+**Edge Case Tests:**
+- Write one test for each edge case specified
 
 Test Code Requirements:
 - Use pytest fixtures for shared setup
@@ -66,7 +102,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/test_stuck_detection.py -v`
+Run validation: `pytest tests/feedback/test_failure_logger.py -v`
 
 Iterate until all tests pass.
 Maximum iterations: 5
