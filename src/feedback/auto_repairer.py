@@ -117,7 +117,7 @@ class AutoRepairer:
     ) -> None:
         spec_content = self._generate_prompt(spec.suggestions)
         payload = {
-            "spec": spec_content,
+            "content": spec_content,
             "project_path": str(Path(__file__).parent.parent.parent.resolve()),
         }
 

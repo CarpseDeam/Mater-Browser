@@ -281,7 +281,7 @@ class TestFillRadioButtons:
         mock_fieldsets_locator.all.return_value = [mock_fieldset]
 
         def page_locator(selector: str) -> Mock:
-            if selector == "fieldset":
+            if "fieldset" in selector or "radiogroup" in selector:
                 return mock_fieldsets_locator
             if 'label[for="yes-radio"]' in selector:
                 return mock_yes_label

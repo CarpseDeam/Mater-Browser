@@ -155,8 +155,8 @@ class TestDispatchLogic:
             call_args = mock_client.post.call_args
             assert call_args[0][0] == BRIDGE_URL
             payload = call_args[1]["json"]
-            assert "description" in payload
-            assert "suggestions" in payload
+            assert "content" in payload
+            assert "project_path" in payload
 
     def test_dispatch_marks_failures_addressed_on_success(
         self, repairer: AutoRepairer

@@ -5,9 +5,6 @@ from typing import Optional
 
 from ..browser.page import Page
 from ..browser.tabs import TabManager
-from ..extractor.dom_service import DomService
-from .claude import ClaudeAgent
-from ..executor.runner import ActionRunner
 from .page_classifier import PageClassifier, PageType
 from .models import (
     JobSource,
@@ -20,7 +17,6 @@ from .models import (
     PAGE_LOAD_TIMEOUT_MS,
     SHORT_WAIT_MS,
 )
-from .form_processor import FormProcessor
 from .answer_engine import AnswerEngine
 from .indeed_form_filler import IndeedFormFiller
 from .indeed_helpers import IndeedHelpers
@@ -29,24 +25,16 @@ logger = logging.getLogger(__name__)
 
 
 class ExternalFlow:
-    """Handles external job board apply flow (Indeed, Dice, direct sites)."""
+    """Handles external job board apply flow (Indeed Easy Apply only)."""
 
     def __init__(
         self,
         page: Page,
         tabs: TabManager,
-        claude: ClaudeAgent,
-        profile: dict,
-        resume_path: Optional[str],
-        timeout_seconds: float,
         max_pages: int,
     ) -> None:
         self._page = page
         self._tabs = tabs
-        self._claude = claude
-        self._profile = profile
-        self._resume_path = resume_path
-        self._timeout_seconds = timeout_seconds
         self._max_pages = max_pages
 
     def apply(self, job_url: str, source: JobSource) -> ApplicationResult:
@@ -149,28 +137,18 @@ class ExternalFlow:
                 url=job_url,
             )
 
-        dom_service = DomService(self._page)
-        runner = ActionRunner(self._page, dom_service)
-
         logger.info(f"Now on: {self._page.url}")
 
-        # Use deterministic filler for Indeed Easy Apply
-        if self._is_indeed_easy_apply():
-            return self._process_indeed_easy_apply(job_url)
+        # Only handle Indeed Easy Apply
+        if not self._is_indeed_easy_apply():
+            logger.info("Not Indeed Easy Apply - skipping (Easy Apply only)")
+            return ApplicationResult(
+                status=ApplicationStatus.SKIPPED,
+                message="Not Indeed Easy Apply - Easy Apply only",
+                url=job_url,
+            )
 
-        processor = FormProcessor(
-            page=self._page,
-            dom_service=dom_service,
-            claude=self._claude,
-            runner=runner,
-            tabs=self._tabs,
-            profile=self._profile,
-            resume_path=self._resume_path,
-            timeout_seconds=self._timeout_seconds,
-            max_pages=self._max_pages,
-        )
-
-        return processor.process(job_url, source=source)
+        return self._process_indeed_easy_apply(job_url)
 
     def _is_external_only_job(self) -> bool:
         """Check if job page only has external apply (no Easy Apply)."""

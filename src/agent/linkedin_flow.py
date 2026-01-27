@@ -4,12 +4,8 @@ from typing import Optional
 
 from ..browser.page import Page
 from ..browser.tabs import TabManager
-from ..extractor.dom_service import DomService
-from .claude import ClaudeAgent
-from ..executor.runner import ActionRunner
 from .page_classifier import PageClassifier, PageType
 from .models import (
-    JobSource,
     ApplicationStatus,
     ApplicationResult,
     MEDIUM_WAIT_MS,
@@ -17,7 +13,6 @@ from .models import (
     PAGE_LOAD_TIMEOUT_MS,
     MAX_POPUP_WAIT_ATTEMPTS,
 )
-from .form_processor import FormProcessor
 from .answer_engine import AnswerEngine
 from .linkedin_form_filler import LinkedInFormFiller
 
@@ -31,18 +26,10 @@ class LinkedInFlow:
         self,
         page: Page,
         tabs: TabManager,
-        claude: ClaudeAgent,
-        profile: dict,
-        resume_path: Optional[str],
-        timeout_seconds: float,
         max_pages: int,
     ) -> None:
         self._page = page
         self._tabs = tabs
-        self._claude = claude
-        self._profile = profile
-        self._resume_path = resume_path
-        self._timeout_seconds = timeout_seconds
         self._max_pages = max_pages
 
     def _wait_for_external_popup(
@@ -148,10 +135,15 @@ class LinkedInFlow:
 
         self._page.wait(MEDIUM_WAIT_MS)
 
-        if page_type == PageType.EASY_APPLY:
-            return self._process_easy_apply(job_url)
+        if page_type != PageType.EASY_APPLY:
+            logger.info("Not Easy Apply - skipping (Easy Apply only)")
+            return ApplicationResult(
+                status=ApplicationStatus.SKIPPED,
+                message="Not Easy Apply - Easy Apply only",
+                url=job_url,
+            )
 
-        return self._process_with_claude_fallback(job_url)
+        return self._process_easy_apply(job_url)
 
     def _process_easy_apply(self, job_url: str) -> ApplicationResult:
         """Process LinkedIn Easy Apply using deterministic form filler."""
@@ -196,22 +188,3 @@ class LinkedInFlow:
             pages_processed=self._max_pages,
             url=job_url,
         )
-
-    def _process_with_claude_fallback(self, job_url: str) -> ApplicationResult:
-        """Fallback to Claude-based processing for external/unknown pages."""
-        dom_service = DomService(self._page)
-        runner = ActionRunner(self._page, dom_service)
-
-        processor = FormProcessor(
-            page=self._page,
-            dom_service=dom_service,
-            claude=self._claude,
-            runner=runner,
-            tabs=self._tabs,
-            profile=self._profile,
-            resume_path=self._resume_path,
-            timeout_seconds=self._timeout_seconds,
-            max_pages=self._max_pages,
-        )
-
-        return processor.process(job_url, source=JobSource.LINKEDIN)

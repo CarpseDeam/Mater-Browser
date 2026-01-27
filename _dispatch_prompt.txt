@@ -1,81 +1,104 @@
-# Spec-Driven Implementation
+## Spec: Strip External ATS and Claude Fallbacks - Easy Apply Only [CRITICAL]
 
-## CRITICAL: TRUST THE SPEC
+### Context
+The bot is supposed to handle LinkedIn and Indeed Easy Apply ONLY. External jobs get SKIPPED. But currently:
+- `form_processor.py` tries ATS handlers (Workday, Greenhouse, etc.) then falls back to Claude
+- `linkedin_flow.py` has `_process_with_claude_fallback()` 
+- `external_flow.py` falls through to `FormProcessor` which uses Claude
 
-The specification below is COMPLETE. Do not:
-- Read README, ARCHITECTURE, or documentation files
-- Search for patterns or conventions in the codebase
-- Explore directory structures
-- Read files unrelated to your implementation
+This makes the bot unreliable. We need deterministic config-driven form filling ONLY.
 
-Only read files that:
-1. You need to import from (check the target path's neighbors)
-2. Contain types/classes referenced in the interface
+### Requirements
 
-The spec tells you exactly what to build. Trust it.
+#### 1. Clean up `src/agent/linkedin_flow.py`
+- Remove `_process_with_claude_fallback()` method entirely
+- In `apply()`: after clicking Easy Apply button, ALWAYS use `_process_easy_apply()`
+- If page_type is not EASY_APPLY after button click, return SKIPPED (not use Claude)
+- Remove imports: `DomService`, `ActionRunner`, `FormProcessor` if no longer needed
 
-## CIRCUIT BREAKER
+#### 2. Clean up `src/agent/external_flow.py`  
+- Remove the `FormProcessor` fallback at the end of `apply()`
+- After `_is_indeed_easy_apply()` check, if NOT Indeed Easy Apply, return SKIPPED
+- The flow should be: check external → skip, check Indeed Easy Apply → use `IndeedFormFiller`, else → skip
+- Remove imports: `DomService`, `ActionRunner`, `FormProcessor`, `ClaudeAgent` if no longer needed
 
-If you have made 8+ file reads without writing any code, STOP.
-You are exploring instead of implementing. The spec is complete.
-Write the implementation now with what you know.
+#### 3. Clean up `src/agent/form_processor.py`
+- Remove `get_handler()` call and `_process_with_handler()` method
+- Remove ATS imports: `from ..ats import get_handler, FormPage, BaseATSHandler`
+- The `process()` method should just return SKIPPED or delegate to the appropriate flow
+- Actually, this class may not be needed at all now - check if anything still uses it
 
-## THE SPECIFICATION
+#### 4. Remove unused ATS system (if nothing uses it)
+- Check if anything imports from `src/ats/`
+- If nothing does, the entire `src/ats/` directory can be deleted
+- Keep the detector if needed for classification, but remove handlers
 
-# Specification: FixPagesParam
-Tier: HOTFIX
+#### 5. Update answer logging
+- When `LinkedInFormFiller` or `IndeedFormFiller` encounters unknown questions, log them properly
+- Both fillers already return `(success, unknown_questions)` - make sure the flows log failures
 
-## Description
-Fix TypeError: ApplicationResult.__init__() got an unexpected keyword argument 'pages'
+### Flow After Changes
 
-## Must Do
-- In `src/agent/external_flow.py`: Replace all `pages=` with `pages_processed=` in ApplicationResult calls
-- In `src/agent/linkedin_flow.py`: Replace all `pages=` with `pages_processed=` in ApplicationResult calls
+**LinkedIn:**
+```
+linkedin_flow.apply() 
+  → classify page
+  → if EASY_APPLY: click button → _process_easy_apply() → LinkedInFormFiller
+  → if unknown questions: log failure, return FAILED
+  → else: return SKIPPED
+```
 
-## Validation
-- Tests: pytest tests/ -k "flow" -v --tb=short
+**Indeed:**
+```
+external_flow.apply()
+  → check _is_external_only_job() → return SKIPPED
+  → classify page  
+  → click apply button
+  → check _is_indeed_easy_apply() → _process_indeed_easy_apply() → IndeedFormFiller
+  → if unknown questions: log failure, return FAILED
+  → else: return SKIPPED (not Indeed Easy Apply)
+```
 
-## YOUR TASK
+### Test Requirements
+- Run existing tests: `pytest tests/ -x -q`
+- Ensure no imports break
+- The feedback system tests should still pass
 
-**Tier: HOTFIX** - Minimal scope, fast iteration.
-- Focus on the specific bug/issue only
-- 1-3 targeted tests maximum
+### Code Standards
+- Static typing everywhere
+- Use logging module, never print()
+- Guard clauses, fail fast
+- Remove dead code completely
 
-### Step 1: Implement the Interface
+## Code Standards
 
-Implementation location: `src/fixpagesparam.py`
+Write code that looks inevitable. Follow these constraints:
 
-Implementation Rules:
-1. Follow interface signatures EXACTLY as specified
-2. Handle all edge cases as specified
-3. Ensure preconditions are checked
-4. Ensure postconditions are satisfied
-5. Respect all 'Must Not Do' constraints
+**Restraint**
+- Solve it in one file if possible
+- No abstractions until the third time you need them
+- No classes if functions will do
+- No inheritance - use composition
 
-**Handling Conflicts:**
-If a 'Must Not Do' constraint conflicts with a 'Must Do' requirement (e.g., fixing behavior breaks existing tests but you're told not to modify tests), prioritize the 'Must Do'. Note the conflict and make the minimal change needed.
+**Functions**
+- Max 25 lines, aim for 15
+- One level of nesting max
+- Name describes exactly what it does: `extract_billable_hours()` not `process_data()`
+- Input → transform → output. No side effects unless that's the point.
 
-### Step 2: Write Tests
+**Files**
+- Max 200 lines for new files
+- One clear responsibility
+- If you're adding a second "system" to a file, stop and split
 
-Test file location: `tests/test_fixpagesparam.py`
+**No Ceremony**
+- No AbstractFactory, no IServiceProvider, no Manager classes
+- No code "just in case" - solve the actual problem
+- Delete commented-out code, don't keep it
 
-After implementing, write tests that verify contract and behavior:
+**Data**
+- Use dataclasses or plain dicts, not classes with only __init__ and getters
+- Data flows obviously - reader should predict what happens next
+- No global state
 
-**Must Do Tests:**
-- Write one test for each item in the 'Must Do' section
-- Tests should verify the behavior/contract, not implementation details
-
-Test Code Requirements:
-- Use pytest fixtures for shared setup
-- Include full type hints
-- Use descriptive test names
-- Keep tests focused and independent
-
-### Step 3: Validate
-
-Run validation: `pytest tests/ -k "flow" -v --tb=short`
-
-Iterate until all tests pass.
-Maximum iterations: 5
-
-Write clean, scalable, modular, efficient code. Follow single responsibility principle. Do not repeat yourself. Use consistent naming conventions. No unnecessary comments.
+The best code is code you delete. Every line is a liability.

@@ -1,16 +1,13 @@
 """Job application agent - orchestrates the full application flow."""
 import logging
-from typing import Optional
 
 from ..browser.tabs import TabManager
-from .claude import ClaudeAgent
 from .models import (
     JobSource,
     ApplicationStatus,
     ApplicationResult,
     LINKEDIN_PATTERNS,
     INDEED_PATTERNS,
-    APPLICATION_TIMEOUT_SECONDS,
 )
 from .linkedin_flow import LinkedInFlow
 from .external_flow import ExternalFlow
@@ -22,40 +19,24 @@ class ApplicationAgent:
     """
     Orchestrates complete job application flow.
 
-    Handles:
-    - Finding and clicking Apply button
-    - Following external ATS links (new tabs)
-    - Multi-page form navigation
-    - Resume upload
-    - Submit detection
+    Handles LinkedIn and Indeed Easy Apply ONLY.
+    External ATS jobs are skipped.
     """
 
     def __init__(
         self,
         tab_manager: TabManager,
-        profile: dict,
-        resume_path: Optional[str] = None,
         max_pages: int = 15,
-        claude_model: str = "claude-sonnet-4-20250514",
-        timeout_seconds: float = APPLICATION_TIMEOUT_SECONDS,
     ) -> None:
         """
         Initialize the application agent.
 
         Args:
             tab_manager: TabManager for handling browser tabs.
-            profile: User profile dictionary with application data.
-            resume_path: Optional path to resume PDF file.
             max_pages: Maximum pages to process before giving up.
-            claude_model: Claude model to use for form analysis.
-            timeout_seconds: Maximum seconds for entire application attempt.
         """
         self._tabs = tab_manager
-        self._profile = profile
-        self._resume_path = resume_path
         self._max_pages = max_pages
-        self._timeout_seconds = timeout_seconds
-        self._claude = ClaudeAgent(model=claude_model)
 
     def apply(self, job_url: str) -> ApplicationResult:
         """
@@ -81,10 +62,6 @@ class ApplicationAgent:
                 flow = LinkedInFlow(
                     page=page,
                     tabs=self._tabs,
-                    claude=self._claude,
-                    profile=self._profile,
-                    resume_path=self._resume_path,
-                    timeout_seconds=self._timeout_seconds,
                     max_pages=self._max_pages,
                 )
                 return flow.apply(job_url)
@@ -92,10 +69,6 @@ class ApplicationAgent:
                 flow = ExternalFlow(
                     page=page,
                     tabs=self._tabs,
-                    claude=self._claude,
-                    profile=self._profile,
-                    resume_path=self._resume_path,
-                    timeout_seconds=self._timeout_seconds,
                     max_pages=self._max_pages,
                 )
                 return flow.apply(job_url, source)

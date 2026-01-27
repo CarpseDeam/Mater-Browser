@@ -60,6 +60,7 @@ class ApplicationStatus(Enum):
     """Status of job application attempt."""
     SUCCESS = "success"
     FAILED = "failed"
+    SKIPPED = "skipped"
     NO_APPLY_BUTTON = "no_apply_button"
     MAX_PAGES_REACHED = "max_pages_reached"
     STUCK = "stuck"
