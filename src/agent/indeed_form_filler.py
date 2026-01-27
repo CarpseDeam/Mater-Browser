@@ -12,21 +12,15 @@ logger = logging.getLogger(__name__)
 class IndeedFormFiller:
     """Fill Indeed Easy Apply forms using config-driven answers."""
 
-    CONTINUE_PATTERNS = [
-        # Submit buttons (for review/final page) - check these first
-        'button[data-testid*="submit"]',
-        'button:has-text("Submit your application")',
-        'button:has-text("Submit application")',
-        # Continue buttons
-        '[data-testid="ia-continueButton"]',
-        '[data-testid*="continue" i]',
-        '[data-testid*="hp-continue-button"]',
-        'button:has-text("Continue")',
-        'button:has-text("Submit")',
-        'button:has-text("Apply")',
-        'button:has-text("Review")',
+    CONTINUE_PATTERNS: list[str] = [
+        # REAL selectors from live Indeed DOM - Jan 2026
+        '[data-testid="submit-application-button"]',  # Final submit on review page
+        'button[name="submit-application"]',           # Alternative submit selector
+        '[data-testid="continue-button"]',             # Continue button on form pages
+        # Fallbacks
         'button[type="submit"]',
-        '.ia-continueButton',
+        'button:has-text("Submit your application")',
+        'button:has-text("Continue")',
     ]
 
     SUBMIT_PATTERNS = [
