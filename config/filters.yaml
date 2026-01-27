@@ -2,7 +2,7 @@
 # All filtering rules in one place - edit this file to tune what jobs pass
 
 scoring:
-  min_score: 0.5
+  min_score: 0.3
   weights:
     title_match: 0.4
     skills_match: 0.4
@@ -22,7 +22,6 @@ title_exclusions:
     - "staff"
     - "principal"
     - "distinguished"
-    - "lead"
     - "architect"
     - "director"
     - "vp"
@@ -359,8 +358,6 @@ role_exclusions:
     - "principal"
     - "distinguished"
     - "senior staff"
-    - "lead engineer"
-    - "lead developer"
     - "architect"
 
   fullstack:

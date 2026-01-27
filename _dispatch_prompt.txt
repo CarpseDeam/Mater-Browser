@@ -1,26 +1,21 @@
-Add fallback answers for unknown text fields and textareas. Don't leave them blank - put SOMETHING.
+Update config/filters.yaml with these specific changes:
 
-## In `src/agent/linkedin_form_filler.py`:
+1. Change `min_score` from 0.5 to 0.3 under scoring section
 
-When filling text inputs or textareas and there's no answer from answer_engine:
+2. In title_exclusions.seniority, REMOVE these entries (user has 6+ years, can do these):
+   - "lead"
+   
+3. In role_exclusions.senior, REMOVE these entries:
+   - "lead engineer"
+   - "lead developer"
 
-### For textareas (long form questions):
-```python
-FALLBACK_TEXTAREA = "Please refer to my resume and LinkedIn profile for detailed information on my experience and qualifications."
-```
+4. Keep ALL frontend, mobile, .NET, Java, PHP, Ruby, Go exclusions - user is Python backend only
 
-### For text inputs (short answers):
-```python
-FALLBACK_TEXT = "See resume"
-```
+5. Keep junior/intern/entry exclusions - user is mid-to-senior level
 
-### Implementation:
-In `_fill_text_inputs()` and `_fill_textareas()`:
-- If answer_engine returns None/empty, use the fallback
-- Log it as: `"Using fallback for unknown question: {question}"`
-- Still fill the field and continue
+Do NOT remove any frontend, mobile, or non-Python stack exclusions. Those stay.
 
-This way NO text field is ever left empty. Always put something.
+File: C:\Projects\Mater-Browser\config\filters.yaml
 
 ## Code Standards
 
