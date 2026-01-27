@@ -34,6 +34,14 @@ ACCOUNT_CREATION_CONTENT_PHRASES = ["create an account", "create your account", 
 NEGATIVE_TEXT_SIGNALS = ["save", "later", "dismiss", "close", "cancel", "not now"]
 EXTERNAL_ARIA_PHRASES = ["on company website", "company site", "external site"]
 
+LINKEDIN_EASY_APPLY_SELECTORS = [
+    'button[data-control-name="jobdetails_topcard_inapply"]',
+    'button.jobs-apply-button',
+    'button[aria-label*="Easy Apply"]',
+    'button.jobs-apply-button--top-card',
+    '[data-testid="jobs-apply-button"]',
+]
+
 
 class PageClassifier:
     """Similo-inspired classifier for job application pages."""
@@ -78,6 +86,10 @@ class PageClassifier:
         return PageType.EXTERNAL_LINK if is_external else PageType.EASY_APPLY
 
     def find_apply_button(self, refresh: bool = False) -> Optional[ElementCandidate]:
+        direct_match = self._try_linkedin_direct()
+        if direct_match:
+            return direct_match
+
         if self._candidates is None or refresh:
             raw_candidates = self._dom_extractor.extract_candidates()
             for c in raw_candidates:
@@ -86,6 +98,30 @@ class PageClassifier:
         for candidate in self._candidates:
             if candidate.is_visible and candidate.score > 0:
                 return candidate
+        return None
+
+    def _try_linkedin_direct(self) -> Optional[ElementCandidate]:
+        for selector in LINKEDIN_EASY_APPLY_SELECTORS:
+            try:
+                locator = self._page.locator(selector).first
+                if locator.is_visible(timeout=500):
+                    text = locator.text_content() or ""
+                    aria_label = locator.get_attribute("aria-label")
+                    data_testid = locator.get_attribute("data-testid")
+                    logger.debug(f"LinkedIn direct selector matched: {selector}")
+                    return ElementCandidate(
+                        selector=selector,
+                        tag="button",
+                        text=text.strip(),
+                        role="button",
+                        aria_label=aria_label,
+                        href=None,
+                        data_testid=data_testid,
+                        is_visible=True,
+                        score=10.0,
+                    )
+            except Exception:
+                continue
         return None
 
     def click_apply_button(self, timeout: int = 8000) -> bool:

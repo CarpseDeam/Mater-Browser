@@ -22,55 +22,38 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: AutoRepairIntegration
-Tier: FEATURE
+# Specification: LinkedInDirectSelector
+Tier: HOTFIX
 
 ## Description
-Add self-healing capability to the automation runner. When failures accumulate, automatically dispatch fixes to Claude Code without manual intervention.
-
-## Interface
-- `AutoRepairer.__init__(threshold: int = 5, cooldown_minutes: int = 10)` — Configure when to trigger repairs
-- `AutoRepairer.record_failure(failure: ApplicationFailure) -> None` — Track a failure
-- `AutoRepairer.maybe_repair() -> bool` — Check threshold, dispatch fix if needed, return True if dispatched
-- `AutoRepairer.reset() -> None` — Clear failure count after successful repair
+Add direct LinkedIn Easy Apply selector before falling back to generic DOM scanning.
 
 ## Must Do
-- Track failure count since last repair
-- Trigger repair when count >= threshold
-- Cooldown period prevents spam (don't repair more than once per cooldown_minutes)
-- Use same logic as `--auto-fix` CLI: read failures, summarize, suggest, POST to bridge
-- POST to `http://localhost:5001/dispatch` with generated spec
-- Log when repair is triggered and result
-- Handle bridge connection errors gracefully (log warning, continue running)
-- Run asynchronously - don't block the main automation loop
+- Add `_try_linkedin_direct()` method that tries each selector in order
+- Call it FIRST in `find_apply_button()` before `_dom_extractor.extract_candidates()`
+- If direct selector finds visible button, return it immediately (skip scoring)
+- Log which selector matched for debugging
+- Build ElementCandidate from the matched element
 
 ## Must Not Do
-- Don't block automation while repair runs
-- Don't crash if bridge unavailable
-- Don't repair on every single failure (respect threshold + cooldown)
-
-## Edge Cases
-- Bridge server not running → log warning, skip repair, continue automation
-- No unaddressed failures → skip repair
-- All failures same type → still generate single fix spec
-- Repair dispatched but fails → log error, reset cooldown anyway (prevent spam)
+- Don't remove the generic fallback - keep it for non-LinkedIn pages
+- Don't change the scoring logic for generic candidates
 
 ## Validation
-- Tests: pytest tests/feedback/test_auto_repairer.py -v
+- Tests: pytest tests/agent/test_page_classifier.py -v --tb=short
 
 ## Target Path
-src/feedback/auto_repairer.py (new)
+src/agent/page_classifier.py
 
 ## YOUR TASK
 
-**Tier: FEATURE** - Standard feature implementation.
-- Full behavior test coverage
-- All edge cases must be tested
-- Contract tests for public interfaces
+**Tier: HOTFIX** - Minimal scope, fast iteration.
+- Focus on the specific bug/issue only
+- 1-3 targeted tests maximum
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/feedback/auto_repairer.py (new)`
+Implementation location: `src/agent/page_classifier.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -81,16 +64,13 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_autorepairintegration.py`
+Test file location: `tests/test_linkedindirectselector.py`
 
 After implementing, write tests that verify contract and behavior:
 
 **Must Do Tests:**
 - Write one test for each item in the 'Must Do' section
 - Tests should verify the behavior/contract, not implementation details
-
-**Edge Case Tests:**
-- Write one test for each edge case specified
 
 Test Code Requirements:
 - Use pytest fixtures for shared setup
@@ -100,7 +80,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/feedback/test_auto_repairer.py -v`
+Run validation: `pytest tests/agent/test_page_classifier.py -v --tb=short`
 
 Iterate until all tests pass.
 Maximum iterations: 5
