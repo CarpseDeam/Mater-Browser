@@ -11,35 +11,25 @@ The `PageClassifier` is responsible for identifying the current state of a job a
     - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site"). The system proactively detects "External-only" jobs (e.g., Indeed's "Apply on company site" or LinkedIn's external links) and skips them early to prioritize Easy Apply flows. For legitimate external transitions, it involves modularized redirection logic to capture both popup-based and same-tab navigations, with immediate transitions to captured URLs to avoid analysis timeouts.
 - **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays from platforms like LinkedIn and Dice.
 
-## ATS-First Architecture
+## Easy Apply Only Strategy
 
-The system utilizes an ATS-first approach to handle job applications deterministically whenever possible. This replaces the reliance on AI for well-known Applicant Tracking Systems (ATS).
-- **ATS Detection**: The `ATSDetector` identifies the ATS being used (e.g., Workday, Greenhouse, Lever, iCIMS, Phenom, SmartRecruiters, Taleo) by analyzing URL patterns and unique DOM signatures.
-- **Deterministic Handlers**: Each supported ATS has a specialized handler (inheriting from `BaseATSHandler`) that provides a standardized interface for reliable form interaction.
-    - `detect_page_state()`: Identifies the current step (e.g., Personal Info, Questions, Review).
-    - `fill_current_page()`: Executes the filling logic for the current page state.
-    - `advance_page()`: Handles the transition to the next page (clicking Next or Submit).
-    - `apply()`: Orchestrates the full end-to-end application flow using these standardized methods.
-- **Field Mapping**: The `FieldMapper` ensures that profile data is correctly mapped to the specific field names and IDs used by different ATS platforms.
-- **Hybrid Strategy**: The system first attempts to use a deterministic handler. If no handler is found for the detected ATS, or if the ATS is unknown, it falls back to the Claude-based agent.
-
-## User Interface & Background Operations
-
-To maintain high responsiveness, the system strictly separates GUI operations from browser automation.
-- **Background Worker**: The `ApplyWorker` (in `src/gui/worker.py`) runs in a dedicated thread and owns the `BrowserConnection` and `ApplicationAgent`.
-- **Asynchronous Communication**: The GUI communicates with the worker via thread-safe message queues and Python's `threading` signals. This prevents blocking the main event loop during long-running tasks like job scraping or multi-step application flows.
-- **Thread Isolation**: Playwright objects are managed exclusively within the worker thread to comply with its single-threaded execution model.
+The system is optimized for LinkedIn and Indeed "Easy Apply" flows. External job applications that redirect to third-party ATS (Workday, Greenhouse, etc.) are automatically detected and skipped to ensure high reliability and deterministic behavior.
 
 ## Form Processing
 
-The `FormProcessor` orchestrates the interaction with web forms using a hybrid strategy:
+The `ApplicationAgent` orchestrates the interaction with web forms using platform-specific deterministic fillers:
 
-1. **ATS Handler Attempt**: It first tries to identify the ATS and use a deterministic handler from the `src/ats/` module.
+1. **LinkedIn Easy Apply**: Uses `LinkedInFormFiller` and `AnswerEngine` for rapid, non-AI modal filling.
+2. **Indeed Easy Apply**: Uses `IndeedFormFiller` and `AnswerEngine` to handle Indeed's multi-step Smart Apply flow.
 
-2. **Deterministic Platform Filling**: For LinkedIn and Indeed Easy Apply, the system uses platform-specific deterministic fillers (`LinkedInFormFiller`, `IndeedFormFiller`) and an `AnswerEngine` to avoid LLM hallucinations and latency. Indeed applications are handled via `ExternalFlow` when "Easy Apply" patterns are detected on Indeed domains.
+This strategy avoids LLM hallucinations, reduces token costs, and provides consistent results based on the user's `answers.yaml` configuration.
 
-3. **Claude Fallback**: If no deterministic handler or filler is applicable, it utilizes a multi-stage prompting strategy defined in `prompts.py` to guide the LLM agent.
-
+### Legacy Components (Internal Only)
+The following components are maintained for historical context but are no longer active in the primary application flow:
+- **ATS Handlers**: Deterministic handlers for Workday, Greenhouse, Lever, etc.
+- **Claude Fallback**: LLM-based form filling for unknown systems.
+- **FormProcessor**: The original orchestration layer for the hybrid AI/ATS strategy.
+- **Stuck Detection**: Loop prevention for multi-page AI flows.
 
 ### Deterministic LinkedIn Flow
 
@@ -96,7 +86,7 @@ To enable continuous improvement and automated recovery, the system includes a s
 The `AutoRepairer` component provides self-healing capabilities by automatically addressing recurring failures.
 - **Thread Safety**: Uses a dedicated `threading.Lock` to ensure atomic operations on the failure counter and repair state, preventing race conditions in multi-threaded environments.
 - **Threshold-Based Repair**: Triggers a repair cycle when the number of unaddressed failures reaches a configurable threshold (default: 5).
-- **Automated Dispatch**: When triggered, it generates a failure summary and fix suggestions formatted as a detailed Markdown specification. This spec, along with the local `project_path`, is dispatched to a bridge server (default: `http://localhost:5001/dispatch`) which interfaces with Claude Code.
+- **Automated Dispatch**: When triggered, it generates a failure summary and fix suggestions formatted as a detailed Markdown specification. This spec, along with the local `project_path`, is dispatched to a bridge server (default: `http://localhost:5001/dispatch`) which interfaces with Claude Code via a `content` payload.
 - **Cooldown Mechanism**: Prevents redundant repair attempts by enforcing a cooldown period (default: 10 minutes) between dispatches.
 - **Non-Blocking Execution**: Runs repairs asynchronously to ensure that the main automation loop continues uninterrupted.
 

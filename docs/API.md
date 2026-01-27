@@ -4,13 +4,20 @@ API documentation.
 
 ## Agent API
 
-### `PageClassifier`
+### `ApplicationAgent`
 
-Classifies job pages and finds primary action buttons.
+Orchestrates the job application flow for LinkedIn and Indeed.
 
-- `classify() -> PageType`: Analyzes the current page to determine its type (e.g., `EASY_APPLY`, `EXTERNAL_LINK`, `ALREADY_APPLIED`).
-- `find_apply_button(refresh: bool = False) -> Optional[ElementCandidate]`: Identifies the best candidate for an "Apply" button. Prioritizes direct matching for known platforms (e.g., LinkedIn) before falling back to weighted scoring.
-- `click_apply_button(candidate: ElementCandidate, timeout: int = 5000) -> bool`: Attempts to click the identified button using a robust multi-stage retry sequence.
+- `__init__(tab_manager: TabManager, max_pages: int = 15)`: Initializes the agent. No longer requires profile or Claude settings.
+- `apply(job_url: str) -> ApplicationResult`: Routes to `LinkedInFlow` or `ExternalFlow` based on the URL.
+
+### `LinkedInFlow`
+
+- `__init__(page: Page, tabs: TabManager, max_pages: int)`: Initializes the LinkedIn-specific flow.
+
+### `ExternalFlow`
+
+- `__init__(page: Page, tabs: TabManager, max_pages: int)`: Initializes the external/Indeed-specific flow.
 
 ### `AnswerEngine`
 
@@ -38,7 +45,7 @@ Deterministic form filler for Indeed Easy Apply pages.
 - `is_review_page() -> bool`: Checks if the form is on a review step before final submission.
 - `is_resume_page() -> bool`: Detects if the current page is for resume selection/upload.
 
-### `FormProcessorStuckDetection`
+### `FormProcessorStuckDetection` (Legacy)
 
 Detects when form processing is stuck repeating the same page.
 
@@ -58,26 +65,26 @@ Background worker for thread-safe browser automation.
 - `on_status(status: WorkerStatus)`: Callback for worker state updates (Connecting, Ready, Error, etc.).
 - `on_result(result: ApplyResult)`: Callback for reporting the outcome of an application attempt.
 
-### `FormProcessor`
+### `FormProcessor` (Legacy)
 
 Handles multi-page application flows.
 
 - `__init__(page, dom_service, claude, runner, tabs, profile, resume_path, timeout_seconds, max_pages, job_url="", job_title="", company="")`: Initializes the processor with job metadata for rich failure logging.
 - `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process. It first attempts to use a deterministic `BaseATSHandler` (via `get_handler`). If no handler is available, it falls back to the Claude-based processing, including automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.   
 
-## ATS API
+## ATS API (Legacy)
 
-### `ATSDetector`
+### `ATSDetector` (Legacy)
 
 Identifies ATS systems from URL patterns and page content.
 
 - `detect() -> ATSType`: Analyzes the current page URL and DOM signatures to return the detected `ATSType` (e.g., `WORKDAY`, `GREENHOUSE`, `LEVER`).
 
-### `get_handler`
+### `get_handler` (Legacy)
 
 - `get_handler(page: Page, profile: dict, resume_path: Optional[str] = None) -> Optional[BaseATSHandler]`: Factory function that returns the appropriate `BaseATSHandler` implementation if an ATS is detected and a handler exists.
 
-### `BaseATSHandler`
+### `BaseATSHandler` (Legacy)
 
 Abstract base class for all ATS-specific handlers.
 
@@ -86,14 +93,14 @@ Abstract base class for all ATS-specific handlers.
 - `advance_page() -> PageResult`: Clicks next/submit to advance the form.       
 - `apply() -> PageResult`: Main entry point to run the full application flow.   
 
-### `ZeroActionsHandler`
+### `ZeroActionsHandler` (Legacy)
 
 Handles edge cases when no form actions are detected.
 
 - `__init__(page: Page, api_key: Optional[str] = None)`: Initializes the handler with a Playwright page and optional API key for vision fallback.
 - `classify_and_handle(input_count: int) -> Tuple[PageState, bool]`: Classifies the current page (e.g., JD, confirmation, loading) and attempts automated recovery (scrolling, clicking fallback buttons, vision-based detection).
 
-### `VisionFallback`
+### `VisionFallback` (Legacy)
 
 Uses Claude vision to find elements when DOM detection fails.
 
@@ -121,7 +128,7 @@ Groups and ranks failures from the failure log for analysis.
 
 - `__init__(failures: list[ApplicationFailure])`: Initializes with a list of failures to analyze.
 - `summarize() -> list[FailureSummary]`: Groups failures by type and ranks them by frequency, returning top summaries.
-- `get_top_unknown_questions(n: int = 10) -> list[tuple[str, int, list[str]]]`: Returns fuzzy-grouped unknown questions with their counts and similar variants.
+- `get_top_unknown_questions(n: int = 10) -> list[tuple[str, int, list[str]]]`: Returns fuzzy-grouped unknown questions with their counts and similar variants. 
 
 ### `ConfigSuggester`
 
@@ -138,14 +145,21 @@ Self-healing coordinator for automated failure resolution. Thread-safe implement
 - `maybe_repair() -> bool`: Evaluates if the threshold and cooldown conditions are met (thread-safe), and if so, dispatches a repair request. Returns `True` if a repair was dispatched.
 - `reset() -> None`: Resets the failure count (thread-safe), typically called after a successful repair dispatch or manual intervention.
 
-### `Prompts`
+### `Prompts` (Legacy)
 Functions for generating LLM prompts.
 - `build_form_prompt(dom_text: str, profile: dict) -> str`: Constructs a detailed user prompt containing the current page elements and the applicant's profile, instructing the agent to classify the page (returning a `page_type`) and plan actions.
 
 ## Data Models
 
-### `ApplicationFailure`
+### `ApplicationStatus`
 
+- `SUCCESS`: Application successfully submitted.
+- `FAILED`: Application failed due to unknown questions or other errors.
+- `SKIPPED`: Job skipped because it was external-only or non-Easy Apply.
+- `ERROR`: Unexpected system error.
+- `NEEDS_LOGIN`: User authentication required.
+
+### `ApplicationFailure`
 Represents a structured application failure event.
 
 - `timestamp: str`: ISO format timestamp of the failure.

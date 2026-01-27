@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: refactor: Strip external ATS and Claude fallbacks to focus on LinkedIn and Indeed Easy Apply only
+  - Removed `FormProcessor` and Claude fallback from `LinkedInFlow` and `ExternalFlow`
+  - Simplified `ApplicationAgent` initialization and flow orchestration
+  - Added `SKIPPED` status to `ApplicationStatus` for explicit handling of non-Easy Apply jobs
+  - Updated `AutoRepairer` and tests to use `content` instead of `spec` in dispatch payload
 - 2026-01-27: fix: Fix ApplicationResult initialization error by renaming 'pages' to 'pages_processed'
   - Updated `ExternalFlow` and `LinkedInFlow` to use `pages_processed` instead of `pages` in `ApplicationResult` calls
 - 2026-01-27: fix: Add thread safety to AutoRepairer to prevent race conditions
