@@ -22,43 +22,43 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: FailureSummarizer
+# Specification: ConfigSuggester
 Tier: FEATURE
 
 ## Description
-Groups and ranks failures from the failure log for analysis. Key feature: fuzzy-groups similar question texts so "Years of Python experience?" and "How many years of Python?" are recognized as the same pattern.
+Takes summarized failures and generates structured fix instructions that can be dispatched to Claude Code.
 
 ## Interface
-- `FailureSummary` dataclass with: failure_type, count, examples, grouped_questions (for unknown_question type)
-- `FailureSummarizer.__init__(failures: list[ApplicationFailure])` — Initialize with failures to analyze
-- `FailureSummarizer.summarize() -> list[FailureSummary]` — Group by type, rank by frequency, return top summaries
-- `FailureSummarizer.get_top_unknown_questions(n: int = 10) -> list[tuple[str, int, list[str]]]` — Returns (canonical_question, count, [similar_questions])
+- `FixSuggestion` dataclass with: target_file, fix_type, description, suggested_content, failure_count
+- `ConfigSuggester.suggest(summaries: list[FailureSummary]) -> list[FixSuggestion]` — Generate fix suggestions from failure summaries
 
 ## Must Do
-- Group failures by failure_type first
-- For `unknown_question` type: fuzzy-group similar question texts using difflib.SequenceMatcher (ratio > 0.7 = same group)
-- Pick shortest question in each fuzzy group as canonical representative
-- Sort summaries by count descending
-- Include up to 3 example failures per summary for context
-- Extract question_text from details dict for unknown_question grouping
-- Handle missing/malformed details gracefully (skip, don't crash)
+- Map failure types to fix strategies:
+- `unknown_question` → fix_type="add_pattern", target_file="src/agent/answer_engine.py", generate regex pattern + config key mapping
+- `react_select_fail` → fix_type="add_handler", target_file="src/agent/form_processor.py", generate selector pattern for react-select handling
+- `validation_error` → fix_type="investigate", target_file="src/agent/form_processor.py", include field selector and error messages for manual review
+- `stuck_loop` → fix_type="no_action", description="Handled by stuck detection" (no suggestion needed)
+- `timeout` → fix_type="investigate", include page_url and last_action
+- `crash` → fix_type="investigate", include exception info
+- For unknown_question: generate regex pattern from canonical question text (escape special chars, replace numbers with \d+, etc.)
+- Sort suggestions by failure_count descending (fix highest impact first)
+- Include example details in suggested_content for context
 
 ## Must Not Do
-- No external dependencies (use stdlib difflib, not rapidfuzz)
-- Don't load failures from disk - receives list in constructor
-- Don't modify the input failures list
+- Don't read/write files - just generate suggestion objects
+- Don't import FailureSummarizer (receive FailureSummary objects, define import at type-check time only)
 
 ## Edge Cases
-- Empty failures list → return empty list
-- Failure missing details.question_text → skip from question grouping
-- All failures are same type → single summary returned
-- Single failure → summary with count=1
+- Empty summaries list → return empty list
+- Summary with count=0 → skip
+- stuck_loop type → return empty suggestion (already handled)
+- Question text with special regex chars → escape properly
 
 ## Validation
-- Tests: pytest tests/feedback/test_failure_summarizer.py -v
+- Tests: pytest tests/feedback/test_config_suggester.py -v
 
 ## Target Path
-src/feedback/failure_summarizer.py
+src/feedback/config_suggester.py
 
 ## YOUR TASK
 
@@ -69,7 +69,7 @@ src/feedback/failure_summarizer.py
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/feedback/failure_summarizer.py`
+Implementation location: `src/feedback/config_suggester.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -80,7 +80,7 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_failuresummarizer.py`
+Test file location: `tests/test_configsuggester.py`
 
 After implementing, write tests that verify contract and behavior:
 
@@ -99,7 +99,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/feedback/test_failure_summarizer.py -v`
+Run validation: `pytest tests/feedback/test_config_suggester.py -v`
 
 Iterate until all tests pass.
 Maximum iterations: 5
