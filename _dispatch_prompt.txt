@@ -22,33 +22,18 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: P1ThreadSafety
+# Specification: FixPagesParam
 Tier: HOTFIX
 
 ## Description
-Add thread safety to AutoRepairer to prevent race conditions.
-
-## Interface
-- `AutoRepairer.__init__()` - Add `self._counter_lock = threading.Lock()`
-- `AutoRepairer.record_failure()` - Use lock when incrementing counter
-- `AutoRepairer.maybe_repair()` - Use lock when checking/resetting counter
+Fix TypeError: ApplicationResult.__init__() got an unexpected keyword argument 'pages'
 
 ## Must Do
-- Add `self._counter_lock = threading.Lock()` in `__init__` (note: there's already a `_lock` used by FailureLogger, name this one `_counter_lock`)
-- Wrap `self._failure_count += 1` in `record_failure()` with the lock
-- Wrap the threshold check and counter reset in `maybe_repair()` with the lock
-- Use context manager pattern: `with self._counter_lock:`
-
-## Must Not Do
-- Hold lock during HTTP request (that would block other threads)
-- Change any other logic
-- Rename or remove existing attributes
+- In `src/agent/external_flow.py`: Replace all `pages=` with `pages_processed=` in ApplicationResult calls
+- In `src/agent/linkedin_flow.py`: Replace all `pages=` with `pages_processed=` in ApplicationResult calls
 
 ## Validation
-- Tests: pytest tests/feedback/test_auto_repairer.py -v
-
-## Target Path
-src/feedback/auto_repairer.py
+- Tests: pytest tests/ -k "flow" -v --tb=short
 
 ## YOUR TASK
 
@@ -58,7 +43,7 @@ src/feedback/auto_repairer.py
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/feedback/auto_repairer.py`
+Implementation location: `src/fixpagesparam.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -72,7 +57,7 @@ If a 'Must Not Do' constraint conflicts with a 'Must Do' requirement (e.g., fixi
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_p1threadsafety.py`
+Test file location: `tests/test_fixpagesparam.py`
 
 After implementing, write tests that verify contract and behavior:
 
@@ -88,7 +73,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/feedback/test_auto_repairer.py -v`
+Run validation: `pytest tests/ -k "flow" -v --tb=short`
 
 Iterate until all tests pass.
 Maximum iterations: 5

@@ -211,7 +211,7 @@ class ExternalFlow:
                 return ApplicationResult(
                     status=ApplicationStatus.SUCCESS,
                     message="Application submitted",
-                    pages=page_num + 1,
+                    pages_processed=page_num + 1,
                     url=job_url,
                 )
 
@@ -229,7 +229,7 @@ class ExternalFlow:
                 return ApplicationResult(
                     status=ApplicationStatus.FAILED,
                     message=f"Unknown questions: {', '.join(unknown[:3])}",
-                    pages=page_num + 1,
+                    pages_processed=page_num + 1,
                     url=job_url,
                 )
 
@@ -246,7 +246,7 @@ class ExternalFlow:
         return ApplicationResult(
             status=ApplicationStatus.FAILED,
             message="Max pages reached or stuck",
-            pages=self._max_pages,
+            pages_processed=self._max_pages,
             url=job_url,
         )
 
