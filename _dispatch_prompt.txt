@@ -1,120 +1,35 @@
-Update `src/agent/linkedin_form_filler.py` to use industry-standard LinkedIn Easy Apply selectors from established GitHub bots.
+The bot is bailing out when it encounters unknown questions. This is wrong. It should fill what it can and SUBMIT ANYWAY.
 
-## Task: Add comprehensive selector constants and improve form field detection
-
-### 1. Add a SELECTORS class/dict at the top of the file with these proven selectors:
-
-```python
-class LinkedInSelectors:
-    """Industry-standard selectors from established LinkedIn Easy Apply bots."""
-    
-    # Form structure
-    FORM_SECTION = ".jobs-easy-apply-form-section__grouping"
-    FORM_ELEMENT = ".jobs-easy-apply-form-element"
-    
-    # Text inputs
-    TEXT_INPUT = ".artdeco-text-input--input"
-    TEXT_INPUT_ALT = ".fb-single-line-text__input"
-    
-    # Radio buttons
-    RADIO = "input[type='radio']"
-    RADIO_FIELDSET = "fieldset[data-test-form-builder-radio-button-form-component='true']"
-    RADIO_TITLE = "span[data-test-form-builder-radio-button-form-component__title]"
-    
-    # Dropdowns/Selects
-    DROPDOWN = ".fb-dropdown__select"
-    SELECT = "select"
-    
-    # Multi-select / typeahead
-    MULTI_SELECT = "[id*='text-entity-list-form-component']"
-    TEXT_ENTITY_LIST = "div[data-test-text-entity-list-form-component]"
-    SINGLE_LINE_TEXT = "div[data-test-single-line-text-form-component]"
-    
-    # Textarea
-    TEXTAREA = "textarea"
-    
-    # Labels
-    QUESTION_LABEL = ".fb-form-element-label"
-    VISUALLY_HIDDEN = ".visually-hidden"
-    
-    # Buttons
-    EASY_APPLY_BUTTON = "button.jobs-apply-button"
-    REVIEW_BUTTON = "button[aria-label='Review your application']"
-    SUBMIT_BUTTON = "button[aria-label='Submit application']"
-    PRIMARY_BUTTON = ".artdeco-button--primary"
-    NEXT_BUTTON = "button[aria-label='Continue to next step']"
-    
-    # File upload
-    RESUME_INPUT = "[id*='jobs-document-upload-file-input-upload-resume']"
-    COVER_LETTER_INPUT = "[id*='jobs-document-upload-file-input-upload-cover-letter']"
-    FILE_INPUT = "input[name='file']"
-    CHOOSE_RESUME = "[aria-label='Choose Resume']"
-    
-    # Follow checkbox
-    FOLLOW_CHECKBOX = "label[for='follow-company-checkbox']"
-    FOLLOW_LABEL = "text='to stay up to date with their page'"
-    
-    # Errors
-    ERROR_MESSAGE = ".artdeco-inline-feedback__message"
-    
-    # Confirmation/Success
-    APPLICATION_SENT = "text='Application sent'"
-    APPLICATION_SENT_ALT = "text='Your application was sent'"
-    POST_APPLY_MODAL = "[data-test-modal-id='post-apply-modal']"
-    MODAL_HEADER_SENT = ".artdeco-modal__header:has-text('Application sent')"
+## Problem
+In `src/agent/linkedin_flow.py`, when there are unknown questions, it logs them and SKIPS the job:
+```
+WARNING: Skipping job - unknown questions: [...]
 ```
 
-### 2. Update `_fill_text_inputs()` to use multiple selector strategies:
-- Try `.artdeco-text-input--input` first
-- Fallback to `.fb-single-line-text__input`
-- Also check for `input[type="text"]` within form sections
+This is unacceptable. The bot should:
+1. Fill everything it knows
+2. Leave unknown fields empty OR fill with a generic response
+3. SUBMIT ANYWAY
 
-### 3. Update `_fill_dropdowns()` to use multiple selector strategies:
-- Try `select` elements first
-- Then try `.fb-dropdown__select`
-- Skip if already has a value (pre-filled by LinkedIn profile)
+## Changes needed:
 
-### 4. Update `_fill_radio_buttons()` to use:
-- `fieldset[data-test-form-builder-radio-button-form-component='true']` for finding radio groups
-- `input[type='radio']` for individual buttons
-- Get label text from `span[data-test-form-builder-radio-button-form-component__title]` or `.visually-hidden`
+### 1. In `src/agent/linkedin_flow.py`:
+- Remove the logic that skips/fails jobs due to unknown questions
+- Just log the unknown questions as INFO, not WARNING
+- Continue with submission regardless
 
-### 5. Update `_fill_textareas()` to find textareas within form sections
+### 2. In `src/agent/linkedin_form_filler.py`:
+- When a field has no answer, skip it silently (don't add to unknown list that causes failure)
+- For textareas with no answer, optionally fill with a generic: "Please see my resume for details."
+- The filler should return success even if some fields couldn't be filled
 
-### 6. Update `is_confirmation_page()` to check for:
-- `text='Application sent'`
-- `text='Your application was sent'`
-- `[data-test-modal-id='post-apply-modal']`
-- `.artdeco-modal__header:has-text('Application sent')`
-- `h2:has-text('Application sent')`
+### 3. The goal is FIRE AND FORGET:
+- Fill what we can
+- Submit
+- Move on
+- Never stop because of missing answers
 
-### 7. Add method to uncheck follow checkbox:
-```python
-async def _uncheck_follow_company(self) -> None:
-    """Uncheck the follow company checkbox if present."""
-    selectors = [
-        "label[for='follow-company-checkbox']",
-        "text='to stay up to date with their page'"
-    ]
-    for selector in selectors:
-        try:
-            el = await self._page.query_selector(selector)
-            if el:
-                # Check if checkbox is checked
-                checkbox = await self._page.query_selector("#follow-company-checkbox")
-                if checkbox and await checkbox.is_checked():
-                    await el.click()
-                    break
-        except Exception:
-            continue
-```
-
-### Requirements:
-- Use Playwright async API
-- Add try/except around each selector attempt - don't fail if one selector doesn't work
-- Log which selector succeeded for debugging
-- Keep existing answer_engine integration
-- Maintain existing method signatures
+Find where the unknown questions cause the application to fail/skip and remove that behavior. The bot should be aggressive about submitting.
 
 ## Code Standards
 

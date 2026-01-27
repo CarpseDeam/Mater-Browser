@@ -88,24 +88,21 @@ class LinkedInFormFiller:
     def __init__(self, page: Page, answer_engine: AnswerEngine | None = None) -> None:
         self._page = page
         self._answers = answer_engine or AnswerEngine()
-        self._unknown_questions: list[str] = []
 
-    def fill_current_modal(self) -> tuple[bool, list[str]]:
-        """Fill all fields in the current Easy Apply modal.
+    def fill_current_modal(self) -> bool:
+        """Fill all fields in the current Easy Apply modal. Fire and forget.
 
         Returns:
-            (success, list of unknown questions)
+            True if modal was found and processed, False if no modal.
         """
-        self._unknown_questions = []
-
         modal = self._page.locator('.jobs-easy-apply-modal, [data-test-modal]').first
         try:
             if not modal.is_visible(timeout=2000):
                 logger.warning("No Easy Apply modal found")
-                return False, []
+                return False
         except Exception:
             logger.warning("No Easy Apply modal found")
-            return False, []
+            return False
 
         self._fill_text_inputs(modal)
         self._fill_selects(modal)
@@ -114,7 +111,7 @@ class LinkedInFormFiller:
         self._fill_textareas(modal)
         self._uncheck_follow_company()
 
-        return len(self._unknown_questions) == 0, self._unknown_questions
+        return True
 
     def _fill_text_inputs(self, container: Locator) -> None:
         """Fill text input fields using multiple selector strategies."""
@@ -174,10 +171,9 @@ class LinkedInFormFiller:
             else:
                 inp.fill(str(answer))
                 logger.info(f"Filled [{strategy}]: {question[:40]} = {answer}")
-            return True
         else:
-            self._unknown_questions.append(question)
-            return True
+            logger.info(f"Skipped (no answer): {question[:50]}")
+        return True
 
     def _get_element_id(self, element: Locator) -> str:
         """Get element ID or generate one from attributes."""
@@ -245,7 +241,7 @@ class LinkedInFormFiller:
                     logger.warning(f"Could not select {answer} for {question}: {e}")
                     return False
         else:
-            self._unknown_questions.append(question)
+            logger.info(f"Skipped select (no answer): {question[:50]}")
             return True
 
     def _fill_radios(self, container: Locator) -> None:
@@ -316,7 +312,7 @@ class LinkedInFormFiller:
         """Fill a single radio group. Returns True if processed."""
         answer = self._answers.get_answer(question, "radio")
         if answer is None:
-            self._unknown_questions.append(question)
+            logger.info(f"Skipped radio (no answer): {question[:50]}")
             return True
 
         answer_str = str(answer).lower()
@@ -396,7 +392,9 @@ class LinkedInFormFiller:
                 textarea.fill(str(answer))
                 logger.info(f"Textarea: {question[:40]} = {str(answer)[:30]}...")
             else:
-                self._unknown_questions.append(question)
+                fallback = "Please see my resume for details."
+                textarea.fill(fallback)
+                logger.info(f"Textarea (fallback): {question[:40]} = {fallback}")
 
     def _uncheck_follow_company(self) -> None:
         """Uncheck the follow company checkbox if present."""

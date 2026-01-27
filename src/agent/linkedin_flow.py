@@ -164,17 +164,7 @@ class LinkedInFlow:
                     url=job_url,
                 )
 
-            success, unknown = filler.fill_current_modal()
-
-            if unknown:
-                logger.warning(f"Skipping job - unknown questions: {unknown[:3]}")
-                filler.close_modal()
-                return ApplicationResult(
-                    status=ApplicationStatus.FAILED,
-                    message=f"Unknown questions: {', '.join(unknown[:3])}",
-                    pages_processed=page_num + 1,
-                    url=job_url,
-                )
+            filler.fill_current_modal()
 
             if not filler.click_next():
                 logger.warning("Could not find next button")
