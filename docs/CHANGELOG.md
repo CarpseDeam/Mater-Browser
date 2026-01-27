@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Implement deterministic Indeed Easy Apply form filler
+  - Added `IndeedFormFiller` for config-driven, deterministic filling of Indeed application forms
+  - Integrated with `AnswerEngine` for consistent answers across LinkedIn and Indeed
+  - Implemented specific selectors for Indeed's unique DOM structure, including "rich-text-question-input"
+  - Added comprehensive behavior tests in `tests/test_indeedformfiller.py`
+
 - 2026-01-26: feat: Implement deterministic LinkedIn Easy Apply form filler
   - Introduced `AnswerEngine` for config-driven, fuzzy-matched question answering
   - Added `LinkedInFormFiller` to handle LinkedIn Easy Apply modals without LLM intervention

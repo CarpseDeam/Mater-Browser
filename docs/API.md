@@ -26,10 +26,18 @@ Deterministic form filler for LinkedIn Easy Apply modals.
 - `fill_current_modal() -> tuple[bool, list[str]]`: Fills all fields in the current modal. Returns success status and a list of any unknown questions.
 - `click_next() -> bool`: Clicks the next, submit, or review button to advance the form.
 - `is_confirmation_page() -> bool`: Detects if the application success page has been reached.
-- `close_modal()`: Closes the Easy Apply modal after completion or failure.
+- `close_modal()`: Closes the Easy Apply modal after completion or failure.     
+
+### `IndeedFormFiller`
+
+Deterministic form filler for Indeed Easy Apply pages.
+
+- `fill_current_page() -> tuple[bool, list[str]]`: Fills all fields on the current Indeed form page. Returns success status and a list of unknown questions.
+- `click_continue() -> bool`: Clicks the "Continue" or "Submit" button to advance the form.
+- `is_success_page() -> bool`: Detects if the application success/confirmation page has been reached.
+- `is_review_page() -> bool`: Checks if the form is on a review step before final submission.
 
 ### `FormProcessor`
-
 Handles multi-page application flows.
 
 - `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process. It first attempts to use a deterministic `BaseATSHandler` (via `get_handler`). If no handler is available, it falls back to the Claude-based processing, including automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.
