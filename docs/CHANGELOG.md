@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Add expanded regex patterns to AnswerEngine for EEO, salary, and preferences
+  - Implemented comprehensive pattern matching for EEO/demographic questions (gender, race, veteran, disability)
+  - Added salary expectation patterns (expected, minimum, hourly rate)
+  - Added language proficiency and preference patterns (notice period, start date, work type)
+  - Enhanced `_format_answer` to support `select` field types by returning values as-is
 - 2026-01-27: fix: Resolve critical bugs in self-healing feedback loop and external job detection
   - Fixed key name in `FailureSummarizer` to check for both "question" and "question_text" for improved robustness
   - Updated `AutoRepairer` to send a formatted Markdown spec instead of raw JSON to the bridge server

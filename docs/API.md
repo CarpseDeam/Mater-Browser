@@ -16,7 +16,7 @@ Classifies job pages and finds primary action buttons.
 
 Config-driven answer lookup for form questions.
 
-- `get_answer(question: str, field_type: str = "text", *, job_url: str = "", job_title: str = "", company: str = "", page_snapshot: str | None = None) -> Optional[Any]`: Looks up an answer for a given question text by matching against `config/answers.yaml` patterns. Logs unknown questions to `FailureLogger`.
+- `get_answer(question: str, field_type: str = "text", *, job_url: str = "", job_title: str = "", company: str = "", page_snapshot: str | None = None) -> Optional[Any]`: Looks up an answer for a given question text by matching against `config/answers.yaml` patterns. Supports `text`, `radio`, and `select` field types. Logs unknown questions to `FailureLogger`.
 - `has_answer(question: str) -> bool`: Checks if an answer is available for the specified question.
 
 ### `LinkedInFormFiller`
