@@ -1,16 +1,20 @@
-# Personal Info
+# Kori Mead - LinkedIn Easy Apply Answers
+# Auto-generated from resume
+
 personal:
   first_name: "Kori"
   last_name: "Mead"
   email: "meadk989@gmail.com"
-  phone: "580-301-3358"
+  phone: "5803013358"
+  phone_country_code: "United States (+1)"
   city: "Lorain, Ohio"
   state: "Ohio"
   zip: "44052"
-  linkedin: "https://www.linkedin.com/in/kori-mead-859b20355/"
-  website: ""
+  linkedin: "https://linkedin.com/in/korimead"
+  website: "https://github.com/korimead"
+  street_address: ""
 
-# Yes/No Checkbox Questions (fuzzy match question text)
+# Yes/No Checkbox Questions
 checkboxes:
   drivers_license: true
   require_visa: false
@@ -24,56 +28,105 @@ checkboxes:
   us_citizen: true
   work_authorization: true
   over_18: true
+  eligible_to_work: true
+  sponsorship_required: false
+  authorized_us: true
+  authorized_united_states: true
 
-# Years of Experience (technology/skill -> years)
+# Years of Technology Experience
 technology:
   python: 6
   fastapi: 4
-  postgresql: 4
-  aws: 3
-  docker: 3
-  kubernetes: 1
-  javascript: 2
-  typescript: 2
-  react: 1
-  sql: 6
-  git: 6
-  linux: 4
-  redis: 2
-  snowflake: 3
   pydantic: 4
   sqlalchemy: 4
-  asyncio: 3
-  selenium: 3
-  pytest: 4
-  default: 0
+  asyncio: 4
+  websockets: 3
+  postgresql: 5
+  postgres: 5
+  sql: 6
+  snowflake: 2
+  aws: 4
+  s3: 4
+  boto3: 3
+  docker: 3
+  git: 6
+  ci_cd: 3
+  pytest: 3
+  selenium: 4
+  playwright: 3
+  javascript: 3
+  js: 3
+  es6: 3
+  airtable: 2
+  yolo: 1
+  yolov8: 1
+  llm: 2
+  ml: 2
+  machine_learning: 2
+  ai: 2
+  rest: 5
+  api: 5
+  backend: 6
+  data_engineering: 3
+  etl: 3
+  scraping: 5
+  web_scraping: 5
+  redis: 2
+  linux: 4
+  bash: 4
+  default: 1
 
 # Years of Industry Experience
 industry:
   software_engineering: 6
+  software_development: 6
   backend_development: 6
   platform_engineering: 4
   data_engineering: 3
   information_technology: 6
   engineering: 6
   python_development: 6
-  api_development: 4
-  default: 0
+  web_development: 4
+  api_development: 5
+  infrastructure: 4
+  devops: 3
+  default: 1
 
 # Education
 education:
-  highest_degree: "Some College"
+  highest_degree: "Technical Training"
   degree_completed:
     - "High School Diploma"
-  gpa: "3.0"
+    - "Technical Certification"
+  gpa: "3.5"
+  school: "United States Air Force"
+  field_of_study: "Technical & Electrical Systems"
+  graduation_year: "2013"
 
 # Language Proficiency
 languages:
   english: "Native or bilingual"
 
-# Select/Dropdown defaults
+# Salary Expectations (adjust as needed)
+salary:
+  minimum: "80000"
+  expected: "100000"
+  desired: "120000"
+  hourly_rate: "50"
+
+# Select/Dropdown defaults (EEO - decline all)
 dropdowns:
-  gender: "Decline to answer"
-  race: "Decline to answer"
-  veteran: "I am a veteran"
-  disability: "Decline to answer"
+  gender: "Decline to self-identify"
+  race: "Decline to self-identify"
+  ethnicity: "Decline to self-identify"
+  veteran: "I am not a protected veteran"
+  veteran_status: "I am not a protected veteran"
+  disability: "I do not wish to answer"
+  disability_status: "I do not wish to answer"
+
+# Work preferences
+preferences:
+  work_type: "Remote"
+  job_type: "Full-time"
+  notice_period: "2 weeks"
+  available_start: "Immediately"

@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-26: feat: Implement deterministic LinkedIn Easy Apply form filler
+  - Introduced `AnswerEngine` for config-driven, fuzzy-matched question answering
+  - Added `LinkedInFormFiller` to handle LinkedIn Easy Apply modals without LLM intervention
+  - Created `config/answers.yaml` for storing deterministic personal and experience data
+  - Updated `LinkedInFlow` to use the new deterministic filler, with Claude as a fallback
 - 2026-01-26: refactor: Standardize ATS handlers and fix naming inconsistencies 
   - Standardized all ATS handlers to use `detect_page_state`, `FormPage`, and `PageResult` to match `BaseATSHandler`
   - Fixed inconsistencies in `LeverHandler`, `PhenomHandler`, and `IndeedHandler` where `PageState` and `HandlerResult` were incorrectly used

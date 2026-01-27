@@ -83,13 +83,15 @@
 ## Structure
 
 - `config/` - Configuration
+    - `answers.yaml` - Deterministic answers for form filling
 - `docs/` - Documentation
 - `scripts/` - Scripts
 - `src/` - Source code
         - `agent/`
-            - `actions.py` - Defines action models and the `ActionPlan` structure   
-            - `prompts.py` - Manages system and user prompts for Claude agent       
-            - `form_processor.py` - Orchestrates form filling and multi-page flows  
+            - `actions.py` - Defines action models and the `ActionPlan` structure
+            - `answer_engine.py` - Config-driven answer lookup for questions
+            - `linkedin_form_filler.py` - Deterministic filler for LinkedIn Easy Apply
+            - `prompts.py` - Manages system and user prompts for Claude agent               - `form_processor.py` - Orchestrates form filling and multi-page flows  
             - `zero_actions_handler.py` - Handles edge cases (JD pages, errors) using DOM analysis and vision fallback
             - `vision_fallback.py` - Uses Claude vision to find elements when DOM detection fails
             - `success_detector.py` - Detects application completion via URL, text, and form state

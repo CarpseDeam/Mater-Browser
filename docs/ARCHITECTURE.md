@@ -26,8 +26,15 @@ The system utilizes an ATS-first approach to handle job applications determinist
 
 The `FormProcessor` orchestrates the interaction with web forms using a hybrid strategy:
 1. **ATS Handler Attempt**: It first tries to identify the ATS and use a deterministic handler from the `src/ats/` module.
-2. **Claude Fallback**: If no deterministic handler is available, it utilizes a multi-stage prompting strategy defined in `prompts.py` to guide the LLM agent.        
-- **Page State Detection**: The agent first classifies the page as a `job_listing`, `form`, or `confirmation` page to determine the appropriate course of action.- **Element Filtering**: Actively ignores non-functional elements like headers, footers, and social links to reduce noise and token usage.
+2. **Deterministic LinkedIn Filling**: Specifically for LinkedIn Easy Apply, the system uses a config-driven deterministic filler (`LinkedInFormFiller`) and an `AnswerEngine` to avoid LLM hallucinations and latency.
+3. **Claude Fallback**: If no deterministic handler or filler is applicable, it utilizes a multi-stage prompting strategy defined in `prompts.py` to guide the LLM agent.  
+
+### Deterministic LinkedIn Flow
+To increase reliability and speed for LinkedIn applications, the system bypasses AI for Easy Apply modals:
+- **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching.
+- **Form Filler**: Automatically identifies and fills text inputs, selects, radio buttons, and checkboxes in the LinkedIn modal.
+- **Fail-Safe**: If an unknown question is encountered for which no answer is configured, the system gracefully skips the job and logs the missing question for future configuration.
+- **Element Filtering**: Actively ignores non-functional elements like headers, footers, and social links to reduce noise and token usage.
 - **Prioritized Filling**: Enforces a strict order of operations (e.g., required fields and contact info before optional fields) and ensures the primary action button is clicked last.
 - **Form Advancement Failsafe**: Automatically detects if the agent's plan fails to include a terminal click action on a multi-page form and appends a click to the most likely 'Submit' or 'Next' button to prevent execution hangs.
 - **Recovery from Edge Cases**: When the analysis model returns no actionable elements, it delegates to `ZeroActionsHandler` to:    - **Classify Page State**: Distinguish between job descriptions, confirmation pages, loading states, and error pages.

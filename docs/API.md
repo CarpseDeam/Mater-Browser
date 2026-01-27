@@ -12,6 +12,22 @@ Classifies job pages and finds primary action buttons.
 - `find_apply_button(refresh: bool = False) -> Optional[ElementCandidate]`: Identifies the best candidate for an "Apply" button on the page using weighted scoring.
 - `click_apply_button(candidate: ElementCandidate, timeout: int = 5000) -> bool`: Attempts to click the identified button using a robust multi-stage retry sequence.
 
+### `AnswerEngine`
+
+Config-driven answer lookup for form questions.
+
+- `get_answer(question: str, field_type: str = "text") -> Optional[Any]`: Looks up an answer for a given question text by matching against `config/answers.yaml` patterns.
+- `has_answer(question: str) -> bool`: Checks if an answer is available for the specified question.
+
+### `LinkedInFormFiller`
+
+Deterministic form filler for LinkedIn Easy Apply modals.
+
+- `fill_current_modal() -> tuple[bool, list[str]]`: Fills all fields in the current modal. Returns success status and a list of any unknown questions.
+- `click_next() -> bool`: Clicks the next, submit, or review button to advance the form.
+- `is_confirmation_page() -> bool`: Detects if the application success page has been reached.
+- `close_modal()`: Closes the Easy Apply modal after completion or failure.
+
 ### `FormProcessor`
 
 Handles multi-page application flows.

@@ -36,6 +36,11 @@ title_exclusions:
     - "intern"
     - "graduate"
     - "apprentice"
+    - "fresher"
+    - "new grad"
+    - "0-1 years"
+    - "0-2 years"
+    - "1-2 years"
 
   platforms:
     - "ios"
