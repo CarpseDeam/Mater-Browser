@@ -2,6 +2,16 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Resolve GUI freezing by moving browser operations to background worker
+  - Introduced `ApplyWorker` to handle all Playwright and automation tasks in a separate thread
+  - Implemented thread-safe communication between GUI and background worker using queues and signals
+  - Refactored `DashboardApp` to be fully responsive during job applications and scraping
+- 2026-01-27: feat: Enhance Indeed Easy Apply deterministic filler
+  - Integrated `IndeedFormFiller` into `ExternalFlow` for reliable, non-AI Indeed applications
+  - Added `IndeedHelpers` for handling specific Indeed UI elements like resume cards and modals
+  - Improved `IndeedFormFiller` selectors and added detection for resume selection pages
+  - Added comprehensive state handling (resume, review, success) for Indeed's multi-step flow
+
 - 2026-01-27: feat: Implement deterministic Indeed Easy Apply form filler
   - Added `IndeedFormFiller` for config-driven, deterministic filling of Indeed application forms
   - Integrated with `AnswerEngine` for consistent answers across LinkedIn and Indeed

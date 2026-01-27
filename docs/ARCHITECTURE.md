@@ -22,16 +22,23 @@ The system utilizes an ATS-first approach to handle job applications determinist
     - `apply()`: Orchestrates the full end-to-end application flow using these standardized methods.
 - **Field Mapping**: The `FieldMapper` ensures that profile data is correctly mapped to the specific field names and IDs used by different ATS platforms.       
 - **Hybrid Strategy**: The system first attempts to use a deterministic handler. If no handler is found for the detected ATS, or if the ATS is unknown, it falls back to the Claude-based agent.
+
+## User Interface & Background Operations
+
+To maintain high responsiveness, the system strictly separates GUI operations from browser automation.
+- **Background Worker**: The `ApplyWorker` (in `src/gui/worker.py`) runs in a dedicated thread and owns the `BrowserConnection` and `ApplicationAgent`.
+- **Asynchronous Communication**: The GUI communicates with the worker via thread-safe message queues and Python's `threading` signals. This prevents blocking the main event loop during long-running tasks like job scraping or multi-step application flows.
+- **Thread Isolation**: Playwright objects are managed exclusively within the worker thread to comply with its single-threaded execution model.
+
 ## Form Processing
 
 The `FormProcessor` orchestrates the interaction with web forms using a hybrid strategy:
 
 1. **ATS Handler Attempt**: It first tries to identify the ATS and use a deterministic handler from the `src/ats/` module.
 
-2. **Deterministic Platform Filling**: For LinkedIn and Indeed Easy Apply, the system uses platform-specific deterministic fillers (`LinkedInFormFiller`, `IndeedFormFiller`) and an `AnswerEngine` to avoid LLM hallucinations and latency.
+2. **Deterministic Platform Filling**: For LinkedIn and Indeed Easy Apply, the system uses platform-specific deterministic fillers (`LinkedInFormFiller`, `IndeedFormFiller`) and an `AnswerEngine` to avoid LLM hallucinations and latency. Indeed applications are handled via `ExternalFlow` when "Easy Apply" patterns are detected on Indeed domains.
 
 3. **Claude Fallback**: If no deterministic handler or filler is applicable, it utilizes a multi-stage prompting strategy defined in `prompts.py` to guide the LLM agent.
-
 
 
 ### Deterministic LinkedIn Flow

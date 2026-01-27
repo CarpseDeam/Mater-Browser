@@ -32,13 +32,25 @@ Deterministic form filler for LinkedIn Easy Apply modals.
 
 Deterministic form filler for Indeed Easy Apply pages.
 
-- `fill_current_page() -> tuple[bool, list[str]]`: Fills all fields on the current Indeed form page. Returns success status and a list of unknown questions.
+- `fill_current_page() -> tuple[bool, list[str]]`: Fills all fields on the current Indeed form page. Returns success status and a list of unknown questions.    
 - `click_continue() -> bool`: Clicks the "Continue" or "Submit" button to advance the form.
 - `is_success_page() -> bool`: Detects if the application success/confirmation page has been reached.
 - `is_review_page() -> bool`: Checks if the form is on a review step before final submission.
+- `is_resume_page() -> bool`: Detects if the current page is for resume selection/upload.
 
-### `FormProcessor`
-Handles multi-page application flows.
+## GUI API
+
+### `ApplyWorker`
+
+Background worker for thread-safe browser automation.
+
+- `start()`: Initializes the background thread and establishes the browser connection.
+- `stop()`: Gracefully shuts down the worker and disconnects from the browser.
+- `submit_apply(request: ApplyRequest)`: Queues a new job application request for processing.
+- `on_status(status: WorkerStatus)`: Callback for worker state updates (Connecting, Ready, Error, etc.).
+- `on_result(result: ApplyResult)`: Callback for reporting the outcome of an application attempt.
+
+### `FormProcessor`Handles multi-page application flows.
 
 - `process(job_url: str, source: Optional[JobSource] = None) -> ApplicationResult`: Orchestrates the form-filling process. It first attempts to use a deterministic `BaseATSHandler` (via `get_handler`). If no handler is available, it falls back to the Claude-based processing, including automated recovery via `ZeroActionsHandler`. Retrieves `ANTHROPIC_API_KEY` from environment for vision support.
 
