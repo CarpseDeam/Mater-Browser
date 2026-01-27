@@ -10,8 +10,8 @@
 - `docs/` - Documentation
 - `scripts/` - Scripts
 - `src/` - Source code
-    - `stuck_detection.py` - Detects and prevents infinite loops in form processing
     - `agent/`
+        - `stuck_detection.py` - Detects and prevents infinite loops in form processing
         - `actions.py` - Defines action models and the `ActionPlan` structure   
         - `answer_engine.py` - Config-driven answer lookup for questions        
         - `linkedin_form_filler.py` - Deterministic filler for LinkedIn Easy Apply
@@ -34,6 +34,7 @@
         - `runner.py` - Manages execution of application plans
     - `feedback/`
         - `failure_logger.py` - Captures and logs application failures for analysis
+        - `failure_summarizer.py` - Groups and ranks failures for easier analysis and auto-fixing
     - `gui/`
         - `app.py` - Main GUI application setup
         - `dashboard.py` - Primary automation control panel

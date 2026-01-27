@@ -111,11 +111,18 @@ Dedicated success detection for application completion.
 Captures and manages application failures for analysis.
 
 - `log(failure: ApplicationFailure) -> None`: Appends a structured failure record to the JSONL log file.
-- `read_all(include_addressed: bool = False) -> list[ApplicationFailure]`: Retrieves all logged failures, with an option to filter for unaddressed ones.
+- `read_all(include_addressed: bool = False) -> list[ApplicationFailure]`: Retrieves all logged failures, with an option to filter for unaddressed ones.        
 - `mark_addressed(timestamps: list[str]) -> None`: Marks specific failures as addressed based on their unique ISO timestamps.
 
-### `Prompts`
+### `FailureSummarizer`
 
+Groups and ranks failures from the failure log for analysis.
+
+- `__init__(failures: list[ApplicationFailure])`: Initializes with a list of failures to analyze.
+- `summarize() -> list[FailureSummary]`: Groups failures by type and ranks them by frequency, returning top summaries.
+- `get_top_unknown_questions(n: int = 10) -> list[tuple[str, int, list[str]]]`: Returns fuzzy-grouped unknown questions with their counts and similar variants.
+
+### `Prompts`
 Functions for generating LLM prompts.
 
 - `build_form_prompt(dom_text: str, profile: dict) -> str`: Constructs a detailed user prompt containing the current page elements and the applicant's profile, instructing the agent to classify the page (returning a `page_type`) and plan actions.
@@ -127,16 +134,24 @@ Functions for generating LLM prompts.
 Represents a structured application failure event.
 
 - `timestamp: str`: ISO format timestamp of the failure.
-- `job_url: str`: URL of the job application where the failure occurred.
+- `job_url: str`: URL of the job application where the failure occurred.        
 - `job_title: str`: Title of the job.
 - `company: str`: Name of the company.
 - `failure_type: Literal[...]`: One of `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, `react_select_fail`.
 - `details: dict`: Context-specific details varying by `failure_type`.
 - `page_snapshot: Optional[str]`: Optional HTML or text snapshot of the page at the time of failure.
-- `addressed: bool`: Whether this failure has been reviewed and resolved.
+- `addressed: bool`: Whether this failure has been reviewed and resolved.       
+
+### `FailureSummary`
+
+Groups application failures by type and similarity.
+
+- `failure_type: str`: The type of failure being summarized.
+- `count: int`: Number of occurrences.
+- `examples: list[ApplicationFailure]`: Up to 3 example failures for context.
+- `grouped_questions: list[dict]`: (For `unknown_question` type) Fuzzy-grouped question text and metadata.
 
 ### `ActionPlan`
-
 The structured response from the Claude agent.
 
 - `page_type: PageType`: Classification of the current page (`job_listing`, `form`, `confirmation`, or `unknown`).

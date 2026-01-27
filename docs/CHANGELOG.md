@@ -2,6 +2,14 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Implement FailureSummarizer for grouping and ranking application failures
+  - Introduced `FailureSummarizer` to analyze and group failures from the log
+  - Implemented fuzzy-grouping for `unknown_question` types using `difflib.SequenceMatcher`
+  - Added ranking of failures by frequency to prioritize fixing common issues
+- 2026-01-27: refactor: Relocate stuck detection to agent module
+  - Moved `stuck_detection.py` from `src/` to `src/agent/` for improved architectural consistency
+  - Updated all imports and tests to reference the new location
+  - Removed temporary migration script `movestuckdetectionfiles.py`
 - 2026-01-27: feat: Implement FailureLogger for capturing and analyzing application failures
   - Introduced `FailureLogger` to log application failures (JSONL format) for analysis and auto-fixing
   - Supports structured logging for `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, and `react_select_fail`

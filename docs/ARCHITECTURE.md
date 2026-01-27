@@ -82,15 +82,15 @@ The `SuccessDetector` component is responsible for determining if an application
 
 ## Failure Logging & Feedback
 
-To enable continuous improvement and automated recovery, the system includes a structured failure logging layer.
+To enable continuous improvement and automated recovery, the system includes a structured failure logging and analysis layer.
 - **Failure Categorization**: Failures are classified into specific types such as `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, and `react_select_fail`.
-- **Contextual Data**: Each failure captures relevant context, including the job URL, page snapshots, and specific details (e.g., the exact question text for `unknown_question` or the repeating sequence for `stuck_loop`).
-- **Persistence**: Failures are stored in a thread-safe JSONL format in the `data/` directory, allowing for append-only logging without loading the entire history into memory.
-- **Feedback Loop**: This logged data serves as a feedback system for developers to update `answers.yaml` or refine ATS handlers, and for the system to eventually implement automated self-fixing.
+- **Contextual Data**: Each failure captures relevant context, including the job URL, page snapshots, and specific details (e.g., the exact question text for `unknown_question`).
+- **Persistence**: Failures are stored in a thread-safe JSONL format in the `data/` directory.
+- **Summarization & Analysis**: The `FailureSummarizer` groups similar failures (using fuzzy matching for questions) and ranks them by frequency. This allows developers to quickly identify the most impactful issues to address in `answers.yaml` or ATS handlers.
 
 ## Loop & Stuck Detection
 
-The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/stuck_detection.py`):
+The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`):
 - **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state.
 - **URL Tracking**: Monitors normalized URL visit counts and element counts to detect repetitions even if content slightly changes.
 - **Pattern Detection**: Identifies repeating sequences of pages (e.g., A-B-A-B or A-B-C-A-B-C) to break out of circular navigation loops.
