@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Implement ConfigSuggester for automated failure fix generation
+  - Introduced `ConfigSuggester` to generate structured fix instructions from failure summaries
+  - Supports automated regex pattern generation for `unknown_question` failures
+  - Provides targeted fix suggestions for `react_select_fail`, `validation_error`, and `crash` types
+  - Integrated with the feedback loop to facilitate auto-fixing of common application issues
 - 2026-01-27: feat: Implement FailureSummarizer for grouping and ranking application failures
   - Introduced `FailureSummarizer` to analyze and group failures from the log
   - Implemented fuzzy-grouping for `unknown_question` types using `difflib.SequenceMatcher`

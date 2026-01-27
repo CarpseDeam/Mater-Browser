@@ -122,9 +122,14 @@ Groups and ranks failures from the failure log for analysis.
 - `summarize() -> list[FailureSummary]`: Groups failures by type and ranks them by frequency, returning top summaries.
 - `get_top_unknown_questions(n: int = 10) -> list[tuple[str, int, list[str]]]`: Returns fuzzy-grouped unknown questions with their counts and similar variants.
 
+### `ConfigSuggester`
+
+Generates structured fix instructions from failure summaries.
+
+- `suggest(summaries: list[FailureSummary]) -> list[FixSuggestion]`: Analyzes failure summaries and generates targeted fix suggestions, including regex patterns for new questions and selectors for React components.
+
 ### `Prompts`
 Functions for generating LLM prompts.
-
 - `build_form_prompt(dom_text: str, profile: dict) -> str`: Constructs a detailed user prompt containing the current page elements and the applicant's profile, instructing the agent to classify the page (returning a `page_type`) and plan actions.
 
 ## Data Models
@@ -148,12 +153,21 @@ Groups application failures by type and similarity.
 
 - `failure_type: str`: The type of failure being summarized.
 - `count: int`: Number of occurrences.
-- `examples: list[ApplicationFailure]`: Up to 3 example failures for context.
+- `examples: list[ApplicationFailure]`: Up to 3 example failures for context.   
 - `grouped_questions: list[dict]`: (For `unknown_question` type) Fuzzy-grouped question text and metadata.
+
+### `FixSuggestion`
+
+Represents a structured instruction for fixing an application failure.
+
+- `target_file: str`: The source file that needs to be modified.
+- `fix_type: Literal["add_pattern", "add_handler", "investigate", "no_action"]`: The strategy for the fix.
+- `description: str`: Human-readable description of the issue and suggested fix.
+- `suggested_content: str`: The specific code or configuration pattern suggested.
+- `failure_count: int`: Number of failures this fix would address.
 
 ### `ActionPlan`
 The structured response from the Claude agent.
-
 - `page_type: PageType`: Classification of the current page (`job_listing`, `form`, `confirmation`, or `unknown`).
 - `reasoning: str`: Brief explanation of the agent's decision.
 - `actions: list[Action]`: Ordered list of actions to execute.

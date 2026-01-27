@@ -86,7 +86,8 @@ To enable continuous improvement and automated recovery, the system includes a s
 - **Failure Categorization**: Failures are classified into specific types such as `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, and `react_select_fail`.
 - **Contextual Data**: Each failure captures relevant context, including the job URL, page snapshots, and specific details (e.g., the exact question text for `unknown_question`).
 - **Persistence**: Failures are stored in a thread-safe JSONL format in the `data/` directory.
-- **Summarization & Analysis**: The `FailureSummarizer` groups similar failures (using fuzzy matching for questions) and ranks them by frequency. This allows developers to quickly identify the most impactful issues to address in `answers.yaml` or ATS handlers.
+- **Summarization & Analysis**: The `FailureSummarizer` groups similar failures (using fuzzy matching for questions) and ranks them by frequency. This allows developers to quickly identify the most impactful issues.
+- **Fix Generation**: The `ConfigSuggester` translates failure summaries into actionable fix instructions. For `unknown_question` types, it automatically generates regex patterns and configuration keys. For other types, it identifies the target files and provides context for manual or semi-automated resolution.
 
 ## Loop & Stuck Detection
 
