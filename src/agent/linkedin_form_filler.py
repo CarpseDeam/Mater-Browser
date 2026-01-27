@@ -12,13 +12,18 @@ class LinkedInFormFiller:
     """Fill LinkedIn Easy Apply forms using config-driven answers."""
 
     SUBMIT_BUTTON_PATTERNS = [
+        # Final submit (most specific first)
+        'button[aria-label="Submit application"]',
+        # Next/Continue/Review
         'button[aria-label*="Submit" i]',
         'button[aria-label*="Review" i]',
         'button[aria-label*="Next" i]',
+        '.artdeco-button--primary',
         'button:has-text("Submit application")',
         'button:has-text("Review")',
         'button:has-text("Next")',
         'button:has-text("Continue")',
+        'button[type="submit"]',
     ]
 
     def __init__(self, page: Page, answer_engine: AnswerEngine | None = None) -> None:

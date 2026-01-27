@@ -37,23 +37,13 @@ Deterministic form filler for LinkedIn Easy Apply modals.
 
 ### `IndeedFormFiller`
 
-
-
 Deterministic form filler for Indeed Easy Apply pages.
 
-
-
-- `fill_current_page() -> tuple[bool, list[str]]`: Fills all fields on the current Indeed form page. Returns success status and a list of unknown questions.    
-
+- `fill_current_page() -> tuple[bool, list[str]]`: Fills all fields on the current Indeed form page. Returns success status and a list of unknown questions.
 - `click_continue() -> bool`: Clicks the "Continue" or "Submit" button to advance the form.
-
 - `is_success_page() -> bool`: Detects if the application success/confirmation page has been reached.
-
 - `is_review_page() -> bool`: Checks if the form is on a review step before final submission.
-
 - `is_resume_page() -> bool`: Detects if the current page is for resume selection/upload.
-
-
 
 ### `FormProcessorStuckDetection` (Legacy)
 
@@ -73,43 +63,23 @@ Detects when form processing is stuck repeating the same page.
 
 ## GUI API
 
-
-
 ### `ApplyWorker`
-
-
 
 Background worker for thread-safe browser automation.
 
-
-
 - `start()`: Initializes the background thread and establishes the browser connection.
-
 - `stop()`: Gracefully shuts down the worker and disconnects from the browser.  
-
 - `submit_apply(request: ApplyRequest)`: Queues a new job application request for processing.
-
 - `on_status(status: WorkerStatus)`: Callback for worker state updates (Connecting, Ready, Error, etc.).
-
 - `on_result(result: ApplyResult)`: Callback for reporting the outcome of an application attempt.
-
-
 
 ### `SuccessDetector`
 
-
-
 Dedicated success detection for application completion.
 
-
-
 - `check() -> CompletionResult`: Evaluates all completion signals (URL, text, form state) and returns the first matching success indicator.
-
 - `mark_form_filled()`: Marks that a form has been interacted with, enabling the form-disappearance signal.
-
 - `reset()`: Resets the detection state for a new application session.
-
-
 
 ### `FailureLogger`
 

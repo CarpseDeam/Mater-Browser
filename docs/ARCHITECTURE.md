@@ -29,7 +29,7 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 - **Direct Button Selection**: Uses optimized CSS selectors to immediately identify the "Easy Apply" button, bypassing generic DOM analysis for faster interaction.
 
-- **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. Supports a wide range of categories including personal info, experience, EEO/demographics (gender, race, veteran status, disability), salary expectations, language proficiency, and work preferences. When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
+- **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. Supports a wide range of categories including personal info, experience, EEO/demographics (gender, race, veteran status, disability), salary expectations, language proficiency, and work preferences. Patterns are prioritized to ensure EEO/demographic questions match correctly before generic personal information patterns (e.g., preventing disability questions from being mistaken for personal website fields). When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
 
 - **Form Filler**: Automatically identifies and fills text inputs, selects, radio buttons, and checkboxes in the LinkedIn modal.
 

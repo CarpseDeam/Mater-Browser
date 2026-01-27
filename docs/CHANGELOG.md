@@ -2,6 +2,10 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Improve Indeed Easy Apply submit logic and AnswerEngine pattern prioritization
+  - Implemented `SUBMIT_PATTERNS` in `IndeedFormFiller` to reliably handle the final review page submission
+  - Reordered `AnswerEngine` patterns to prioritize EEO/Demographic questions, preventing false positives with personal info
+  - Added support for "Decline to self-identify" in EEO questions via `config/answers.yaml`
 - 2026-01-27: refactor: Complete Easy Apply cleanup by removing all legacy ATS handlers and Claude fallbacks
   - Deleted `src/agent/form_processor.py` and the entire `src/ats/` directory
   - Removed `_process_with_claude_fallback` and related Claude/ActionRunner imports from `LinkedInFlow`

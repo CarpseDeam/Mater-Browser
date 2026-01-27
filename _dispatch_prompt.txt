@@ -1,20 +1,72 @@
-## Spec: Fix Indeed Easy Apply - Review Page Submit + Pattern Matching [CRITICAL]
+## Spec: Fix Indeed and LinkedIn Selectors - RESEARCHED REAL SELECTORS [CRITICAL]
 
 ### Context
-The bot is hitting Indeed Easy Apply pages but failing:
-1. Lands on `smartapply.indeed.com/.../review-module` but can't find submit button
-2. AnswerEngine matched "Voluntary Self-Identification of Disability" to `personal.website` - pattern matching is broken
+Previous tasks were guessing. I researched the actual selectors from working automation bots.
 
-### Problem 1: Review Page Submit Button
+### LinkedIn Easy Apply Selectors (FROM WORKING BOTS)
 
-In `src/agent/indeed_form_filler.py`, the CONTINUE_PATTERNS are:
+These are from https://github.com/nicolomantini/LinkedIn-Easy-Apply-Bot which is actively maintained:
+
+```python
+# Easy Apply button
+'button[contains(@class, "jobs-apply-button")]'
+'.jobs-apply-button--top-card'
+
+# Submit/Next/Review buttons
+'button[aria-label="Submit application"]'  # FINAL SUBMIT
+'.artdeco-button--primary'  # Generic primary button (Next, Review, Submit)
+
+# Form fields
+'.jobs-easy-apply-form-section__grouping'  # Field containers
+'.artdeco-text-input--input'  # Text inputs
+
+# Resume upload  
+'//*[contains(@id, "jobs-document-upload-file-input-upload-resume")]'
+
+# Error message
+'.artdeco-inline-feedback__message'
+
+# Modal
+'.jobs-easy-apply-modal'
+```
+
+### Indeed Easy Apply - NEED TO INSPECT DOM
+
+The bot is landing on `smartapply.indeed.com/.../review-module` but can't find the submit button.
+
+**TASK: Run the bot, capture what's on the review page, and find the actual selectors.**
+
+Use this approach:
+1. Look at `src/agent/indeed_form_filler.py` current selectors
+2. Add debug logging to dump the page HTML when on review-module URL
+3. OR just add more aggressive selectors based on common patterns:
+
+```python
+# Indeed patterns to TRY (need validation):
+'button[data-testid*="submit"]'
+'button:has-text("Submit your application")'
+'button:has-text("Submit application")' 
+'button[type="submit"]'
+'.ia-continueButton'
+'[data-tn-element="submit"]'
+'button.ia-Button'
+'button.css-1c7gy80'  # Indeed uses CSS modules - inspect actual classes
+```
+
+### Fix `src/agent/indeed_form_filler.py`
+
+Update CONTINUE_PATTERNS to include submit-specific selectors at the TOP:
+
 ```python
 CONTINUE_PATTERNS = [
+    # Submit buttons (for review/final page) - CHECK THESE FIRST
+    'button[data-testid*="submit"]',
+    'button:has-text("Submit your application")',
+    'button:has-text("Submit application")',
+    
+    # Continue buttons  
     '[data-testid="ia-continueButton"]',
-    '[data-testid*="continue" i]',
-    '[data-testid*="hp-continue-button"]',
     'button:has-text("Continue")',
-    'button:has-text("Submit")',
     'button:has-text("Apply")',
     'button:has-text("Review")',
     'button[type="submit"]',
@@ -22,44 +74,39 @@ CONTINUE_PATTERNS = [
 ]
 ```
 
-These don't match the actual Indeed review page submit button. Research Indeed's actual selectors:
-- The review page has "Submit your application" or "Submit application" button
-- May have data-testid like `ia-submitButton` or similar
-- Try: `button:has-text("Submit your application")`, `button:has-text("Submit application")`
-- Try: `[data-testid*="submit"]`, `[data-tn-element="submit"]`
+### Fix `src/agent/linkedin_form_filler.py`
 
-### Fix Required in `src/agent/indeed_form_filler.py`:
-1. Add more submit button selectors to CONTINUE_PATTERNS
-2. Add `is_review_page()` method that checks if URL contains "review"
-3. In `click_continue()`, if on review page, prioritize submit-specific selectors
+Update SUBMIT_BUTTON_PATTERNS with the researched selectors:
 
-### Problem 2: Pattern Order in AnswerEngine
-
-In `src/agent/answer_engine.py`, patterns are matched in order. The question "Voluntary Self-Identification of Disability" matched `personal.website` somehow.
-
-The disability pattern should be:
 ```python
-(r"disability\s*status|disability|accommodation", "dropdowns", "disability_status"),
+SUBMIT_BUTTON_PATTERNS = [
+    # Final submit (MOST SPECIFIC FIRST)
+    'button[aria-label="Submit application"]',
+    
+    # Next/Continue/Review  
+    'button[aria-label*="Submit" i]',
+    'button[aria-label*="Review" i]',
+    'button[aria-label*="Next" i]',
+    '.artdeco-button--primary',
+    'button:has-text("Submit application")',
+    'button:has-text("Review")',
+    'button:has-text("Next")',
+    'button:has-text("Continue")',
+    'button[type="submit"]',
+]
 ```
 
-But it's in `eeo_patterns` which comes AFTER `personal_patterns`.
+### Fix Pattern Order in `src/agent/answer_engine.py`
 
-### Fix Required in `src/agent/answer_engine.py`:
-1. Move EEO patterns (gender, race, veteran, disability) to the TOP of the pattern list - they need to match before personal info patterns
-2. Make the disability pattern more specific: `r"self.?identification.*disability|disability\s*status|disability|accommodation"`
-3. Add explicit skip for questions containing "self-identification" that should default to "Prefer not to say" or "Decline to answer"
+Move EEO patterns to TOP so they match before personal info patterns that are too loose.
 
-### Additional: Handle EEO/Demographic Questions
-Indeed's demographic questions are voluntary. The bot should:
-1. Detect these questions by keywords: "voluntary", "self-identification", "demographic", "eeo", "equal opportunity"
-2. Select "Decline to self-identify" or "Prefer not to say" option when available
-3. If no decline option, skip the question (don't guess at personal demographics)
+The disability question matched "personal.website" because `r"website|portfolio|github"` pattern matched before the disability pattern could run.
 
 ### Test
 Run: `pytest tests/ -x -q`
 
 ### Code Standards
-- Static typing everywhere
+- Static typing everywhere  
 - Guard clauses
 - logging module only
 

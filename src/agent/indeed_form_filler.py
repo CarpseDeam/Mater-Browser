@@ -13,6 +13,11 @@ class IndeedFormFiller:
     """Fill Indeed Easy Apply forms using config-driven answers."""
 
     CONTINUE_PATTERNS = [
+        # Submit buttons (for review/final page) - check these first
+        'button[data-testid*="submit"]',
+        'button:has-text("Submit your application")',
+        'button:has-text("Submit application")',
+        # Continue buttons
         '[data-testid="ia-continueButton"]',
         '[data-testid*="continue" i]',
         '[data-testid*="hp-continue-button"]',
