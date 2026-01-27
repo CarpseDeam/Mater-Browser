@@ -1,12 +1,17 @@
 """Deterministic answer engine for form questions."""
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from ..feedback.failure_logger import FailureLogger, ApplicationFailure
+
 logger = logging.getLogger(__name__)
+
+_failure_logger = FailureLogger()
 
 
 class AnswerEngine:
@@ -87,12 +92,25 @@ class AnswerEngine:
 
         return patterns
 
-    def get_answer(self, question: str, field_type: str = "text") -> Any | None:
+    def get_answer(
+        self,
+        question: str,
+        field_type: str = "text",
+        *,
+        job_url: str = "",
+        job_title: str = "",
+        company: str = "",
+        page_snapshot: str | None = None,
+    ) -> Any | None:
         """Look up answer for a question.
 
         Args:
             question: The question text (label, placeholder, aria-label)
             field_type: Type of field (text, checkbox, select, radio, number)
+            job_url: URL of the job posting (for failure logging)
+            job_title: Title of the job (for failure logging)
+            company: Company name (for failure logging)
+            page_snapshot: HTML snapshot of the page (for failure logging)
 
         Returns:
             Answer value or None if no match found
@@ -111,7 +129,36 @@ class AnswerEngine:
             return self._format_answer(experience_match, field_type)
 
         logger.warning(f"AnswerEngine: No match for '{question[:80]}'")
+        self._log_unknown_question(question, field_type, job_url, job_title, company, page_snapshot)
         return None
+
+    def _log_unknown_question(
+        self,
+        question: str,
+        field_type: str,
+        job_url: str,
+        job_title: str,
+        company: str,
+        page_snapshot: str | None,
+    ) -> None:
+        """Log an unknown question failure."""
+        truncated_snapshot = None
+        if page_snapshot is not None:
+            truncated_snapshot = page_snapshot[:50 * 1024] if len(page_snapshot) > 50 * 1024 else page_snapshot
+
+        failure = ApplicationFailure(
+            timestamp=datetime.now().isoformat(),
+            job_url=job_url,
+            job_title=job_title,
+            company=company,
+            failure_type="unknown_question",
+            details={"question": question, "field_type": field_type},
+            page_snapshot=truncated_snapshot,
+        )
+        try:
+            _failure_logger.log(failure)
+        except Exception as e:
+            logger.debug(f"Failed to log unknown question: {e}")
 
     def _match_experience_question(self, question: str) -> int | None:
         """Try to match 'years of X experience' questions dynamically."""

@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import time
+from datetime import datetime
 from typing import Optional
 
 from ..browser.page import Page
@@ -21,8 +22,12 @@ from .indeed_helpers import IndeedHelpers
 from .success_detector import SuccessDetector
 from .zero_actions_handler import ZeroActionsHandler, PageState
 from ..ats import get_handler, FormPage, BaseATSHandler
+from ..feedback.failure_logger import FailureLogger, ApplicationFailure
+from .stuck_detection import FormProcessorStuckDetection
 
 logger = logging.getLogger(__name__)
+
+_failure_logger = FailureLogger()
 
 
 class FormProcessor:
@@ -32,6 +37,7 @@ class FormProcessor:
         self, page: Page, dom_service: DomService, claude: ClaudeAgent,
         runner: ActionRunner, tabs: TabManager, profile: dict,
         resume_path: Optional[str], timeout_seconds: float, max_pages: int,
+        job_url: str = "", job_title: str = "", company: str = "",
     ) -> None:
         self._page = page
         self._dom_service = dom_service
@@ -47,6 +53,10 @@ class FormProcessor:
         self._success_detector = SuccessDetector(page.raw)
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         self._zero_handler = ZeroActionsHandler(page.raw, api_key)
+        self._stuck_detection = FormProcessorStuckDetection()
+        self._job_url = job_url
+        self._job_title = job_title
+        self._company = company
 
     def process(self, job_url: str, source: Optional[JobSource] = None) -> ApplicationResult:
         """Process multi-page application form."""
@@ -66,14 +76,34 @@ class FormProcessor:
         """Process application using ATS-specific handler."""
         pages = 0
         start_time = time.time()
+        self._stuck_detection.reset()
 
         while pages < self._max_pages:
             elapsed = time.time() - start_time
             if elapsed > self._timeout_seconds:
                 logger.warning(f"Handler timed out after {elapsed:.1f}s")
+                self._log_failure("timeout", f"Timed out after {elapsed:.1f}s")
                 return ApplicationResult(
                     ApplicationStatus.STUCK,
                     f"Timed out after {elapsed:.1f}s",
+                    pages,
+                    job_url,
+                )
+
+            page_content = self._get_page_content()
+            self._stuck_detection.record_page(
+                url=self._page.url,
+                element_count=0,
+                page_content=page_content,
+            )
+
+            stuck_result = self._stuck_detection.check_stuck()
+            if stuck_result.is_stuck:
+                logger.warning(f"Stuck detected: {stuck_result.reason}")
+                self._log_failure("stuck_loop", stuck_result.reason or "Stuck in processing loop")
+                return ApplicationResult(
+                    ApplicationStatus.STUCK,
+                    stuck_result.reason or "Stuck in processing loop",
                     pages,
                     job_url,
                 )
@@ -123,11 +153,13 @@ class FormProcessor:
         stuck_count = 0
         last_url = ""
         start_time = time.time()
+        self._stuck_detection.reset()
 
         while pages_processed < self._max_pages:
             elapsed = time.time() - start_time
             if elapsed > self._timeout_seconds:
                 logger.warning(f"Application timed out after {elapsed:.1f}s")
+                self._log_failure("timeout", f"Timed out after {elapsed:.1f}s")
                 return ApplicationResult(ApplicationStatus.STUCK, f"Timed out after {elapsed:.1f}s", pages_processed, job_url)
             pages_processed += 1
 
@@ -166,6 +198,19 @@ class FormProcessor:
 
             dom_state = self._dom_service.extract()
             logger.info(f"Found {dom_state.elementCount} elements")
+
+            page_content = self._get_page_content()
+            self._stuck_detection.record_page(
+                url=current_url,
+                element_count=dom_state.elementCount,
+                page_content=page_content,
+            )
+
+            stuck_result = self._stuck_detection.check_stuck()
+            if stuck_result.is_stuck:
+                logger.warning(f"Stuck detected: {stuck_result.reason}")
+                self._log_failure("stuck_loop", stuck_result.reason or "Stuck in processing loop")
+                return ApplicationResult(ApplicationStatus.STUCK, stuck_result.reason or "Stuck in processing loop", pages_processed, job_url)
 
             if dom_state.elementCount == 0:
                 stuck_count += 1
@@ -386,3 +431,30 @@ class FormProcessor:
     def _get_button_text(self, el: DomElement) -> str:
         """Get display text for a button element."""
         return el.buttonText or el.text or el.label or el.ref
+
+    def _get_page_content(self) -> str:
+        """Get page content for stuck detection, safely."""
+        try:
+            content = self._page.raw.content()
+            if len(content) > 50 * 1024:
+                return content[:50 * 1024]
+            return content
+        except Exception:
+            return ""
+
+    def _log_failure(self, failure_type: str, details: str) -> None:
+        """Log a failure with context."""
+        page_snapshot = self._get_page_content() or None
+        failure = ApplicationFailure(
+            timestamp=datetime.now().isoformat(),
+            job_url=self._job_url,
+            job_title=self._job_title,
+            company=self._company,
+            failure_type=failure_type,  # type: ignore[arg-type]
+            details={"message": details},
+            page_snapshot=page_snapshot,
+        )
+        try:
+            _failure_logger.log(failure)
+        except Exception as e:
+            logger.debug(f"Failed to log failure: {e}")
