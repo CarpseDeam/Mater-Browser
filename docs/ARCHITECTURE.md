@@ -94,6 +94,7 @@ To enable continuous improvement and automated recovery, the system includes a s
 ## Self-Healing Automation
 
 The `AutoRepairer` component provides self-healing capabilities by automatically addressing recurring failures.
+- **Thread Safety**: Uses a dedicated `threading.Lock` to ensure atomic operations on the failure counter and repair state, preventing race conditions in multi-threaded environments.
 - **Threshold-Based Repair**: Triggers a repair cycle when the number of unaddressed failures reaches a configurable threshold (default: 5).
 - **Automated Dispatch**: When triggered, it generates a failure summary and fix suggestions formatted as a detailed Markdown specification. This spec, along with the local `project_path`, is dispatched to a bridge server (default: `http://localhost:5001/dispatch`) which interfaces with Claude Code.
 - **Cooldown Mechanism**: Prevents redundant repair attempts by enforcing a cooldown period (default: 10 minutes) between dispatches.

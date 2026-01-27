@@ -2,6 +2,10 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Add thread safety to AutoRepairer to prevent race conditions
+  - Implemented `threading.Lock` for failure counter and repair checks
+  - Ensured atomic increments and resets of failure counts
+  - Protected threshold checks and cooldown state during repair decision making
 - 2026-01-27: feat: Add expanded regex patterns to AnswerEngine for EEO, salary, and preferences
   - Implemented comprehensive pattern matching for EEO/demographic questions (gender, race, veteran, disability)
   - Added salary expectation patterns (expected, minimum, hourly rate)

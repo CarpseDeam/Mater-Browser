@@ -131,12 +131,12 @@ Generates structured fix instructions from failure summaries.
 
 ### `AutoRepairer`
 
-Self-healing coordinator for automated failure resolution.
+Self-healing coordinator for automated failure resolution. Thread-safe implementation.
 
 - `__init__(threshold: int = 5, cooldown_minutes: int = 10)`: Configures the repair trigger threshold and cooldown period.
-- `record_failure(failure: ApplicationFailure) -> None`: Increments the failure count and checks if a repair should be initiated.
-- `maybe_repair() -> bool`: Evaluates if the threshold and cooldown conditions are met, and if so, dispatches a repair request. Returns `True` if a repair was dispatched.
-- `reset() -> None`: Resets the failure count, typically called after a successful repair dispatch or manual intervention.
+- `record_failure(failure: ApplicationFailure) -> None`: Increments the failure count (thread-safe) and checks if a repair should be initiated.
+- `maybe_repair() -> bool`: Evaluates if the threshold and cooldown conditions are met (thread-safe), and if so, dispatches a repair request. Returns `True` if a repair was dispatched.
+- `reset() -> None`: Resets the failure count (thread-safe), typically called after a successful repair dispatch or manual intervention.
 
 ### `Prompts`
 Functions for generating LLM prompts.
