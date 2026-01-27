@@ -36,10 +36,12 @@ def mock_page() -> MagicMock:
     page = MagicMock()
     page.url = "https://example.com/form"
     page.raw = MagicMock()
-    page.raw.content.return_value = "<html><body>Application Form - Please fill in your details</body></html>"
+    page.raw.content.return_value = "<html><body>Job Application Form</body></html>"
     page.raw.url = "https://example.com/form"
     page.raw.query_selector.return_value = None
     page.raw.query_selector_all.return_value = []
+    # Prevent payment page detection - evaluate() is used to check for payment phrases
+    page.raw.evaluate.return_value = False
     return page
 
 

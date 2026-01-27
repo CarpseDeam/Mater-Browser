@@ -22,47 +22,32 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: FailureLoggerIntegration
-Tier: FEATURE
+# Specification: FixIntegrationTests
+Tier: HOTFIX
 
 ## Description
-Wire FailureLogger into the form processing components to capture failures at runtime.
+Fix the 9 failing tests in test_failureloggerintegration.py. All failures are caused by mock page content triggering payment page detection, which aborts before failure logging happens.
 
 ## Must Do
-- Import FailureLogger at module level in each file
-- Create single FailureLogger instance per module (module-level constant)
-- Pass job context (job_url, job_title, company) through to logging calls - may need to add parameters or use class state
-- Use ISO timestamps via datetime.now().isoformat()
-- Capture page_snapshot as page.content() when logging (truncate to 50KB if larger)
-- Import and use FormProcessorStuckDetection, call record_page() on each iteration, check_stuck() to detect
-- When stuck detected: log failure, return early from processing loop
-
-## Must Not Do
-- Don't change existing method signatures if avoidable - add optional params or use **kwargs
-- Don't break existing tests - run pytest after changes
-- Don't log on every iteration - only on actual failures
-
-## Edge Cases
-- Job context not available → use empty strings for job_url/job_title/company
-- page.content() fails → set page_snapshot to None
-- FailureLogger.log() raises → catch and continue (logging shouldn't break form filling)
+- Fix all 9 failing tests to not trigger payment detection
+- Keep the test intent intact (still testing failure logging)
+- Don't modify production code - only test file
 
 ## Validation
-- Tests: pytest tests/agent/test_answer_engine.py tests/agent/test_form_processor.py -v --tb=short
+- Tests: pytest tests/test_failureloggerintegration.py -v --tb=short
 
 ## Target Path
-Multiple files: src/agent/answer_engine.py, src/agent/form_processor.py
+tests/test_failureloggerintegration.py
 
 ## YOUR TASK
 
-**Tier: FEATURE** - Standard feature implementation.
-- Full behavior test coverage
-- All edge cases must be tested
-- Contract tests for public interfaces
+**Tier: HOTFIX** - Minimal scope, fast iteration.
+- Focus on the specific bug/issue only
+- 1-3 targeted tests maximum
 
 ### Step 1: Implement the Interface
 
-Implementation location: `Multiple files: src/agent/answer_engine.py, src/agent/form_processor.py`
+Implementation location: `tests/test_failureloggerintegration.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -73,16 +58,13 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_failureloggerintegration.py`
+Test file location: `tests/test_fixintegrationtests.py`
 
 After implementing, write tests that verify contract and behavior:
 
 **Must Do Tests:**
 - Write one test for each item in the 'Must Do' section
 - Tests should verify the behavior/contract, not implementation details
-
-**Edge Case Tests:**
-- Write one test for each edge case specified
 
 Test Code Requirements:
 - Use pytest fixtures for shared setup
@@ -92,7 +74,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/agent/test_answer_engine.py tests/agent/test_form_processor.py -v --tb=short`
+Run validation: `pytest tests/test_failureloggerintegration.py -v --tb=short`
 
 Iterate until all tests pass.
 Maximum iterations: 5
