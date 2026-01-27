@@ -7,6 +7,10 @@ from .answer_engine import AnswerEngine
 
 logger = logging.getLogger(__name__)
 
+# Fallback answers for unknown questions
+FALLBACK_TEXT = "See resume"
+FALLBACK_TEXTAREA = "Please refer to my resume and LinkedIn profile for detailed information on my experience and qualifications."
+
 
 class LinkedInSelectors:
     """Industry-standard selectors from established LinkedIn Easy Apply bots."""
@@ -172,7 +176,8 @@ class LinkedInFormFiller:
                 inp.fill(str(answer))
                 logger.info(f"Filled [{strategy}]: {question[:40]} = {answer}")
         else:
-            logger.info(f"Skipped (no answer): {question[:50]}")
+            inp.fill(FALLBACK_TEXT)
+            logger.info(f"Using fallback for unknown question: {question[:50]}")
         return True
 
     def _get_element_id(self, element: Locator) -> str:
@@ -392,9 +397,8 @@ class LinkedInFormFiller:
                 textarea.fill(str(answer))
                 logger.info(f"Textarea: {question[:40]} = {str(answer)[:30]}...")
             else:
-                fallback = "Please see my resume for details."
-                textarea.fill(fallback)
-                logger.info(f"Textarea (fallback): {question[:40]} = {fallback}")
+                textarea.fill(FALLBACK_TEXTAREA)
+                logger.info(f"Using fallback for unknown question: {question[:50]}")
 
     def _uncheck_follow_company(self) -> None:
         """Uncheck the follow company checkbox if present."""
