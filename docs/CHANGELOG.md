@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Implement FormProcessorStuckDetection to prevent infinite loops
+  - Introduced `FormProcessorStuckDetection` to track page states and detect repetitions
+  - Implemented content hashing to detect identical page states accurately
+  - Added detection for repeating sequences of 2-3 pages (A-B-A-B or A-B-C-A-B-C)
+  - Integrated with `FormProcessor` to automatically halt when stuck behavior is identified
 - 2026-01-27: fix: Resolve GUI freezing by moving browser operations to background worker
   - Introduced `ApplyWorker` to handle all Playwright and automation tasks in a separate thread
   - Implemented thread-safe communication between GUI and background worker using queues and signals

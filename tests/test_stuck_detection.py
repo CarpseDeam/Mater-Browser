@@ -1,6 +1,6 @@
 """Tests for FormProcessorStuckDetection."""
 import pytest
-from src.formprocessorstuckdetection import (
+from src.stuck_detection import (
     FormProcessorStuckDetection,
     PageSnapshot,
     StuckResult,

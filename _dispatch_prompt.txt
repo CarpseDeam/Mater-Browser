@@ -22,25 +22,24 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: FormProcessorStuckDetection
-Tier: FEATURE
+# Specification: MoveStuckDetectionFiles
+Tier: HOTFIX
 
 ## Description
-Fix the infinite loop problem where FormProcessor repeats the same page 15 times without detecting it's stuck.
+Move and rename stuck detection files to correct locations.
 
 ## Validation
-- Tests: pytest tests/ -v
+- Tests: pytest tests/test_stuck_detection.py -v
 
 ## YOUR TASK
 
-**Tier: FEATURE** - Standard feature implementation.
-- Full behavior test coverage
-- All edge cases must be tested
-- Contract tests for public interfaces
+**Tier: HOTFIX** - Minimal scope, fast iteration.
+- Focus on the specific bug/issue only
+- 1-3 targeted tests maximum
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/formprocessorstuckdetection.py`
+Implementation location: `src/movestuckdetectionfiles.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -51,7 +50,7 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_formprocessorstuckdetection.py`
+Test file location: `tests/test_movestuckdetectionfiles.py`
 
 After implementing, write tests that verify contract and behavior:
 
@@ -67,7 +66,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/ -v`
+Run validation: `pytest tests/test_stuck_detection.py -v`
 
 Iterate until all tests pass.
 Maximum iterations: 5
