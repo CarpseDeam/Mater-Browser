@@ -2,6 +2,9 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Fix failing integration tests by preventing false positive payment detection in mocks
+  - Updated `tests/test_failureloggerintegration.py` to prevent mock page content from triggering payment detection
+  - Added `evaluate()` mock return to simulate non-payment page state to `mock_page` fixture
 - 2026-01-27: feat: Integrate FailureLogger and StuckDetection into core agent flows
   - Integrated `FailureLogger` into `AnswerEngine` to automatically capture unknown questions with job context and page snapshots
   - Integrated `FormProcessorStuckDetection` into `FormProcessor` to detect and halt on infinite loops in both ATS and Claude flows
