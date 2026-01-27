@@ -2,6 +2,9 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Loosen job filtering rules to include lead-level roles and lower scoring threshold
+  - Reduced `min_score` from 0.5 to 0.3 in `config/filters.yaml` to increase application volume
+  - Removed "lead" seniority exclusion and "lead engineer/developer" role exclusions to accommodate user's 6+ years of experience
 - 2026-01-27: feat: Add fallback answers for unknown text fields in LinkedInFormFiller
   - Implemented `FALLBACK_TEXT` and `FALLBACK_TEXTAREA` to ensure no text field is left empty
   - Updated `LinkedInFormFiller` to use these fallbacks when `AnswerEngine` returns no answer, rather than skipping

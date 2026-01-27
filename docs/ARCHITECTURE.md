@@ -93,6 +93,7 @@ The `JobScorer` filters and ranks job listings using a centralized `FilterConfig
 - **Statistical Tracking**: Employs `FilterStats` to track rejection breakdowns across job batches.
 - **Flexible Relevance**: Configurable keyword requirements (e.g., "Python") can be set as strict filters or as scoring boosts via `positive_signals` to handle truncated job descriptions.
 - **External ATS & Domain Blocking**: Automatically filters jobs from blocked domains or external ATS patterns that require account creation.
+- **TITLE_HARD_EXCLUSIONS**: for immediate filtering of non-relevant roles (Staff/Principal, Mobile, DevOps, etc.)
 
 ## Platform Support
 
