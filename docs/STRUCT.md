@@ -30,6 +30,10 @@
         - `registry.py` - Manages the mapping between detected ATS types and their handlers
         - `handlers/` - Implementation of specific handlers (Workday, Greenhouse, Lever, iCIMS, Phenom, SmartRecruiters, Taleo)
         - `fallback.py` - Logic for falling back to Claude when no deterministic handler is available
+    - `executor/`
+        - `runner.py` - Manages execution of application plans
+    - `feedback/`
+        - `failure_logger.py` - Captures and logs application failures for analysis
     - `gui/`
         - `app.py` - Main GUI application setup
         - `dashboard.py` - Primary automation control panel

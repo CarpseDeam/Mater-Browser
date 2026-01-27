@@ -2,6 +2,10 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Implement FailureLogger for capturing and analyzing application failures
+  - Introduced `FailureLogger` to log application failures (JSONL format) for analysis and auto-fixing
+  - Supports structured logging for `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, and `react_select_fail`
+  - Implemented thread-safe append-only storage and methods to read/mark failures as addressed
 - 2026-01-27: fix: Move and rename stuck detection files to correct locations
 - 2026-01-27: feat: Implement FormProcessorStuckDetection to prevent infinite loops
   - Introduced `FormProcessorStuckDetection` to track page states and detect repetitions

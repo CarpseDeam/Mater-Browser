@@ -80,6 +80,14 @@ The `SuccessDetector` component is responsible for determining if an application
 2. **Content Signal**: Scans page text for confirmation phrases (e.g., "application submitted").
 3. **State Signal**: Detects when form elements disappear from the page, indicating a successful transition. Only active if a form has been previously filled during the session to avoid false positives.
 
+## Failure Logging & Feedback
+
+To enable continuous improvement and automated recovery, the system includes a structured failure logging layer.
+- **Failure Categorization**: Failures are classified into specific types such as `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, and `react_select_fail`.
+- **Contextual Data**: Each failure captures relevant context, including the job URL, page snapshots, and specific details (e.g., the exact question text for `unknown_question` or the repeating sequence for `stuck_loop`).
+- **Persistence**: Failures are stored in a thread-safe JSONL format in the `data/` directory, allowing for append-only logging without loading the entire history into memory.
+- **Feedback Loop**: This logged data serves as a feedback system for developers to update `answers.yaml` or refine ATS handlers, and for the system to eventually implement automated self-fixing.
+
 ## Loop & Stuck Detection
 
 The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/stuck_detection.py`):

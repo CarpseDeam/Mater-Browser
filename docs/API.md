@@ -106,6 +106,14 @@ Dedicated success detection for application completion.
 - `mark_form_filled()`: Marks that a form has been interacted with, enabling the form-disappearance signal.
 - `reset()`: Resets the detection state for a new application session.
 
+### `FailureLogger`
+
+Captures and manages application failures for analysis.
+
+- `log(failure: ApplicationFailure) -> None`: Appends a structured failure record to the JSONL log file.
+- `read_all(include_addressed: bool = False) -> list[ApplicationFailure]`: Retrieves all logged failures, with an option to filter for unaddressed ones.
+- `mark_addressed(timestamps: list[str]) -> None`: Marks specific failures as addressed based on their unique ISO timestamps.
+
 ### `Prompts`
 
 Functions for generating LLM prompts.
@@ -113,6 +121,19 @@ Functions for generating LLM prompts.
 - `build_form_prompt(dom_text: str, profile: dict) -> str`: Constructs a detailed user prompt containing the current page elements and the applicant's profile, instructing the agent to classify the page (returning a `page_type`) and plan actions.
 
 ## Data Models
+
+### `ApplicationFailure`
+
+Represents a structured application failure event.
+
+- `timestamp: str`: ISO format timestamp of the failure.
+- `job_url: str`: URL of the job application where the failure occurred.
+- `job_title: str`: Title of the job.
+- `company: str`: Name of the company.
+- `failure_type: Literal[...]`: One of `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, `react_select_fail`.
+- `details: dict`: Context-specific details varying by `failure_type`.
+- `page_snapshot: Optional[str]`: Optional HTML or text snapshot of the page at the time of failure.
+- `addressed: bool`: Whether this failure has been reviewed and resolved.
 
 ### `ActionPlan`
 
