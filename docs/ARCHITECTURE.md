@@ -87,10 +87,17 @@ To enable continuous improvement and automated recovery, the system includes a s
 - **Contextual Data**: Each failure captures relevant context, including the job URL, page snapshots, and specific details (e.g., the exact question text for `unknown_question`).
 - **Persistence**: Failures are stored in a thread-safe JSONL format in the `data/` directory.
 - **Summarization & Analysis**: The `FailureSummarizer` groups similar failures (using fuzzy matching for questions) and ranks them by frequency. This allows developers to quickly identify the most impactful issues.
-- **Fix Generation**: The `ConfigSuggester` translates failure summaries into actionable fix instructions. For `unknown_question` types, it automatically generates regex patterns and configuration keys. For other types, it identifies the target files and provides context for manual or semi-automated resolution.
+- **Fix Generation**: The `ConfigSuggester` translates failure summaries into actionable fix instructions. For `unknown_question` types, it automatically generates regex patterns and configuration keys. For other types, it identifies the target files and provides context for manual or semi-automated resolution.        
+
+## Self-Healing Automation
+
+The `AutoRepairer` component provides self-healing capabilities by automatically addressing recurring failures.
+- **Threshold-Based Repair**: Triggers a repair cycle when the number of unaddressed failures reaches a configurable threshold (default: 5).
+- **Automated Dispatch**: When triggered, it generates a failure summary and fix suggestions, then dispatches a "fix spec" to a bridge server (default: `http://localhost:5001/dispatch`) which interfaces with Claude Code.
+- **Cooldown Mechanism**: Prevents redundant repair attempts by enforcing a cooldown period (default: 10 minutes) between dispatches.
+- **Non-Blocking Execution**: Runs repairs asynchronously to ensure that the main automation loop continues uninterrupted.
 
 ## Loop & Stuck Detection
-
 The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`). It is integrated directly into the `FormProcessor` loop, capturing page content hashes and sequence patterns to detect and halt when stuck behavior is identified, logging the failure for analysis.
 
 - **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state.

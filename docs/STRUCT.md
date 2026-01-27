@@ -36,6 +36,7 @@
         - `failure_logger.py` - Captures and logs application failures for analysis
         - `failure_summarizer.py` - Groups and ranks failures for easier analysis and auto-fixing
         - `config_suggester.py` - Generates structured fix instructions from failure summaries
+        - `auto_repairer.py` - Automatically dispatches fixes based on failure thresholds
     - `gui/`
         - `app.py` - Main GUI application setup
         - `dashboard.py` - Primary automation control panel

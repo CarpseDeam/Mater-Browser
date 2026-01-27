@@ -129,6 +129,15 @@ Generates structured fix instructions from failure summaries.
 
 - `suggest(summaries: list[FailureSummary]) -> list[FixSuggestion]`: Analyzes failure summaries and generates targeted fix suggestions, including regex patterns for new questions and selectors for React components.
 
+### `AutoRepairer`
+
+Self-healing coordinator for automated failure resolution.
+
+- `__init__(threshold: int = 5, cooldown_minutes: int = 10)`: Configures the repair trigger threshold and cooldown period.
+- `record_failure(failure: ApplicationFailure) -> None`: Increments the failure count and checks if a repair should be initiated.
+- `maybe_repair() -> bool`: Evaluates if the threshold and cooldown conditions are met, and if so, dispatches a repair request. Returns `True` if a repair was dispatched.
+- `reset() -> None`: Resets the failure count, typically called after a successful repair dispatch or manual intervention.
+
 ### `Prompts`
 Functions for generating LLM prompts.
 - `build_form_prompt(dom_text: str, profile: dict) -> str`: Constructs a detailed user prompt containing the current page elements and the applicant's profile, instructing the agent to classify the page (returning a `page_type`) and plan actions.

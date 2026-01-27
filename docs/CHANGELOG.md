@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Implement AutoRepairer for self-healing automation
+  - Added `AutoRepairer` to automatically dispatch fixes to Claude Code when failures accumulate
+  - Implemented threshold-based triggering and cooldown periods to prevent spam
+  - Integrated with `FailureLogger` and `FailureSummarizer` for automated spec generation
+  - Added asynchronous dispatch to bridge server at `http://localhost:5001/dispatch`
 - 2026-01-27: fix: Fix failing integration tests by preventing false positive payment detection in mocks
   - Updated `tests/test_failureloggerintegration.py` to prevent mock page content from triggering payment detection
   - Added `evaluate()` mock return to simulate non-payment page state to `mock_page` fixture
