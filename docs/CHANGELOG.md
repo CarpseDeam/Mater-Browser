@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Overhaul LinkedIn Easy Apply form filler and expand AnswerEngine patterns
+  - Implemented `LinkedInSelectors` with industry-standard selectors for improved reliability across LinkedIn's UI
+  - Added multi-stage selector strategies for text inputs, dropdowns, and radio groups
+  - Added support for textarea fields and automatic unchecking of the "follow company" checkbox
+  - Implemented specialized autocomplete handling for LinkedIn location/city fields
+  - Updated `AnswerEngine` with new patterns for phone country codes, databases, and end-to-end application questions
 - 2026-01-27: feat: Loosen job filters to increase application volume
   - Made `required_keywords` optional in `FilterConfig` to prevent over-filtering on truncated descriptions
   - Updated `JobScorer` to handle empty required keyword lists gracefully, allowing jobs to pass without strict keyword matches
