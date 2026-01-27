@@ -20,7 +20,7 @@ The system utilizes an ATS-first approach to handle job applications determinist
     - `fill_current_page()`: Executes the filling logic for the current page state.
     - `advance_page()`: Handles the transition to the next page (clicking Next or Submit).
     - `apply()`: Orchestrates the full end-to-end application flow using these standardized methods.
-- **Field Mapping**: The `FieldMapper` ensures that profile data is correctly mapped to the specific field names and IDs used by different ATS platforms.       
+- **Field Mapping**: The `FieldMapper` ensures that profile data is correctly mapped to the specific field names and IDs used by different ATS platforms.
 - **Hybrid Strategy**: The system first attempts to use a deterministic handler. If no handler is found for the detected ATS, or if the ATS is unknown, it falls back to the Claude-based agent.
 
 ## User Interface & Background Operations
@@ -55,7 +55,7 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 ### Deterministic Indeed Flow
 
-Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:  
+Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:
 
 - **Selector Precision**: Uses Indeed-specific selectors to identify form fields, including support for "rich-text-question-input" areas.
 
@@ -100,7 +100,7 @@ The system prevents infinite loops in `FormProcessor` using `FormProcessorStuckD
 
 Individual actions are executed via `ActionRunner`, which provides robustness for common web patterns:
 - **Hidden Inputs**: Automatically handles hidden radio and checkbox inputs by attempting to click their associated `<label>` elements or using direct JavaScript execution.
-- **Upload Action**: Automatically resolves `<label>` elements to their associated file `<input>` if the model targets the label instead of the input directly. 
+- **Upload Action**: Automatically resolves `<label>` elements to their associated file `<input>` if the model targets the label instead of the input directly.
 - **React Select**: Specialized logic for interacting with complex React-based select components.
 
 ## Job Scoring & Filtering

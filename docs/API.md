@@ -153,8 +153,8 @@ Groups application failures by type and similarity.
 
 - `failure_type: str`: The type of failure being summarized.
 - `count: int`: Number of occurrences.
-- `examples: list[ApplicationFailure]`: Up to 3 example failures for context.   
-- `grouped_questions: list[dict]`: (For `unknown_question` type) Fuzzy-grouped question text and metadata.
+- `examples: list[ApplicationFailure]`: Up to 3 example failures for context.
+- `grouped_questions: list[tuple[str, int, list[str]]]`: (For `unknown_question` type) Fuzzy-grouped question text and metadata.
 
 ### `FixSuggestion`
 
