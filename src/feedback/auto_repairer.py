@@ -4,16 +4,17 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
 
 from src.feedback.failure_logger import ApplicationFailure, FailureLogger
 from src.feedback.failure_summarizer import FailureSummarizer
-from src.feedback.config_suggester import ConfigSuggester
+from src.feedback.config_suggester import ConfigSuggester, FixSuggestion
 
 if TYPE_CHECKING:
-    from src.feedback.config_suggester import FixSuggestion
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -92,21 +93,28 @@ class AutoRepairer:
 
         return RepairSpec(description=description, suggestions=suggestions)
 
+    def _generate_prompt(self, suggestions: list[FixSuggestion]) -> str:
+        lines = ["# Fix Suggestions for Failure Feedback System", ""]
+
+        for i, suggestion in enumerate(suggestions, 1):
+            lines.append(f"## {i}. {suggestion.fix_type}: {suggestion.description}")
+            lines.append(f"**Target file:** `{suggestion.target_file}`")
+            lines.append(f"**Failure count:** {suggestion.failure_count}")
+            lines.append("")
+            lines.append("```")
+            lines.append(suggestion.suggested_content)
+            lines.append("```")
+            lines.append("")
+
+        return "\n".join(lines)
+
     def _dispatch_repair_sync(
         self, spec: RepairSpec, failures: list[ApplicationFailure]
     ) -> None:
+        spec_content = self._generate_prompt(spec.suggestions)
         payload = {
-            "description": spec.description,
-            "suggestions": [
-                {
-                    "target_file": s.target_file,
-                    "fix_type": s.fix_type,
-                    "description": s.description,
-                    "suggested_content": s.suggested_content,
-                    "failure_count": s.failure_count,
-                }
-                for s in spec.suggestions
-            ],
+            "spec": spec_content,
+            "project_path": str(Path(__file__).parent.parent.parent.resolve()),
         }
 
         try:

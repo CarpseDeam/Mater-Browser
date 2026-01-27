@@ -65,7 +65,7 @@ class FailureSummarizer:
         for failure in failures:
             if not isinstance(failure.details, dict):
                 continue
-            question_text = failure.details.get("question_text")
+            question_text = failure.details.get("question") or failure.details.get("question_text")
             if question_text and isinstance(question_text, str):
                 questions.append(question_text)
 

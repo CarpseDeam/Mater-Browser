@@ -22,28 +22,25 @@ Write the implementation now with what you know.
 
 ## THE SPECIFICATION
 
-# Specification: LinkedInDirectSelector
+# Specification: P0BugFixes
 Tier: HOTFIX
 
 ## Description
-Add direct LinkedIn Easy Apply selector before falling back to generic DOM scanning.
+Fix three critical bugs preventing the self-healing feedback loop from working.
 
 ## Must Do
-- Add `_try_linkedin_direct()` method that tries each selector in order
-- Call it FIRST in `find_apply_button()` before `_dom_extractor.extract_candidates()`
-- If direct selector finds visible button, return it immediately (skip scoring)
-- Log which selector matched for debugging
-- Build ElementCandidate from the matched element
+- Fix the key name in failure_summarizer.py from "question_text" to "question"
+- Rewrite auto_repairer._dispatch_repair_sync() to build and send proper spec format
+- Reorder linkedin_flow.py to check EXTERNAL_LINK before clicking apply button
+- Maintain all existing functionality
 
 ## Must Not Do
-- Don't remove the generic fallback - keep it for non-LinkedIn pages
-- Don't change the scoring logic for generic candidates
+- Change any other logic or behavior
+- Modify test files
+- Add new dependencies
 
 ## Validation
-- Tests: pytest tests/agent/test_page_classifier.py -v --tb=short
-
-## Target Path
-src/agent/page_classifier.py
+- Tests: pytest tests/feedback/ tests/test_stuck_detection.py -v
 
 ## YOUR TASK
 
@@ -53,7 +50,7 @@ src/agent/page_classifier.py
 
 ### Step 1: Implement the Interface
 
-Implementation location: `src/agent/page_classifier.py`
+Implementation location: `src/p0bugfixes.py`
 
 Implementation Rules:
 1. Follow interface signatures EXACTLY as specified
@@ -64,7 +61,7 @@ Implementation Rules:
 
 ### Step 2: Write Tests
 
-Test file location: `tests/test_linkedindirectselector.py`
+Test file location: `tests/test_p0bugfixes.py`
 
 After implementing, write tests that verify contract and behavior:
 
@@ -80,7 +77,7 @@ Test Code Requirements:
 
 ### Step 3: Validate
 
-Run validation: `pytest tests/agent/test_page_classifier.py -v --tb=short`
+Run validation: `pytest tests/feedback/ tests/test_stuck_detection.py -v`
 
 Iterate until all tests pass.
 Maximum iterations: 5

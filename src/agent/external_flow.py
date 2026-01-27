@@ -72,6 +72,15 @@ class ExternalFlow:
         except Exception:
             pass
 
+        # Check for external-only job FIRST (Indeed "Apply on company site")
+        if self._is_external_only_job():
+            logger.info("External-only job detected - skipping (Easy Apply only)")
+            return ApplicationResult(
+                status=ApplicationStatus.SKIPPED,
+                message="External application - Easy Apply only",
+                url=job_url,
+            )
+
         classifier = PageClassifier(self._page.raw)
         page_type = classifier.classify()
         logger.info(f"Page classification: {page_type.value}")
@@ -162,6 +171,24 @@ class ExternalFlow:
         )
 
         return processor.process(job_url, source=source)
+
+    def _is_external_only_job(self) -> bool:
+        """Check if job page only has external apply (no Easy Apply)."""
+        try:
+            # Indeed: "Apply on company site" button
+            external_selectors = [
+                'button:has-text("Apply on company site")',
+                'a:has-text("Apply on company site")',
+                '[data-testid="indeedApply-button"]:has-text("company site")',
+                'button[aria-label*="Apply on company"]',
+            ]
+            for selector in external_selectors:
+                if self._page.raw.locator(selector).first.is_visible(timeout=1000):
+                    logger.info(f"Found external-only button: {selector}")
+                    return True
+        except Exception:
+            pass
+        return False
 
     def _is_indeed_easy_apply(self) -> bool:
         """Check if current page is Indeed Easy Apply flow."""

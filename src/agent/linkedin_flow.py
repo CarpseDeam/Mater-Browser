@@ -131,6 +131,14 @@ class LinkedInFlow:
                 url=job_url,
             )
 
+        if page_type == PageType.EXTERNAL_LINK:
+            logger.info("External job detected - skipping (Easy Apply only)")
+            return ApplicationResult(
+                status=ApplicationStatus.SKIPPED,
+                message="External application - Easy Apply only",
+                url=job_url,
+            )
+
         if not classifier.click_apply_button():
             return ApplicationResult(
                 status=ApplicationStatus.NO_APPLY_BUTTON,
@@ -139,15 +147,6 @@ class LinkedInFlow:
             )
 
         self._page.wait(MEDIUM_WAIT_MS)
-
-        if page_type == PageType.EXTERNAL_LINK:
-            popup_url = self._wait_for_external_popup()
-            if popup_url:
-                logger.info(f"External job: navigating to popup {popup_url}")
-                self._page.goto(popup_url)
-                self._page.wait(LONG_WAIT_MS)
-                self._tabs.close_extras(keep=1)
-            return self._process_with_claude_fallback(job_url)
 
         if page_type == PageType.EASY_APPLY:
             return self._process_easy_apply(job_url)
