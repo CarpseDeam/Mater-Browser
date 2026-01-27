@@ -2,6 +2,9 @@
 
 All notable changes to this project.
 
+- 2026-01-27: feat: Add fallback answers for unknown text fields in LinkedInFormFiller
+  - Implemented `FALLBACK_TEXT` and `FALLBACK_TEXTAREA` to ensure no text field is left empty
+  - Updated `LinkedInFormFiller` to use these fallbacks when `AnswerEngine` returns no answer, rather than skipping
 - 2026-01-27: feat: Overhaul LinkedIn Easy Apply form filler and expand AnswerEngine patterns
   - Implemented `LinkedInSelectors` with industry-standard selectors for improved reliability across LinkedIn's UI
   - Added multi-stage selector strategies for text inputs, dropdowns, and radio groups

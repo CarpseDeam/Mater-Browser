@@ -33,7 +33,7 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 - **Form Filler**: Automatically identifies and fills text inputs, textareas, selects, radio buttons, and checkboxes in the LinkedIn modal using a multi-stage selector strategy. It includes specialized handling for autocomplete location fields and automatically unchecks the "follow company" option to maintain user privacy.
 
-- **Fail-Safe**: If an unknown question is encountered for which no answer is configured, the system gracefully skips the job and logs the missing question for future configuration.
+- **Fail-Safe**: If an unknown text field or textarea is encountered for which no answer is configured, the system uses generic fallback answers ("See resume" or a longer referral text) to ensure the field is not left blank, allowing the application to proceed. All unknown questions are still logged to the `FailureLogger` for future configuration updates.
 
 
 
