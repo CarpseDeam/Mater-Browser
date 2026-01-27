@@ -13,6 +13,7 @@
     - `agent/`
         - `stuck_detection.py` - Detects and prevents infinite loops in form processing
         - `actions.py` - Defines action models and the `ActionPlan` structure   
+        - `models.py` - Application agent models, enums, and constants
         - `answer_engine.py` - Config-driven answer lookup for questions        
         - `linkedin_form_filler.py` - Deterministic filler for LinkedIn Easy Apply
         - `indeed_form_filler.py` - Deterministic filler for Indeed Easy Apply  

@@ -2,6 +2,8 @@
 
 All notable changes to this project.
 
+- 2026-01-27: fix: Fix ApplicationResult initialization error by renaming 'pages' to 'pages_processed'
+  - Updated `ExternalFlow` and `LinkedInFlow` to use `pages_processed` instead of `pages` in `ApplicationResult` calls
 - 2026-01-27: fix: Add thread safety to AutoRepairer to prevent race conditions
   - Implemented `threading.Lock` for failure counter and repair checks
   - Ensured atomic increments and resets of failure counts

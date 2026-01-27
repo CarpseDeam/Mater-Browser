@@ -157,6 +157,15 @@ Represents a structured application failure event.
 - `page_snapshot: Optional[str]`: Optional HTML or text snapshot of the page at the time of failure.
 - `addressed: bool`: Whether this failure has been reviewed and resolved.       
 
+
+### `ApplicationResult`
+
+Result of a job application attempt.
+
+- `status: ApplicationStatus`: The outcome of the application (Success, Failed, etc.).
+- `message: str`: A descriptive message about the result.
+- `pages_processed: int`: Total number of pages interacted with during the flow.
+- `url: str`: The final URL or job URL associated with the application.
 ### `FailureSummary`
 
 Groups application failures by type and similarity.
