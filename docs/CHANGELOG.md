@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-28: fix: Handle unfilled dropdowns and multi-select checkboxes in LinkedInFormFiller
+  - Modified `_fill_single_text_input` to detect numeric fields (salary, rate, amount, etc.) and use "0" as fallback instead of "See resume"
+  - Updated `_fill_single_select` with a fallback to select the first non-placeholder option if no matching answer is found
+  - Implemented `_fill_multi_select_checkboxes` to handle "Select all that apply" fieldsets by checking the first option as fallback
+  - Added helper methods `_get_fieldset_question` and `_get_checkbox_label` for robust form analysis
 - 2026-01-28: fix: Fix radio and checkbox fallback handling in LinkedIn form filler and expand AnswerEngine patterns
   - Implemented fallback to select the first option for required radio groups when no answer is configured to prevent infinite loops
   - Added fallback to check checkboxes by default, with exclusion for spam-related keywords (marketing, newsletter, etc.)

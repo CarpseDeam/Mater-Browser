@@ -30,7 +30,7 @@ Config-driven answer lookup for form questions.
 
 Deterministic form filler for LinkedIn Easy Apply modals.
 
-- `fill_current_modal() -> bool`: Fills all fields in the current modal. Uses fallback answers for unknown text fields to ensure completion. Returns `True` if modal was found and processed.
+- `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups). Uses fallback answers for unknown text fields (including numeric "0" fallbacks) and selects/radios to ensure completion. Returns `True` if modal was found and processed.
 - `click_next() -> bool`: Clicks the next, submit, or review button to advance the form.
 - `is_confirmation_page() -> bool`: Detects if the application success page has been reached.
 - `close_modal()`: Closes the Easy Apply modal after completion or failure.
