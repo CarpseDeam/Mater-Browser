@@ -1,21 +1,65 @@
-Update config/filters.yaml with these specific changes:
+TASK: Fix radio and checkbox fallback handling in LinkedIn form filler
 
-1. Change `min_score` from 0.5 to 0.3 under scoring section
+Files to edit:
+- C:\Projects\Mater-Browser\src\agent\linkedin_form_filler.py
+- C:\Projects\Mater-Browser\src\agent\answer_engine.py
 
-2. In title_exclusions.seniority, REMOVE these entries (user has 6+ years, can do these):
-   - "lead"
-   
-3. In role_exclusions.senior, REMOVE these entries:
-   - "lead engineer"
-   - "lead developer"
+ISSUE: Bot loops forever because required radio/checkbox fields stay empty when no answer is configured.
 
-4. Keep ALL frontend, mobile, .NET, Java, PHP, Ruby, Go exclusions - user is Python backend only
+FIX 1 - linkedin_form_filler.py `_fill_single_radio_group()`:
+When answer is None, select the FIRST radio option instead of skipping:
 
-5. Keep junior/intern/entry exclusions - user is mid-to-senior level
+```python
+if answer is None:
+    # Fallback: select first option for required radio groups
+    try:
+        radios = fieldset.locator(LinkedInSelectors.RADIO).all()
+        if radios:
+            first_radio = radios[0]
+            if not first_radio.is_checked():
+                first_radio.check()
+            label = self._get_radio_label(first_radio)
+            logger.info(f"Fallback radio (first option): {question[:50]} = {label}")
+    except Exception as e:
+        logger.warning(f"Fallback radio failed: {e}")
+    return True
+```
 
-Do NOT remove any frontend, mobile, or non-Python stack exclusions. Those stay.
+FIX 2 - linkedin_form_filler.py `_fill_checkboxes()`:
+When answer is None, check the box UNLESS it contains spam keywords:
 
-File: C:\Projects\Mater-Browser\config\filters.yaml
+```python
+if answer is None:
+    q_lower = question.lower()
+    spam_keywords = ["follow", "marketing", "newsletter", "subscribe", "updates"]
+    if any(kw in q_lower for kw in spam_keywords):
+        logger.debug(f"Skipping spam checkbox: {question[:50]}")
+        continue
+    try:
+        if not cb.is_checked():
+            cb.check()
+            logger.info(f"Fallback checkbox (checked): {question[:50]}")
+    except Exception:
+        pass
+    continue
+```
+
+FIX 3 - answer_engine.py - Add these patterns to checkbox_patterns list:
+
+```python
+(r"sms|text\s*(message|communication)", "checkboxes", "sms_consent"),
+(r"i\s*(understand|acknowledge|agree|certify|confirm)", "checkboxes", "acknowledgment"),
+(r"consent", "checkboxes", "general_consent"),
+```
+
+And add to config/answers.yaml under checkboxes:
+```yaml
+sms_consent: false
+acknowledgment: true
+general_consent: true
+```
+
+Goal: Bot always fills SOMETHING for radio groups and acknowledgment checkboxes. Never leave required fields empty.
 
 ## Code Standards
 

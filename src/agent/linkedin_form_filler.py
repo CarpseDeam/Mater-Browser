@@ -316,16 +316,26 @@ class LinkedInFormFiller:
     def _fill_single_radio_group(self, fieldset: Locator, question: str, strategy: str) -> bool:
         """Fill a single radio group. Returns True if processed."""
         answer = self._answers.get_answer(question, "radio")
-        if answer is None:
-            logger.info(f"Skipped radio (no answer): {question[:50]}")
-            return True
 
-        answer_str = str(answer).lower()
         try:
             radios = fieldset.locator(LinkedInSelectors.RADIO).all()
         except Exception:
             return False
 
+        if answer is None:
+            # Fallback: select first option for required radio groups
+            try:
+                if radios:
+                    first_radio = radios[0]
+                    if not first_radio.is_checked():
+                        first_radio.check()
+                    label = self._get_radio_label(first_radio)
+                    logger.info(f"Fallback radio (first option): {question[:50]} = {label}")
+            except Exception as e:
+                logger.warning(f"Fallback radio failed: {e}")
+            return True
+
+        answer_str = str(answer).lower()
         for radio in radios:
             label = self._get_radio_label(radio)
             if label and answer_str in label.lower():
@@ -354,17 +364,30 @@ class LinkedInFormFiller:
                 continue
 
             answer = self._answers.get_answer(question, "checkbox")
-            if answer is not None:
-                should_check = bool(answer)
+            if answer is None:
+                q_lower = question.lower()
+                spam_keywords = ["follow", "marketing", "newsletter", "subscribe", "updates"]
+                if any(kw in q_lower for kw in spam_keywords):
+                    logger.debug(f"Skipping spam checkbox: {question[:50]}")
+                    continue
                 try:
-                    if cb.is_checked() != should_check:
-                        if should_check:
-                            cb.check()
-                        else:
-                            cb.uncheck()
-                        logger.info(f"Checkbox: {question[:40]} = {should_check}")
+                    if not cb.is_checked():
+                        cb.check()
+                        logger.info(f"Fallback checkbox (checked): {question[:50]}")
                 except Exception:
                     pass
+                continue
+
+            should_check = bool(answer)
+            try:
+                if cb.is_checked() != should_check:
+                    if should_check:
+                        cb.check()
+                    else:
+                        cb.uncheck()
+                    logger.info(f"Checkbox: {question[:40]} = {should_check}")
+            except Exception:
+                pass
 
     def _fill_textareas(self, container: Locator) -> None:
         """Fill textarea fields within form sections."""

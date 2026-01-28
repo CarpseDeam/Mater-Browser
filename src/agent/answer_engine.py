@@ -75,6 +75,9 @@ class AnswerEngine:
             (r"(authorized|eligible)\s*to\s*work", "checkboxes", "work_authorization"),
             (r"(18|eighteen)\s*(years|yrs)\s*(old|of\s*age|or\s*older)", "checkboxes", "over_18"),
             (r"designed.*application.*end\s*to\s*end|end\s*to\s*end.*application", "checkboxes", "designed_end_to_end"),
+            (r"sms|text\s*(message|communication)", "checkboxes", "sms_consent"),
+            (r"i\s*(understand|acknowledge|agree|certify|confirm)", "checkboxes", "acknowledgment"),
+            (r"consent", "checkboxes", "general_consent"),
         ]
 
         experience_patterns = [
