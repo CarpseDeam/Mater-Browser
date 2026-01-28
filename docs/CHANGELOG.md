@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-28: fix: Fix radio and checkbox fallback handling in LinkedIn form filler and expand AnswerEngine patterns
+  - Implemented fallback to select the first option for required radio groups when no answer is configured to prevent infinite loops
+  - Added fallback to check checkboxes by default, with exclusion for spam-related keywords (marketing, newsletter, etc.)
+  - Expanded `AnswerEngine` with new regex patterns for SMS consent, acknowledgments, and general consent
+  - Updated `config/answers.yaml` with default values for new checkbox patterns
 - 2026-01-27: feat: Loosen job filtering rules to include lead-level roles and lower scoring threshold
   - Reduced `min_score` from 0.5 to 0.3 in `config/filters.yaml` to increase application volume
   - Removed "lead" seniority exclusion and "lead engineer/developer" role exclusions to accommodate user's 6+ years of experience

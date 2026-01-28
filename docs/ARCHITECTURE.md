@@ -33,8 +33,11 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 - **Form Filler**: Automatically identifies and fills text inputs, textareas, selects, radio buttons, and checkboxes in the LinkedIn modal using a multi-stage selector strategy. It includes specialized handling for autocomplete location fields and automatically unchecks the "follow company" option to maintain user privacy.
 
-- **Fail-Safe**: If an unknown text field or textarea is encountered for which no answer is configured, the system uses generic fallback answers ("See resume" or a longer referral text) to ensure the field is not left blank, allowing the application to proceed. All unknown questions are still logged to the `FailureLogger` for future configuration updates.
-
+- **Fail-Safe**: To ensure applications never stall on required fields:
+    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured.
+    - **Radio Groups**: Automatically selects the first available option if no specific answer matches.
+    - **Checkboxes**: Checks the box by default, unless the question contains spam keywords (e.g., "marketing", "newsletter", "subscribe").
+    - **Logging**: All unknown questions are still logged to the `FailureLogger` for future configuration updates.
 
 
 ### Deterministic Indeed Flow
