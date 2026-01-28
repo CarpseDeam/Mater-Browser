@@ -1,65 +1,76 @@
-TASK: Fix radio and checkbox fallback handling in LinkedIn form filler
+Fix linkedin_form_filler.py to handle unfilled dropdowns and multi-select checkboxes.
 
-Files to edit:
-- C:\Projects\Mater-Browser\src\agent\linkedin_form_filler.py
-- C:\Projects\Mater-Browser\src\agent\answer_engine.py
+PROBLEM: Bot gets stuck because:
+1. Dropdowns with no answer stay at "Select an option" 
+2. Multi-select checkbox groups (Select all that apply) don't get filled
+3. Salary/numeric fields get "See resume" but need numbers
 
-ISSUE: Bot loops forever because required radio/checkbox fields stay empty when no answer is configured.
+FIXES NEEDED:
 
-FIX 1 - linkedin_form_filler.py `_fill_single_radio_group()`:
-When answer is None, select the FIRST radio option instead of skipping:
-
+1. In `_fill_single_select()` - Add fallback to select first non-empty option:
 ```python
 if answer is None:
-    # Fallback: select first option for required radio groups
+    # Fallback: select first non-placeholder option
     try:
-        radios = fieldset.locator(LinkedInSelectors.RADIO).all()
-        if radios:
-            first_radio = radios[0]
-            if not first_radio.is_checked():
-                first_radio.check()
-            label = self._get_radio_label(first_radio)
-            logger.info(f"Fallback radio (first option): {question[:50]} = {label}")
+        options = select.locator("option").all()
+        for opt in options:
+            val = opt.get_attribute("value")
+            text = opt.text_content()
+            # Skip placeholder options
+            if val and val.strip() and text and "select" not in text.lower():
+                select.select_option(value=val, timeout=3000)
+                logger.info(f"Fallback select (first option): {question[:50]} = {text}")
+                return True
     except Exception as e:
-        logger.warning(f"Fallback radio failed: {e}")
+        logger.warning(f"Fallback select failed: {e}")
     return True
 ```
 
-FIX 2 - linkedin_form_filler.py `_fill_checkboxes()`:
-When answer is None, check the box UNLESS it contains spam keywords:
-
+2. In `_fill_single_text_input()` - Detect numeric fields and use numeric fallback:
 ```python
-if answer is None:
-    q_lower = question.lower()
-    spam_keywords = ["follow", "marketing", "newsletter", "subscribe", "updates"]
-    if any(kw in q_lower for kw in spam_keywords):
-        logger.debug(f"Skipping spam checkbox: {question[:50]}")
-        continue
-    try:
-        if not cb.is_checked():
-            cb.check()
-            logger.info(f"Fallback checkbox (checked): {question[:50]}")
-    except Exception:
-        pass
-    continue
+# Before setting fallback, check if field expects number
+field_type = inp.get_attribute("type") or "text"
+if field_type == "number" or any(kw in question.lower() for kw in ["salary", "rate", "amount", "years", "months", "pkr", "usd", "compensation"]):
+    inp.fill("0")
+    logger.info(f"Fallback numeric: {question[:50]} = 0")
+else:
+    inp.fill(FALLBACK_TEXT)
+    logger.info(f"Fallback text: {question[:50]}")
 ```
 
-FIX 3 - answer_engine.py - Add these patterns to checkbox_patterns list:
-
+3. Add new patterns to answer_engine.py for these specific questions:
 ```python
-(r"sms|text\s*(message|communication)", "checkboxes", "sms_consent"),
-(r"i\s*(understand|acknowledge|agree|certify|confirm)", "checkboxes", "acknowledgment"),
-(r"consent", "checkboxes", "general_consent"),
+# In checkbox_patterns or create new section
+(r"sql.*postgres|postgres|mysql|sql\s*server", "multi_select", "sql_databases"),
+(r"nosql|mongo|cassandra|dynamodb", "multi_select", "nosql_databases"),
+(r"restful|rest\s*api|microservice", "dropdowns", "api_experience"),
+(r"notice\s*period", "dropdowns", "notice_period"),
+(r"python.*node|node.*python|years.*python", "dropdowns", "python_years"),
 ```
 
-And add to config/answers.yaml under checkboxes:
+4. Add to config/answers.yaml:
 ```yaml
-sms_consent: false
-acknowledgment: true
-general_consent: true
+dropdowns:
+  api_experience: "3-5 years"
+  notice_period: "2 weeks"
+  python_years: "5+"
+  
+multi_select:
+  sql_databases: true
+  nosql_databases: false
 ```
 
-Goal: Bot always fills SOMETHING for radio groups and acknowledgment checkboxes. Never leave required fields empty.
+5. Create `_fill_multi_select_checkboxes()` method that specifically handles checkbox GROUPS:
+- Find container elements with "Select all that apply" in question
+- Check the first checkbox in the group as fallback
+- For database questions, check "SQL" option
+
+Files:
+- C:\Projects\Mater-Browser\src\agent\linkedin_form_filler.py
+- C:\Projects\Mater-Browser\src\agent\answer_engine.py
+- C:\Projects\Mater-Browser\config\answers.yaml
+
+The goal is: NEVER leave required fields empty. Always fill something.
 
 ## Code Standards
 

@@ -112,6 +112,7 @@ class LinkedInFormFiller:
         self._fill_selects(modal)
         self._fill_radios(modal)
         self._fill_checkboxes(modal)
+        self._fill_multi_select_checkboxes(modal)
         self._fill_textareas(modal)
         self._uncheck_follow_company()
 
@@ -176,8 +177,14 @@ class LinkedInFormFiller:
                 inp.fill(str(answer))
                 logger.info(f"Filled [{strategy}]: {question[:40]} = {answer}")
         else:
-            inp.fill(FALLBACK_TEXT)
-            logger.info(f"Using fallback for unknown question: {question[:50]}")
+            # Numeric fields need numbers, not "See resume"
+            numeric_keywords = ["salary", "rate", "amount", "years", "months", "compensation", "pkr", "usd", "number"]
+            if field_type == "number" or any(kw in question.lower() for kw in numeric_keywords):
+                inp.fill("0")
+                logger.info(f"Fallback numeric: {question[:50]} = 0")
+            else:
+                inp.fill(FALLBACK_TEXT)
+                logger.info(f"Fallback text: {question[:50]}")
         return True
 
     def _get_element_id(self, element: Locator) -> str:
@@ -244,10 +251,19 @@ class LinkedInFormFiller:
                     return True
                 except Exception as e:
                     logger.warning(f"Could not select {answer} for {question}: {e}")
-                    return False
-        else:
-            logger.info(f"Skipped select (no answer): {question[:50]}")
-            return True
+        # Fallback: select first non-placeholder option
+        try:
+            options = select.locator("option").all()
+            for opt in options:
+                val = opt.get_attribute("value") or ""
+                text = (opt.text_content() or "").strip()
+                if val.strip() and text and "select" not in text.lower():
+                    select.select_option(value=val, timeout=3000)
+                    logger.info(f"Fallback select (first option): {question[:50]} = {text}")
+                    return True
+        except Exception as e:
+            logger.warning(f"Fallback select failed: {e}")
+        return True
 
     def _fill_radios(self, container: Locator) -> None:
         """Fill radio button groups using multiple selector strategies."""
@@ -388,6 +404,71 @@ class LinkedInFormFiller:
                     logger.info(f"Checkbox: {question[:40]} = {should_check}")
             except Exception:
                 pass
+
+    def _fill_multi_select_checkboxes(self, container: Locator) -> None:
+        """Fill multi-select checkbox groups (Select all that apply)."""
+        # Find fieldsets that contain multiple checkboxes
+        try:
+            fieldsets = container.locator("fieldset").all()
+        except Exception:
+            return
+
+        for fieldset in fieldsets:
+            try:
+                question = self._get_fieldset_question(fieldset)
+                if not question:
+                    continue
+                # Skip if not a "select all" type question
+                q_lower = question.lower()
+                if "select all" not in q_lower and "check all" not in q_lower:
+                    continue
+
+                checkboxes = fieldset.locator('input[type="checkbox"]').all()
+                if len(checkboxes) < 2:
+                    continue
+
+                # Check if any are already checked
+                any_checked = any(cb.is_checked() for cb in checkboxes)
+                if any_checked:
+                    continue
+
+                # Fallback: check first checkbox in group
+                checkboxes[0].check()
+                label = self._get_checkbox_label(checkboxes[0])
+                logger.info(f"Fallback multi-select: {question[:40]} = {label}")
+            except Exception as e:
+                logger.debug(f"Multi-select processing failed: {e}")
+
+    def _get_fieldset_question(self, fieldset: Locator) -> str:
+        """Extract question text from fieldset legend or label."""
+        for selector in ["legend", "span.fb-form-element-label", ".visually-hidden"]:
+            try:
+                el = fieldset.locator(selector).first
+                if el.count() > 0:
+                    text = el.text_content()
+                    if text:
+                        return text.strip()
+            except Exception:
+                pass
+        return ""
+
+    def _get_checkbox_label(self, checkbox: Locator) -> str:
+        """Get label text for a checkbox."""
+        try:
+            cb_id = checkbox.get_attribute("id")
+            if cb_id:
+                label = self._page.locator(f'label[for="{cb_id}"]').first
+                if label.count() > 0:
+                    return (label.text_content() or "").strip()
+        except Exception:
+            pass
+        try:
+            parent = checkbox.locator("xpath=ancestor::label").first
+            if parent.count() > 0:
+                return (parent.text_content() or "").strip()
+        except Exception:
+            pass
+        return ""
 
     def _fill_textareas(self, container: Locator) -> None:
         """Fill textarea fields within form sections."""
