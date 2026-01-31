@@ -30,7 +30,11 @@ Config-driven answer lookup for form questions.
 
 Deterministic form filler for LinkedIn Easy Apply modals.
 
-- `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups). Uses fallback answers for unknown text fields (including numeric "0" fallbacks) and selects/radios to ensure completion. Returns `True` if modal was found and processed.
+- `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups). 
+    - **Intelligent Skill Matching**: Automatically matches multi-select skill checkboxes against the user's documented technical profile.
+    - **Smart Dropdowns**: Employs fuzzy and range-based matching for experience and preference dropdowns.
+    - **Fail-Safe**: Uses fallback answers for unknown text fields (including numeric "0" fallbacks) and selects/radios to ensure completion. 
+    - Returns `True` if modal was found and processed.
 - `click_next() -> bool`: Clicks the next, submit, or review button to advance the form.
 - `is_confirmation_page() -> bool`: Detects if the application success page has been reached.
 - `close_modal()`: Closes the Easy Apply modal after completion or failure.
@@ -161,7 +165,7 @@ Represents a structured instruction for fixing an application failure.
 
 Evaluates and filters job listings based on relevance using centralized configuration.
 
-- `check_filter(job: JobListing) -> FilterResult`: Performs detailed evaluation of a job against all configured rules and returns a result containing pass/fail status and the specific reason.
+- `check_filter(job: JobListing) -> FilterResult`: Performs detailed evaluation of a job against all configured rules (including title, role, stack, and geographic location exclusions) and returns a result containing pass/fail status and the specific reason.
 - `score(job: JobListing) -> float`: Calculates the relevance score (0.0 to 1.0). Returns 0.0 if the job fails any filter.
 - `explain(job: JobListing) -> str`: Generates a detailed text explanation of why a job passed or failed, including all matched exclusion rules and scoring breakdown.
 - `filter_and_score(jobs: list[JobListing]) -> list[JobListing]`: Processes a batch of jobs, returning those that pass filtering, sorted by score. Logs a summary of filter statistics.

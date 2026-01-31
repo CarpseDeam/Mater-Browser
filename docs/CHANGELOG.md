@@ -2,6 +2,13 @@
 
 All notable changes to this project.
 
+- 2026-01-31: fix: Fix LinkedIn Easy Apply form filling and add location-based filtering
+  - Fixed LinkedIn dropdown filling by implementing intelligent option matching (exact, partial, and numeric range for years of experience)
+  - Overhauled checkbox handling to prevent blind checking; implemented `_fill_skill_checkboxes` for intelligent multi-select skill matching based on user profile
+  - Added `location_exclusions` to `FilterConfig` and `JobScorer` to automatically reject jobs in specified regions (e.g., India, Pakistan, etc.)
+  - Enhanced `LinkedInFlow` with stuck detection using modal state hashing (progress bar and element counts)
+  - Expanded `AnswerEngine` with `_match_multi_tech_experience` and `_get_experience_dropdown_answer` for better handling of complex experience questions
+  - Updated `config/answers.yaml` with new `skills` and `experience_dropdowns` sections
 - 2026-01-28: fix: Handle unfilled dropdowns and multi-select checkboxes in LinkedInFormFiller
   - Modified `_fill_single_text_input` to detect numeric fields (salary, rate, amount, etc.) and use "0" as fallback instead of "See resume"
   - Updated `_fill_single_select` with a fallback to select the first non-placeholder option if no matching answer is found

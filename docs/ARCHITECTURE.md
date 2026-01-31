@@ -29,18 +29,19 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 - **Direct Button Selection**: Uses optimized CSS selectors to immediately identify the "Easy Apply" button, bypassing generic DOM analysis for faster interaction.
 
-- **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. Supports a wide range of categories including personal info, experience, EEO/demographics (gender, race, veteran status, disability), salary expectations, language proficiency, and work preferences. Patterns are prioritized to ensure EEO/demographic questions match correctly before generic personal information patterns (e.g., preventing disability questions from being mistaken for personal website fields). When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
+- **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. Supports a wide range of categories including personal info, experience, EEO/demographics (gender, race, veteran status, disability), salary expectations, language proficiency, and work preferences. It includes specialized logic for matching experience-related questions, including multi-technology experience calculation and smart dropdown matching. Patterns are prioritized to ensure EEO/demographic questions match correctly before generic personal information patterns. When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
 
-- **Form Filler**: Automatically identifies and fills text inputs, textareas, selects, radio buttons, and checkboxes in the LinkedIn modal using a multi-stage selector strategy. It includes specialized handling for autocomplete location fields and automatically unchecks the "follow company" option to maintain user privacy.
+- **Form Filler**: Automatically identifies and fills text inputs, textareas, selects, radio buttons, and checkboxes in the LinkedIn modal using a multi-stage selector strategy. 
+    - **Intelligent Skill Matching**: For "Select all that apply" checkbox groups, it matches available options against the user's documented skills in `answers.yaml` to provide accurate technical profiles.
+    - **Smart Dropdowns**: Implements multi-stage matching for select options (exact, partial, and numeric range for years of experience) to ensure the best answer is selected even when phrasing differs.
+    - **Automation**: Includes specialized handling for autocomplete location fields and automatically unchecks the "follow company" option to maintain user privacy.
 
 - **Fail-Safe**: To ensure applications never stall on required fields:
-    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.
+    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.  
     - **Radio Groups**: Automatically selects the first available option if no specific answer matches.
-    - **Select/Dropdowns**: If no matching option is found in the configuration, it selects the first non-placeholder option (excluding "Select an option" style prompts).
-    - **Checkboxes**: For single checkboxes, it checks the box by default unless it contains spam keywords.
-    - **Multi-select Checkboxes**: For "Select all that apply" groups, it checks the first checkbox in the group as a fallback if no specific options are matched.
+    - **Select/Dropdowns**: If no matching option is found in the configuration, it selects the first non-placeholder option as a last resort.
+    - **Checkboxes**: For single checkboxes, it checks the box by default unless it contains spam keywords. For multi-select skill groups, it checks the first relevant option if no skills match.
     - **Logging**: All unknown questions are still logged to the `FailureLogger` for future configuration updates.
-
 
 ### Deterministic Indeed Flow
 
@@ -77,28 +78,26 @@ The `AutoRepairer` component provides self-healing capabilities by automatically
 - **Non-Blocking Execution**: Runs repairs asynchronously to ensure that the main automation loop continues uninterrupted.
 
 ## Loop & Stuck Detection
-The system prevents infinite loops using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`). It captures page content hashes and sequence patterns to detect and halt when stuck behavior is identified, logging the failure for analysis.
+The system prevents infinite loops using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`) for generic flows, and specialized modal hashing in `LinkedInFlow`.
 
-- **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state.
+- **LinkedIn Modal Hashing**: Monitors the Easy Apply modal for state changes by hashing the progress bar value and form element counts. If the state remains identical across multiple attempts to advance, the flow is halted to prevent infinite loops.
+- **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state in generic flows.
 - **URL Tracking**: Monitors normalized URL visit counts and element counts to detect repetitions even if content slightly changes.
 - **Pattern Detection**: Identifies repeating sequences of pages (e.g., A-B-A-B or A-B-C-A-B-C) to break out of circular navigation loops.
 
 ## Action Execution
-
-Individual actions are executed via `ActionRunner`, which provides robustness for common web patterns:
-- **Hidden Inputs**: Automatically handles hidden radio and checkbox inputs by attempting to click their associated `<label>` elements or using direct JavaScript execution.
-- **Upload Action**: Automatically resolves `<label>` elements to their associated file `<input>` if the model targets the label instead of the input directly.
-- **React Select**: Specialized logic for interacting with complex React-based select components.
-
+...
 ## Job Scoring & Filtering
 
 The `JobScorer` filters and ranks job listings using a centralized `FilterConfig` system:
-- **Centralized Configuration**: All rules (title/stack/role exclusions, keywords, blocked domains) and scoring weights are managed via `FilterConfig` (loaded from `config/filters.yaml`).
+- **Centralized Configuration**: All rules (title/stack/role exclusions, keywords, blocked domains, location exclusions) and scoring weights are managed via `FilterConfig` (loaded from `config/filters.yaml`).
 - **Granular Filtering**: Uses `FilterResult` to provide specific reasons for rejection, classified by `RuleType`.
 - **Statistical Tracking**: Employs `FilterStats` to track rejection breakdowns across job batches.
 - **Flexible Relevance**: Configurable keyword requirements (e.g., "Python") can be set as strict filters or as scoring boosts via `positive_signals` to handle truncated job descriptions.
 - **External ATS & Domain Blocking**: Automatically filters jobs from blocked domains or external ATS patterns that require account creation.
-- **TITLE_HARD_EXCLUSIONS**: for immediate filtering of non-relevant roles (Staff/Principal, Mobile, DevOps, etc.)
+- **Exclusion Rules**:
+    - **TITLE_HARD_EXCLUSIONS**: Immediate filtering of non-relevant roles (Staff/Principal, Mobile, DevOps, etc.).
+    - **LOCATION_EXCLUSION**: Rejects jobs based on geographic location patterns (e.g., excluding offshore roles).
 
 ## Platform Support
 
