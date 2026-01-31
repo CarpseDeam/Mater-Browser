@@ -1,76 +1,510 @@
-Fix linkedin_form_filler.py to handle unfilled dropdowns and multi-select checkboxes.
+Fix LinkedIn Easy Apply form filling - dropdowns not filling, checkboxes blindly checking everything.
 
-PROBLEM: Bot gets stuck because:
-1. Dropdowns with no answer stay at "Select an option" 
-2. Multi-select checkbox groups (Select all that apply) don't get filled
-3. Salary/numeric fields get "See resume" but need numbers
+## CRITICAL BUGS TO FIX
 
-FIXES NEEDED:
+### Bug 1: Dropdowns not being filled
+Questions like these return None from answer_engine:
+- "Do you have at least 4-6+ years of professional experience as a Software Engineer?"
+- "How many years of experience do you have using Go, Python, or a comparable structured and opinionated language?"
+- "How many years of experience do you have using PostgreSQL or other relational databases?"
 
-1. In `_fill_single_select()` - Add fallback to select first non-empty option:
+### Bug 2: Multi-select checkboxes checking EVERYTHING including "None of the above"
+The `_fill_checkboxes` method in linkedin_form_filler.py has this bad fallback:
 ```python
 if answer is None:
-    # Fallback: select first non-placeholder option
+    # ... spam check ...
+    if not cb.is_checked():
+        self._click_checkbox_label(cb)  # CHECKS EVERYTHING!
+```
+
+This is checking Go, Python, Java, C#, AND "None of the above" all at once.
+
+---
+
+## FILES TO MODIFY
+
+### 1. config/answers.yaml - Add new sections
+
+Add these new sections:
+
+```yaml
+# Skills the user actually has (for multi-select checkbox matching)
+skills:
+  languages:
+    - "python"
+    - "sql"
+    - "javascript"
+    - "bash"
+  frameworks:
+    - "fastapi"
+    - "django"
+    - "flask"
+    - "pydantic"
+    - "sqlalchemy"
+  infrastructure:
+    - "aws"
+    - "docker"
+    - "kubernetes"
+    - "terraform"
+    - "ci/cd"
+    - "github actions"
+  databases:
+    - "postgresql"
+    - "postgres"
+    - "snowflake"
+    - "redis"
+    - "sql"
+  practices:
+    - "backend"
+    - "api"
+    - "microservices"
+    - "rest"
+    - "cloud infrastructure"
+    - "core backend"
+    - "platform services"
+    - "internal developer tooling"
+    - "ci/cd pipelines"
+    - "deployment workflows"
+
+# Dropdown option mappings - maps years of experience to dropdown text options
+experience_dropdowns:
+  # For "Do you have at least X years" questions
+  yes_no_experience:
+    - "yes"
+    - "Yes"
+  # For "How many years" dropdowns - try these in order
+  years_options:
+    - "6+"
+    - "6+ years"  
+    - "5-7 years"
+    - "5-7"
+    - "4-6 years"
+    - "4-6"
+    - "5+"
+    - "5+ years"
+    - "4+"
+    - "4+ years"
+    - "3-5 years"
+    - "3-5"
+```
+
+### 2. src/agent/answer_engine.py - Add new patterns and methods
+
+Add these patterns to `_build_patterns()` BEFORE other patterns:
+
+```python
+# Experience confirmation patterns (Yes/No dropdowns) - MUST BE FIRST
+experience_confirmation_patterns = [
+    # "Do you have at least X years of experience" → Yes
+    (r"do you have at least.*years.*experience|at least.*years.*professional", "experience_dropdowns", "yes_no_experience"),
+    (r"do you have.*\d+.*years", "experience_dropdowns", "yes_no_experience"),
+    # Software engineer experience confirmation
+    (r"software engineer.*experience|experience.*software engineer", "experience_dropdowns", "yes_no_experience"),
+]
+
+# Multi-tech experience patterns  
+multi_tech_experience_patterns = [
+    # "How many years using Go, Python, or comparable" → return max of known techs
+    (r"years.*experience.*(?:go|python|java|c#|ruby|rust|scala)", "MULTI_TECH", "max"),
+    (r"years.*using.*(?:go|python|java|c#|ruby|rust|scala)", "MULTI_TECH", "max"),
+    # Database experience
+    (r"years.*(?:postgresql|postgres|mysql|sql|database|relational)", "technology", "postgresql"),
+]
+```
+
+Add new method `_match_multi_tech_experience()`:
+
+```python
+def _match_multi_tech_experience(self, question: str) -> int | None:
+    """Match questions asking about experience with multiple technologies.
+    
+    E.g., "How many years using Go, Python, or comparable language?"
+    Returns the maximum experience from any mentioned technology.
+    """
+    tech_keywords = {
+        "python": "python",
+        "go": "go", 
+        "golang": "go",
+        "java": "java",
+        "c#": "csharp",
+        "csharp": "csharp",
+        "ruby": "ruby",
+        "rust": "rust",
+        "scala": "scala",
+        "javascript": "javascript",
+        "typescript": "typescript",
+        "sql": "sql",
+        "postgresql": "postgresql",
+        "postgres": "postgresql",
+        "mysql": "sql",
+        "database": "postgresql",
+        "relational": "postgresql",
+    }
+    
+    tech_config = self._config.get("technology", {})
+    max_exp = 0
+    matched_any = False
+    
+    question_lower = question.lower()
+    for keyword, config_key in tech_keywords.items():
+        if keyword in question_lower:
+            exp = tech_config.get(config_key, 0)
+            if exp > max_exp:
+                max_exp = exp
+                matched_any = True
+    
+    return max_exp if matched_any else None
+```
+
+Add new method `_get_experience_dropdown_answer()`:
+
+```python
+def _get_experience_dropdown_answer(self, question: str, field_type: str) -> str | None:
+    """Get answer for experience-related dropdown questions.
+    
+    Handles:
+    - "Do you have at least X years" → "Yes"
+    - "How many years of experience" → "6+" or best matching option
+    """
+    q_lower = question.lower()
+    
+    # Yes/No experience confirmation
+    if "do you have" in q_lower and "years" in q_lower:
+        return "Yes"
+    
+    # Years of experience - return the numeric value, let the form filler
+    # find the best matching dropdown option
+    multi_tech = self._match_multi_tech_experience(question)
+    if multi_tech is not None:
+        return str(multi_tech)
+    
+    return None
+```
+
+Modify `get_answer()` to call these new methods BEFORE the main pattern loop:
+
+```python
+def get_answer(self, question: str, field_type: str = "text", ...) -> Any | None:
+    question_lower = question.lower().strip()
+    
+    # FIRST: Check for experience dropdown questions (Yes/No and years)
+    if field_type == "select":
+        exp_answer = self._get_experience_dropdown_answer(question, field_type)
+        if exp_answer is not None:
+            logger.info(f"AnswerEngine: '{question[:50]}' -> experience_dropdown = {exp_answer}")
+            return exp_answer
+    
+    # ... rest of existing logic ...
+```
+
+### 3. src/agent/linkedin_form_filler.py - Fix checkbox and dropdown logic
+
+**Fix `_fill_checkboxes()` - REMOVE the blind fallback:**
+
+```python
+def _fill_checkboxes(self, container: Locator) -> None:
+    """Fill checkboxes - only check boxes we have explicit answers for."""
+    try:
+        checkboxes = container.locator('input[type="checkbox"]').all()
+    except Exception:
+        return
+
+    for cb in checkboxes:
+        try:
+            if not cb.is_visible(timeout=1000):
+                continue
+        except Exception:
+            continue
+
+        question = self._get_question_text(cb)
+        if not question:
+            continue
+
+        # Skip spam checkboxes
+        q_lower = question.lower()
+        spam_keywords = ["follow", "marketing", "newsletter", "subscribe", "updates"]
+        if any(kw in q_lower for kw in spam_keywords):
+            logger.debug(f"Skipping spam checkbox: {question[:50]}")
+            continue
+
+        answer = self._answers.get_answer(question, "checkbox")
+        if answer is None:
+            # DO NOT auto-check unknown checkboxes!
+            logger.debug(f"No answer for checkbox, skipping: {question[:50]}")
+            continue
+
+        should_check = bool(answer)
+        try:
+            if cb.is_checked() != should_check:
+                self._click_checkbox_label(cb)
+                logger.info(f"Checkbox: {question[:40]} = {should_check}")
+        except Exception:
+            pass
+```
+
+**Add new method `_fill_skill_checkboxes()` - intelligent skill matching:**
+
+```python
+def _fill_skill_checkboxes(self, container: Locator) -> None:
+    """Fill multi-select skill checkboxes intelligently based on user's actual skills."""
+    try:
+        fieldsets = container.locator("fieldset").all()
+    except Exception:
+        return
+
+    # Load user's skills from config
+    skills_config = self._answers._config.get("skills", {})
+    all_skills: set[str] = set()
+    for category_skills in skills_config.values():
+        if isinstance(category_skills, list):
+            all_skills.update(s.lower() for s in category_skills)
+
+    for fieldset in fieldsets:
+        try:
+            question = self._get_fieldset_question(fieldset)
+            if not question:
+                continue
+            
+            q_lower = question.lower()
+            # Only process multi-select skill questions
+            if "select all" not in q_lower and "check all" not in q_lower:
+                continue
+            if "coding" not in q_lower and "language" not in q_lower and "experience" not in q_lower and "following" not in q_lower:
+                continue
+
+            checkboxes = fieldset.locator('input[type="checkbox"]').all()
+            if len(checkboxes) < 2:
+                continue
+
+            checked_any = False
+            for cb in checkboxes:
+                try:
+                    if cb.is_checked():
+                        continue
+                        
+                    label = self._get_checkbox_label(cb)
+                    if not label:
+                        continue
+                    
+                    label_lower = label.lower().strip()
+                    
+                    # NEVER check "None of the above"
+                    if "none" in label_lower and "above" in label_lower:
+                        continue
+                    
+                    # Check if this skill/option matches user's skills
+                    should_check = False
+                    
+                    # Direct skill match
+                    if label_lower in all_skills:
+                        should_check = True
+                    # Partial match (e.g., "Python" matches "python")
+                    elif any(skill in label_lower or label_lower in skill for skill in all_skills):
+                        should_check = True
+                    # Common mappings
+                    elif "python" in label_lower and "python" in all_skills:
+                        should_check = True
+                    elif "backend" in label_lower or "back-end" in label_lower or "back end" in label_lower:
+                        should_check = "backend" in all_skills or "api" in all_skills
+                    elif "cloud" in label_lower or "aws" in label_lower or "gcp" in label_lower or "azure" in label_lower:
+                        should_check = "aws" in all_skills or "cloud infrastructure" in all_skills
+                    elif "ci/cd" in label_lower or "deployment" in label_lower or "pipeline" in label_lower:
+                        should_check = "ci/cd" in all_skills or "ci/cd pipelines" in all_skills
+                    elif "platform" in label_lower or "infrastructure" in label_lower:
+                        should_check = "platform services" in all_skills or "aws" in all_skills
+                    elif "tooling" in label_lower or "developer tool" in label_lower:
+                        should_check = "internal developer tooling" in all_skills
+                    elif "core backend" in label_lower:
+                        should_check = "core backend" in all_skills or "backend" in all_skills
+                    
+                    if should_check:
+                        self._click_checkbox_label(cb)
+                        checked_any = True
+                        logger.info(f"Skill checkbox: {question[:30]} -> checked '{label}'")
+                        
+                except Exception as e:
+                    logger.debug(f"Checkbox processing error: {e}")
+                    continue
+
+            if not checked_any:
+                # If no skills matched, check first non-"none" option as fallback
+                for cb in checkboxes:
+                    label = self._get_checkbox_label(cb)
+                    if label and "none" not in label.lower():
+                        self._click_checkbox_label(cb)
+                        logger.info(f"Fallback skill checkbox: {question[:30]} -> '{label}'")
+                        break
+
+        except Exception as e:
+            logger.debug(f"Skill fieldset processing failed: {e}")
+```
+
+**Fix `_fill_single_select()` - smarter dropdown option matching:**
+
+```python
+def _fill_single_select(self, select: Locator, strategy: str) -> bool:
+    """Fill a single select dropdown with intelligent option matching."""
+    try:
+        if not select.is_visible():
+            return False
+    except Exception:
+        return False
+
+    try:
+        current_value = select.input_value()
+        if current_value and current_value.strip():
+            logger.debug(f"Skipping pre-filled select [{strategy}]")
+            return False
+    except Exception:
+        pass
+
+    question = self._get_question_text(select)
+    if not question:
+        return False
+
+    answer = self._answers.get_answer(question, "select")
+    
+    # Get all available options
     try:
         options = select.locator("option").all()
+        option_texts = []
         for opt in options:
-            val = opt.get_attribute("value")
-            text = opt.text_content()
-            # Skip placeholder options
-            if val and val.strip() and text and "select" not in text.lower():
-                select.select_option(value=val, timeout=3000)
-                logger.info(f"Fallback select (first option): {question[:50]} = {text}")
-                return True
-    except Exception as e:
-        logger.warning(f"Fallback select failed: {e}")
+            text = (opt.text_content() or "").strip()
+            val = opt.get_attribute("value") or ""
+            if text and "select" not in text.lower():
+                option_texts.append((val, text))
+    except Exception:
+        option_texts = []
+
+    if answer is not None:
+        answer_str = str(answer).lower()
+        
+        # Try exact match first
+        for val, text in option_texts:
+            if answer_str == text.lower() or answer_str == val.lower():
+                try:
+                    select.select_option(value=val, timeout=3000)
+                    logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
+                    return True
+                except Exception:
+                    pass
+        
+        # Try partial/fuzzy match
+        for val, text in option_texts:
+            text_lower = text.lower()
+            # "Yes" matches "Yes", "yes", etc.
+            if answer_str in text_lower or text_lower.startswith(answer_str):
+                try:
+                    select.select_option(value=val, timeout=3000)
+                    logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
+                    return True
+                except Exception:
+                    pass
+        
+        # For numeric answers (years of experience), find best matching range
+        if answer_str.isdigit():
+            years = int(answer_str)
+            best_match = self._find_best_years_option(years, option_texts)
+            if best_match:
+                try:
+                    select.select_option(value=best_match[0], timeout=3000)
+                    logger.info(f"Selected [{strategy}]: {question[:40]} = {best_match[1]} (for {years} years)")
+                    return True
+                except Exception:
+                    pass
+
+    # Fallback: select first non-placeholder option
+    if option_texts:
+        val, text = option_texts[0]
+        try:
+            select.select_option(value=val, timeout=3000)
+            logger.info(f"Fallback select: {question[:50]} = {text}")
+            return True
+        except Exception as e:
+            logger.warning(f"Fallback select failed: {e}")
+    
+    return True
+
+def _find_best_years_option(self, years: int, options: list[tuple[str, str]]) -> tuple[str, str] | None:
+    """Find the best dropdown option for a given number of years experience."""
+    # Priority order for matching
+    for val, text in options:
+        text_lower = text.lower()
+        
+        # Exact match like "6 years" or "6"
+        if str(years) in text and ("year" in text_lower or text.strip().isdigit()):
+            return (val, text)
+        
+        # "X+" match (e.g., "6+" for 6 years)
+        if f"{years}+" in text:
+            return (val, text)
+    
+    # Range match (e.g., "5-7 years" for 6 years)
+    import re
+    for val, text in options:
+        range_match = re.search(r"(\d+)\s*[-–]\s*(\d+)", text)
+        if range_match:
+            low, high = int(range_match.group(1)), int(range_match.group(2))
+            if low <= years <= high:
+                return (val, text)
+    
+    # "X+" where X <= years (e.g., "5+" for 6 years)
+    for val, text in options:
+        plus_match = re.search(r"(\d+)\+", text)
+        if plus_match:
+            threshold = int(plus_match.group(1))
+            if years >= threshold:
+                return (val, text)
+    
+    # Last resort: any option with a number <= years
+    for val, text in options:
+        num_match = re.search(r"(\d+)", text)
+        if num_match and int(num_match.group(1)) <= years:
+            return (val, text)
+    
+    return None
+```
+
+**Update `fill_current_modal()` to call skill checkboxes:**
+
+```python
+def fill_current_modal(self) -> bool:
+    """Fill all fields in the current Easy Apply modal."""
+    modal = self._page.locator('.jobs-easy-apply-modal, [data-test-modal]').first
+    try:
+        if not modal.is_visible(timeout=2000):
+            logger.warning("No Easy Apply modal found")
+            return False
+    except Exception:
+        logger.warning("No Easy Apply modal found")
+        return False
+
+    self._fill_text_inputs(modal)
+    self._fill_selects(modal)
+    self._fill_radios(modal)
+    self._fill_skill_checkboxes(modal)  # NEW: intelligent skill matching
+    self._fill_checkboxes(modal)  # Now only checks boxes with explicit answers
+    self._fill_textareas(modal)
+    self._uncheck_follow_company()
+
     return True
 ```
 
-2. In `_fill_single_text_input()` - Detect numeric fields and use numeric fallback:
-```python
-# Before setting fallback, check if field expects number
-field_type = inp.get_attribute("type") or "text"
-if field_type == "number" or any(kw in question.lower() for kw in ["salary", "rate", "amount", "years", "months", "pkr", "usd", "compensation"]):
-    inp.fill("0")
-    logger.info(f"Fallback numeric: {question[:50]} = 0")
-else:
-    inp.fill(FALLBACK_TEXT)
-    logger.info(f"Fallback text: {question[:50]}")
-```
+---
 
-3. Add new patterns to answer_engine.py for these specific questions:
-```python
-# In checkbox_patterns or create new section
-(r"sql.*postgres|postgres|mysql|sql\s*server", "multi_select", "sql_databases"),
-(r"nosql|mongo|cassandra|dynamodb", "multi_select", "nosql_databases"),
-(r"restful|rest\s*api|microservice", "dropdowns", "api_experience"),
-(r"notice\s*period", "dropdowns", "notice_period"),
-(r"python.*node|node.*python|years.*python", "dropdowns", "python_years"),
-```
+## SUMMARY OF CHANGES
 
-4. Add to config/answers.yaml:
-```yaml
-dropdowns:
-  api_experience: "3-5 years"
-  notice_period: "2 weeks"
-  python_years: "5+"
-  
-multi_select:
-  sql_databases: true
-  nosql_databases: false
-```
+1. **answers.yaml**: Added `skills` section (languages, frameworks, infrastructure, databases, practices) and `experience_dropdowns` section
 
-5. Create `_fill_multi_select_checkboxes()` method that specifically handles checkbox GROUPS:
-- Find container elements with "Select all that apply" in question
-- Check the first checkbox in the group as fallback
-- For database questions, check "SQL" option
+2. **answer_engine.py**: Added patterns for "do you have at least X years" → Yes, added `_match_multi_tech_experience()` for questions with multiple techs, added `_get_experience_dropdown_answer()` called early in `get_answer()`
 
-Files:
-- C:\Projects\Mater-Browser\src\agent\linkedin_form_filler.py
-- C:\Projects\Mater-Browser\src\agent\answer_engine.py
-- C:\Projects\Mater-Browser\config\answers.yaml
+3. **linkedin_form_filler.py**: 
+   - Fixed `_fill_checkboxes()` to NOT auto-check unknown boxes
+   - Added `_fill_skill_checkboxes()` for intelligent skill matching
+   - Fixed `_fill_single_select()` with `_find_best_years_option()` for experience dropdowns
+   - Updated `fill_current_modal()` to call skill checkboxes first
 
-The goal is: NEVER leave required fields empty. Always fill something.
+Test by running against a LinkedIn Easy Apply job with similar questions.
 
 ## Code Standards
 

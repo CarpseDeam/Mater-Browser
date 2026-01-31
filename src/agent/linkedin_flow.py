@@ -151,6 +151,10 @@ class LinkedInFlow:
 
         answer_engine = AnswerEngine()
         filler = LinkedInFormFiller(self._page.raw, answer_engine)
+        
+        last_page_hash = ""
+        stuck_count = 0
+        max_stuck = 2  # If same page 2 times, we're stuck
 
         for page_num in range(self._max_pages):
             self._page.wait(1000)
@@ -163,6 +167,17 @@ class LinkedInFlow:
                     pages_processed=page_num + 1,
                     url=job_url,
                 )
+
+            # Get current page hash to detect stuck
+            current_hash = self._get_modal_hash()
+            if current_hash == last_page_hash:
+                stuck_count += 1
+                if stuck_count >= max_stuck:
+                    logger.warning(f"Stuck on same page {stuck_count} times, aborting")
+                    break
+            else:
+                stuck_count = 0
+                last_page_hash = current_hash
 
             filler.fill_current_modal()
 
@@ -178,3 +193,22 @@ class LinkedInFlow:
             pages_processed=self._max_pages,
             url=job_url,
         )
+
+    def _get_modal_hash(self) -> str:
+        """Get a hash of the current modal state to detect if we're stuck."""
+        try:
+            # Use progress bar percentage as page identifier
+            progress = self._page.raw.locator("progress").first
+            if progress.is_visible(timeout=500):
+                value = progress.get_attribute("value") or ""
+                return f"progress:{value}"
+        except Exception:
+            pass
+        
+        try:
+            # Fallback: count form elements
+            inputs = self._page.raw.locator(".jobs-easy-apply-modal input").count()
+            radios = self._page.raw.locator(".jobs-easy-apply-modal fieldset").count()
+            return f"elements:{inputs}:{radios}"
+        except Exception:
+            return ""

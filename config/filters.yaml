@@ -145,6 +145,37 @@ blocked_url_patterns:
   - "registration"
   - "newuser"
 
+location_exclusions:
+  # Reject jobs with these locations (case-insensitive)
+  - "india"
+  - "chennai"
+  - "bangalore"
+  - "bengaluru"
+  - "mumbai"
+  - "hyderabad"
+  - "pune"
+  - "delhi"
+  - "kolkata"
+  - "tamil nadu"
+  - "maharashtra"
+  - "karnataka"
+  - "pakistan"
+  - "philippines"
+  - "nigeria"
+  - "kenya"
+  - "south africa"
+  - "argentina"
+  - "brazil"
+  - "mexico"
+  - "colombia"
+  - "poland"
+  - "ukraine"
+  - "romania"
+  - "vietnam"
+  - "indonesia"
+  - "malaysia"
+  - "singapore"
+
 positive_signals:
   # Boost score if description mentions these
   - "python"

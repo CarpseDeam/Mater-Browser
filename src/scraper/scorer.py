@@ -112,6 +112,17 @@ class JobScorer:
                     matched_value=pattern,
                 )
 
+        # Check location exclusions
+        location_lower = job.location.lower() if job.location else ""
+        for loc in self._config.location_exclusions:
+            if loc in location_lower:
+                return FilterResult(
+                    passed=False,
+                    reason=f"excluded location: '{loc}'",
+                    rule_type=RuleType.LOCATION_EXCLUSION,
+                    matched_value=loc,
+                )
+
         for excl in self._config.description_exclusions:
             if excl in combined:
                 return FilterResult(

@@ -36,6 +36,8 @@ checkboxes:
   sms_consent: false
   acknowledgment: true
   general_consent: true
+  worked_here_before: false
+  education_completed: true
 
 # Years of Technology Experience
 technology:
@@ -136,3 +138,66 @@ preferences:
   notice_period: "2 weeks"
   available_start: "Immediately"
   databases: "PostgreSQL, Snowflake, Redis"
+
+# Yes/No dropdown answers
+yes_no:
+  yes: "Yes"
+
+# Skills the user actually has (for multi-select checkbox matching)
+skills:
+  languages:
+    - "python"
+    - "sql"
+    - "javascript"
+    - "bash"
+  frameworks:
+    - "fastapi"
+    - "django"
+    - "flask"
+    - "pydantic"
+    - "sqlalchemy"
+  infrastructure:
+    - "aws"
+    - "docker"
+    - "kubernetes"
+    - "terraform"
+    - "ci/cd"
+    - "github actions"
+  databases:
+    - "postgresql"
+    - "postgres"
+    - "snowflake"
+    - "redis"
+    - "sql"
+  practices:
+    - "backend"
+    - "api"
+    - "microservices"
+    - "rest"
+    - "cloud infrastructure"
+    - "core backend"
+    - "platform services"
+    - "internal developer tooling"
+    - "ci/cd pipelines"
+    - "deployment workflows"
+
+# Dropdown option mappings - maps years of experience to dropdown text options
+experience_dropdowns:
+  # For "Do you have at least X years" questions
+  yes_no_experience:
+    - "yes"
+    - "Yes"
+  # For "How many years" dropdowns - try these in order
+  years_options:
+    - "6+"
+    - "6+ years"
+    - "5-7 years"
+    - "5-7"
+    - "4-6 years"
+    - "4-6"
+    - "5+"
+    - "5+ years"
+    - "4+"
+    - "4+ years"
+    - "3-5 years"
+    - "3-5"

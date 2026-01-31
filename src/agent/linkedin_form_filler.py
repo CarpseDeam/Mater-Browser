@@ -111,8 +111,8 @@ class LinkedInFormFiller:
         self._fill_text_inputs(modal)
         self._fill_selects(modal)
         self._fill_radios(modal)
-        self._fill_checkboxes(modal)
-        self._fill_multi_select_checkboxes(modal)
+        self._fill_skill_checkboxes(modal)  # Intelligent skill matching first
+        self._fill_checkboxes(modal)  # Now only checks boxes with explicit answers
         self._fill_textareas(modal)
         self._uncheck_follow_company()
 
@@ -219,7 +219,7 @@ class LinkedInFormFiller:
                         filled_ids.add(select_id)
 
     def _fill_single_select(self, select: Locator, strategy: str) -> bool:
-        """Fill a single select dropdown. Returns True if processed."""
+        """Fill a single select dropdown with intelligent option matching."""
         try:
             if not select.is_visible():
                 return False
@@ -239,31 +239,102 @@ class LinkedInFormFiller:
             return False
 
         answer = self._answers.get_answer(question, "select")
-        if answer is not None:
-            try:
-                select.select_option(label=str(answer), timeout=5000)
-                logger.info(f"Selected [{strategy}]: {question[:40]} = {answer}")
-                return True
-            except Exception:
-                try:
-                    select.select_option(value=str(answer), timeout=5000)
-                    logger.info(f"Selected [{strategy}]: {question[:40]} = {answer}")
-                    return True
-                except Exception as e:
-                    logger.warning(f"Could not select {answer} for {question}: {e}")
-        # Fallback: select first non-placeholder option
+
+        # Get all available options
+        option_texts: list[tuple[str, str]] = []
         try:
             options = select.locator("option").all()
             for opt in options:
-                val = opt.get_attribute("value") or ""
                 text = (opt.text_content() or "").strip()
-                if val.strip() and text and "select" not in text.lower():
-                    select.select_option(value=val, timeout=3000)
-                    logger.info(f"Fallback select (first option): {question[:50]} = {text}")
-                    return True
-        except Exception as e:
-            logger.warning(f"Fallback select failed: {e}")
+                val = opt.get_attribute("value") or ""
+                if text and "select" not in text.lower():
+                    option_texts.append((val, text))
+        except Exception:
+            pass
+
+        if answer is not None:
+            answer_str = str(answer).lower()
+
+            # Try exact match first
+            for val, text in option_texts:
+                if answer_str == text.lower() or answer_str == val.lower():
+                    try:
+                        select.select_option(value=val, timeout=3000)
+                        logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
+                        return True
+                    except Exception:
+                        pass
+
+            # Try partial/fuzzy match
+            for val, text in option_texts:
+                text_lower = text.lower()
+                if answer_str in text_lower or text_lower.startswith(answer_str):
+                    try:
+                        select.select_option(value=val, timeout=3000)
+                        logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
+                        return True
+                    except Exception:
+                        pass
+
+            # For numeric answers (years of experience), find best matching range
+            if answer_str.isdigit():
+                years = int(answer_str)
+                best_match = self._find_best_years_option(years, option_texts)
+                if best_match:
+                    try:
+                        select.select_option(value=best_match[0], timeout=3000)
+                        logger.info(f"Selected [{strategy}]: {question[:40]} = {best_match[1]} (for {years} years)")
+                        return True
+                    except Exception:
+                        pass
+
+        # Fallback: select first non-placeholder option
+        if option_texts:
+            val, text = option_texts[0]
+            try:
+                select.select_option(value=val, timeout=3000)
+                logger.info(f"Fallback select: {question[:50]} = {text}")
+                return True
+            except Exception as e:
+                logger.warning(f"Fallback select failed: {e}")
+
         return True
+
+    def _find_best_years_option(self, years: int, options: list[tuple[str, str]]) -> tuple[str, str] | None:
+        """Find the best dropdown option for a given number of years experience."""
+        import re
+
+        # Exact match like "6 years" or "6"
+        for val, text in options:
+            text_lower = text.lower()
+            if str(years) in text and ("year" in text_lower or text.strip().isdigit()):
+                return (val, text)
+            if f"{years}+" in text:
+                return (val, text)
+
+        # Range match (e.g., "5-7 years" for 6 years)
+        for val, text in options:
+            range_match = re.search(r"(\d+)\s*[-–]\s*(\d+)", text)
+            if range_match:
+                low, high = int(range_match.group(1)), int(range_match.group(2))
+                if low <= years <= high:
+                    return (val, text)
+
+        # "X+" where X <= years (e.g., "5+" for 6 years)
+        for val, text in options:
+            plus_match = re.search(r"(\d+)\+", text)
+            if plus_match:
+                threshold = int(plus_match.group(1))
+                if years >= threshold:
+                    return (val, text)
+
+        # Last resort: any option with a number <= years
+        for val, text in options:
+            num_match = re.search(r"(\d+)", text)
+            if num_match and int(num_match.group(1)) <= years:
+                return (val, text)
+
+        return None
 
     def _fill_radios(self, container: Locator) -> None:
         """Fill radio button groups using multiple selector strategies."""
@@ -344,7 +415,7 @@ class LinkedInFormFiller:
                 if radios:
                     first_radio = radios[0]
                     if not first_radio.is_checked():
-                        first_radio.check()
+                        self._click_radio_label(first_radio)
                     label = self._get_radio_label(first_radio)
                     logger.info(f"Fallback radio (first option): {question[:50]} = {label}")
             except Exception as e:
@@ -357,20 +428,43 @@ class LinkedInFormFiller:
             if label and answer_str in label.lower():
                 try:
                     if not radio.is_checked():
-                        radio.check()
+                        self._click_radio_label(radio)
                         logger.info(f"Radio [{strategy}]: {question[:40]} = {label}")
                 except Exception:
                     pass
                 return True
         return False
 
+    def _click_radio_label(self, radio: Locator) -> None:
+        """Click the label for a radio button instead of the input directly.
+        
+        LinkedIn's labels intercept pointer events, so we must click the label.
+        """
+        try:
+            radio_id = radio.get_attribute("id")
+            if radio_id:
+                label = self._page.locator(f'label[for="{radio_id}"]').first
+                if label.is_visible(timeout=1000):
+                    label.click(timeout=3000)
+                    return
+        except Exception:
+            pass
+        # Fallback: try force click on the radio itself
+        try:
+            radio.click(force=True, timeout=3000)
+        except Exception:
+            pass
+
     def _fill_checkboxes(self, container: Locator) -> None:
-        """Fill checkboxes."""
-        checkboxes = container.locator('input[type="checkbox"]').all()
+        """Fill checkboxes - only check boxes we have explicit answers for."""
+        try:
+            checkboxes = container.locator('input[type="checkbox"]').all()
+        except Exception:
+            return
 
         for cb in checkboxes:
             try:
-                if not cb.is_visible():
+                if not cb.is_visible(timeout=1000):
                     continue
             except Exception:
                 continue
@@ -379,65 +473,138 @@ class LinkedInFormFiller:
             if not question:
                 continue
 
+            # Skip spam checkboxes
+            q_lower = question.lower()
+            spam_keywords = ["follow", "marketing", "newsletter", "subscribe", "updates"]
+            if any(kw in q_lower for kw in spam_keywords):
+                logger.debug(f"Skipping spam checkbox: {question[:50]}")
+                continue
+
             answer = self._answers.get_answer(question, "checkbox")
             if answer is None:
-                q_lower = question.lower()
-                spam_keywords = ["follow", "marketing", "newsletter", "subscribe", "updates"]
-                if any(kw in q_lower for kw in spam_keywords):
-                    logger.debug(f"Skipping spam checkbox: {question[:50]}")
-                    continue
-                try:
-                    if not cb.is_checked():
-                        cb.check()
-                        logger.info(f"Fallback checkbox (checked): {question[:50]}")
-                except Exception:
-                    pass
+                # DO NOT auto-check unknown checkboxes!
+                logger.debug(f"No answer for checkbox, skipping: {question[:50]}")
                 continue
 
             should_check = bool(answer)
             try:
                 if cb.is_checked() != should_check:
-                    if should_check:
-                        cb.check()
-                    else:
-                        cb.uncheck()
+                    self._click_checkbox_label(cb)
                     logger.info(f"Checkbox: {question[:40]} = {should_check}")
             except Exception:
                 pass
 
-    def _fill_multi_select_checkboxes(self, container: Locator) -> None:
-        """Fill multi-select checkbox groups (Select all that apply)."""
-        # Find fieldsets that contain multiple checkboxes
+    def _click_checkbox_label(self, checkbox: Locator) -> None:
+        """Click the label for a checkbox instead of the input directly."""
+        try:
+            cb_id = checkbox.get_attribute("id")
+            if cb_id:
+                label = self._page.locator(f'label[for="{cb_id}"]').first
+                if label.is_visible(timeout=1000):
+                    label.click(timeout=2000)
+                    return
+        except Exception:
+            pass
+        # Fallback: force click
+        try:
+            checkbox.click(force=True, timeout=2000)
+        except Exception:
+            pass
+
+    def _fill_skill_checkboxes(self, container: Locator) -> None:
+        """Fill multi-select skill checkboxes intelligently based on user's actual skills."""
         try:
             fieldsets = container.locator("fieldset").all()
         except Exception:
             return
+
+        # Load user's skills from config
+        skills_config = self._answers._config.get("skills", {})
+        all_skills: set[str] = set()
+        for category_skills in skills_config.values():
+            if isinstance(category_skills, list):
+                all_skills.update(s.lower() for s in category_skills)
 
         for fieldset in fieldsets:
             try:
                 question = self._get_fieldset_question(fieldset)
                 if not question:
                     continue
-                # Skip if not a "select all" type question
+
                 q_lower = question.lower()
+                # Only process multi-select skill questions
                 if "select all" not in q_lower and "check all" not in q_lower:
+                    continue
+                skill_indicators = ["coding", "language", "experience", "following", "skill", "technolog"]
+                if not any(ind in q_lower for ind in skill_indicators):
                     continue
 
                 checkboxes = fieldset.locator('input[type="checkbox"]').all()
                 if len(checkboxes) < 2:
                     continue
 
-                # Check if any are already checked
-                any_checked = any(cb.is_checked() for cb in checkboxes)
-                if any_checked:
-                    continue
+                checked_any = False
+                for cb in checkboxes:
+                    try:
+                        if cb.is_checked():
+                            continue
 
-                # Fallback: check first checkbox in group
-                checkboxes[0].check()
-                label = self._get_checkbox_label(checkboxes[0])
-                logger.info(f"Fallback multi-select: {question[:40]} = {label}")
+                        label = self._get_checkbox_label(cb)
+                        if not label:
+                            continue
+
+                        label_lower = label.lower().strip()
+
+                        # NEVER check "None of the above"
+                        if "none" in label_lower and "above" in label_lower:
+                            continue
+
+                        # Check if this skill/option matches user's skills
+                        should_check = self._skill_matches(label_lower, all_skills)
+
+                        if should_check:
+                            self._click_checkbox_label(cb)
+                            checked_any = True
+                            logger.info(f"Skill checkbox: {question[:30]} -> checked '{label}'")
+
+                    except Exception as e:
+                        logger.debug(f"Checkbox processing error: {e}")
+                        continue
+
+                if not checked_any:
+                    # If no skills matched, check first non-"none" option as fallback
+                    for cb in checkboxes:
+                        label = self._get_checkbox_label(cb)
+                        if label and "none" not in label.lower():
+                            self._click_checkbox_label(cb)
+                            logger.info(f"Fallback skill checkbox: {question[:30]} -> '{label}'")
+                            break
+
             except Exception as e:
-                logger.debug(f"Multi-select processing failed: {e}")
+                logger.debug(f"Skill fieldset processing failed: {e}")
+
+    def _skill_matches(self, label: str, skills: set[str]) -> bool:
+        """Check if a checkbox label matches any of the user's skills."""
+        # Direct skill match
+        if label in skills:
+            return True
+        # Partial match (e.g., "Python" matches "python")
+        if any(skill in label or label in skill for skill in skills):
+            return True
+        # Common mappings
+        if "backend" in label or "back-end" in label or "back end" in label:
+            return "backend" in skills or "api" in skills
+        if "cloud" in label or "aws" in label or "gcp" in label or "azure" in label:
+            return "aws" in skills or "cloud infrastructure" in skills
+        if "ci/cd" in label or "deployment" in label or "pipeline" in label:
+            return "ci/cd" in skills or "ci/cd pipelines" in skills
+        if "platform" in label or "infrastructure" in label:
+            return "platform services" in skills or "aws" in skills
+        if "tooling" in label or "developer tool" in label:
+            return "internal developer tooling" in skills
+        if "core backend" in label:
+            return "core backend" in skills or "backend" in skills
+        return False
 
     def _get_fieldset_question(self, fieldset: Locator) -> str:
         """Extract question text from fieldset legend or label."""

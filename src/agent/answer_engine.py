@@ -38,6 +38,17 @@ class AnswerEngine:
         """
         patterns = []
 
+        # Experience confirmation patterns (Yes/No dropdowns) - MUST BE FIRST
+        # These handle "Do you have at least X years of experience" type questions
+        experience_confirmation_patterns = [
+            (r"do you have at least.*years.*experience|at least.*years.*professional", "EXPERIENCE_CONFIRMATION", "yes"),
+            (r"do you have.*\d+.*years", "EXPERIENCE_CONFIRMATION", "yes"),
+            (r"software engineer.*experience|experience.*software engineer", "EXPERIENCE_CONFIRMATION", "yes"),
+        ]
+
+        for pattern_str, category, key in experience_confirmation_patterns:
+            patterns.append((re.compile(pattern_str, re.IGNORECASE), category, key))
+
         # EEO patterns FIRST - must match before personal patterns to avoid
         # "Voluntary Self-Identification of Disability" matching personal.website
         eeo_patterns = [
@@ -64,6 +75,9 @@ class AnswerEngine:
         checkbox_patterns = [
             (r"driver.?s?\s*licen[sc]e", "checkboxes", "drivers_license"),
             (r"(require|need)\s*(visa|sponsorship)", "checkboxes", "require_visa"),
+            (r"will you.*need.*sponsorship|ever need.*sponsorship|sponsorship.*to work", "checkboxes", "require_visa"),
+            (r"require.*employer.*sponsor|employer.*sponsored.*work.*authorization", "checkboxes", "require_visa"),
+            (r"do you have.*experience|solid experience|experience with.*and knowledge", "checkboxes", "acknowledgment"),
             (r"legally\s*(authorized|able)", "checkboxes", "legally_authorized"),
             (r"(willing|open)\s*to\s*relocate", "checkboxes", "willing_to_relocate"),
             (r"background\s*check", "checkboxes", "background_check"),
@@ -78,9 +92,18 @@ class AnswerEngine:
             (r"sms|text\s*(message|communication)", "checkboxes", "sms_consent"),
             (r"i\s*(understand|acknowledge|agree|certify|confirm)", "checkboxes", "acknowledgment"),
             (r"consent", "checkboxes", "general_consent"),
+            # Common LinkedIn questions
+            (r"can you start.*immediately|start.*urgent|urgently", "checkboxes", "start_immediately"),
+            (r"comfortable.*remote|remote.*environment|work.*from.*home", "checkboxes", "remote_work"),
+            (r"felony|convicted|criminal.*record", "checkboxes", "background_check"),
+            (r"previously.*worked.*at|former.*employee|worked.*here.*before", "checkboxes", "worked_here_before"),
+            (r"completed.*education|bachelor|master|degree.*completed|level.*education", "checkboxes", "education_completed"),
         ]
 
         experience_patterns = [
+            # Generic work experience
+            (r"how many years.*(work|professional).*experience|years of work experience|total.*experience", "industry", "software_engineering"),
+            # Tech-specific
             (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*python", "technology", "python"),
             (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*fastapi", "technology", "fastapi"),
             (r"years?\s*(of)?\s*(experience|exp)?\s*(with|in|using)?\s*(aws|amazon)", "technology", "aws"),
@@ -119,6 +142,13 @@ class AnswerEngine:
             (r"which\s*database|database.*experienced|experienced.*database", "preferences", "databases"),
         ]
 
+        # Yes/No dropdown patterns (consent, agreements, confirmations)
+        yes_no_dropdown_patterns = [
+            (r"agree.*privacy\s*policy|privacy\s*policy.*data\s*processing|clicking.*yes.*agree", "yes_no", "yes"),
+            (r"accurate\s*information|dishonesty.*rejection|termination", "yes_no", "yes"),
+            (r"certify.*true|information.*accurate|truthful", "yes_no", "yes"),
+        ]
+
         all_patterns = (
             eeo_patterns
             + personal_patterns
@@ -127,6 +157,7 @@ class AnswerEngine:
             + salary_patterns
             + language_patterns
             + preference_patterns
+            + yes_no_dropdown_patterns
         )
 
         for pattern_str, category, key in all_patterns:
@@ -159,8 +190,19 @@ class AnswerEngine:
         """
         question_lower = question.lower().strip()
 
+        # FIRST: Check for experience dropdown questions (Yes/No and years)
+        if field_type == "select":
+            exp_answer = self._get_experience_dropdown_answer(question, field_type)
+            if exp_answer is not None:
+                logger.info(f"AnswerEngine: '{question[:50]}' -> experience_dropdown = {exp_answer}")
+                return exp_answer
+
         for pattern, category, key in self._question_patterns:
             if pattern.search(question_lower):
+                # Special handling for experience confirmation patterns
+                if category == "EXPERIENCE_CONFIRMATION":
+                    logger.info(f"AnswerEngine: '{question[:50]}' -> experience_confirmation = Yes")
+                    return "Yes"
                 value = self._config.get(category, {}).get(key)
                 if value is not None:
                     logger.info(f"AnswerEngine: '{question[:50]}' -> {category}.{key} = {value}")
@@ -220,6 +262,66 @@ class AnswerEngine:
             return industry_config[skill]
 
         return tech_config.get("default", 0)
+
+    def _match_multi_tech_experience(self, question: str) -> int | None:
+        """Match questions asking about experience with multiple technologies.
+
+        E.g., "How many years using Go, Python, or comparable language?"
+        Returns the maximum experience from any mentioned technology.
+        """
+        tech_keywords = {
+            "python": "python",
+            "go": "go",
+            "golang": "go",
+            "java": "java",
+            "c#": "csharp",
+            "csharp": "csharp",
+            "ruby": "ruby",
+            "rust": "rust",
+            "scala": "scala",
+            "javascript": "javascript",
+            "typescript": "typescript",
+            "sql": "sql",
+            "postgresql": "postgresql",
+            "postgres": "postgresql",
+            "mysql": "sql",
+            "database": "postgresql",
+            "relational": "postgresql",
+        }
+
+        tech_config = self._config.get("technology", {})
+        max_exp = 0
+        matched_any = False
+
+        question_lower = question.lower()
+        for keyword, config_key in tech_keywords.items():
+            if keyword in question_lower:
+                exp = tech_config.get(config_key, 0)
+                if exp > max_exp:
+                    max_exp = exp
+                    matched_any = True
+
+        return max_exp if matched_any else None
+
+    def _get_experience_dropdown_answer(self, question: str, field_type: str) -> str | None:
+        """Get answer for experience-related dropdown questions.
+
+        Handles:
+        - "Do you have at least X years" → "Yes"
+        - "How many years of experience" → numeric string for form filler to match
+        """
+        q_lower = question.lower()
+
+        # Yes/No experience confirmation
+        if "do you have" in q_lower and "years" in q_lower:
+            return "Yes"
+
+        # Years of experience - return the numeric value
+        multi_tech = self._match_multi_tech_experience(question)
+        if multi_tech is not None:
+            return str(multi_tech)
+
+        return None
 
     def _format_answer(self, value: Any, field_type: str) -> Any:
         """Format answer for field type."""
