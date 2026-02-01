@@ -38,7 +38,7 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 - **Fail-Safe**: To ensure applications never stall on required fields:
     - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.  
-    - **Radio Groups**: Automatically selects the first available option if no specific answer matches.
+    - **Radio Groups**: Uses intelligent defaults based on question content to ensure safe and accurate applications. It automatically defaults to "No" for sensitive topics (previous employment, conflict of interest, referrals, crypto, legal actions) and "Yes" for essential requirements (work authorization, background checks, consent). For unknown Yes/No questions, it defaults to "No" as a safer option before falling back to the first available choice for non-binary groups.
     - **Select/Dropdowns**: If no matching option is found in the configuration, it selects the first non-placeholder option as a last resort.
     - **Checkboxes**: For single checkboxes, it checks the box by default unless it contains spam keywords. For multi-select skill groups, it checks the first relevant option if no skills match.
     - **Logging**: All unknown questions are still logged to the `FailureLogger` for future configuration updates.

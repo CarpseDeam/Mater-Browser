@@ -2,6 +2,13 @@
 
 All notable changes to this project.
 
+- 2026-01-31: fix: Fix critical radio button and pattern matching bugs in LinkedIn form filler
+  - Refined `city|location` pattern in `AnswerEngine` to be more specific, preventing false positives on employment history questions
+  - Rewrote `_fill_single_radio_group` in `LinkedInFormFiller` with intelligent defaults:
+    - Automatically defaults to "No" for sensitive questions (previous employment, conflict of interest, referrals, crypto/blockchain, etc.)
+    - Automatically defaults to "Yes" for work authorization, background checks, and consent-related questions
+    - Uses "No" as a safe fallback for unknown Yes/No questions to avoid over-claiming
+  - Updated `config/answers.yaml` with a new `default_no` section to support safe defaults
 - 2026-01-31: fix: Fix LinkedIn Easy Apply form filling and add location-based filtering
   - Fixed LinkedIn dropdown filling by implementing intelligent option matching (exact, partial, and numeric range for years of experience)
   - Overhauled checkbox handling to prevent blind checking; implemented `_fill_skill_checkboxes` for intelligent multi-select skill matching based on user profile

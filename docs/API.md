@@ -23,19 +23,19 @@ Orchestrates the job application flow for LinkedIn and Indeed.
 
 Config-driven answer lookup for form questions.
 
-- `get_answer(question: str, field_type: str = "text", *, job_url: str = "", job_title: str = "", company: str = "", page_snapshot: str | None = None) -> Optional[Any]`: Looks up an answer for a given question text by matching against `config/answers.yaml` patterns. Supports `text`, `radio`, and `select` field types. Logs unknown questions to `FailureLogger`.
+- `get_answer(question: str, field_type: str = "text", *, job_url: str = "", job_title: str = "", company: str = "", page_snapshot: str | None = None) -> Optional[Any]`: Looks up an answer for a given question text by matching against `config/answers.yaml` patterns. Supports `text`, `radio`, and `select` field types. Includes refined regex for high-precision matching of location and personal info. Logs unknown questions to `FailureLogger`.
 - `has_answer(question: str) -> bool`: Checks if an answer is available for the specified question.
 
 ### `LinkedInFormFiller`
 
 Deterministic form filler for LinkedIn Easy Apply modals.
 
-- `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups). 
+- `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups).
     - **Intelligent Skill Matching**: Automatically matches multi-select skill checkboxes against the user's documented technical profile.
     - **Smart Dropdowns**: Employs fuzzy and range-based matching for experience and preference dropdowns.
-    - **Fail-Safe**: Uses fallback answers for unknown text fields (including numeric "0" fallbacks) and selects/radios to ensure completion. 
-    - Returns `True` if modal was found and processed.
-- `click_next() -> bool`: Clicks the next, submit, or review button to advance the form.
+    - **Intelligent Radio Defaults**: Applies safe defaults for Yes/No questions based on context (e.g., "No" for conflicts of interest, "Yes" for work authorization) when no explicit answer is found.
+    - **Fail-Safe**: Uses fallback answers for unknown text fields (including numeric "0" fallbacks) to ensure completion.
+    - Returns `True` if modal was found and processed.- `click_next() -> bool`: Clicks the next, submit, or review button to advance the form.
 - `is_confirmation_page() -> bool`: Detects if the application success page has been reached.
 - `close_modal()`: Closes the Easy Apply modal after completion or failure.
 

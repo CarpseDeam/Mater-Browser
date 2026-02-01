@@ -1,202 +1,254 @@
-Fix critical radio button and pattern matching bugs in LinkedIn form filler.
+Fix LinkedIn Easy Apply flow getting stuck immediately - missing logging and broken stuck detection.
 
-## BUGS FROM LOGS
+## PROBLEM
 
-### Bug 1: "city|location" pattern matching wrong questions
-The question "Have you previously been employed by Coinbase in a location..." is matching the pattern `city|location` and returning "Lorain, Ohio" instead of being treated as a previous employment question.
-
-The pattern is too broad. "location" appears in many contexts.
-
-### Bug 2: Radio fallback defaults to "Yes" for dangerous questions
-The fallback in `_fill_single_radio_group` selects the FIRST option, which is usually "Yes". This is answering:
-- "Do you have a public Ethereum Address" → Yes (WRONG - should be No)
-- "Do you or a close relative hold a role [conflict of interest]" → Yes (WRONG - should be No) 
-- "Were you referred by a senior leader" → Yes (WRONG - should be No)
-- "Have you previously been employed by Coinbase" → Yes (WRONG - should be No)
-
-These false "Yes" answers can disqualify the application or create legal issues.
-
----
-
-## FILES TO MODIFY
-
-### 1. src/agent/answer_engine.py - Fix patterns and add "No" defaults
-
-**Fix the city/location pattern to be more specific:**
-
-Change from:
-```python
-(r"city|location", "personal", "city"),
+The logs show:
+```
+19:34:07 - Using deterministic form filler for Easy Apply
+19:34:19 - Stuck on same page 2 times, aborting
 ```
 
-To:
-```python
-(r"(?:your|current|preferred)\s*(?:city|location)|where.*(?:located|live|reside)|^city$|^location$", "personal", "city"),
-```
+NO form filler logs in between (no "Filled", "Selected", "Radio", etc.). This means either:
+1. The modal isn't being found but silently failing
+2. `_get_modal_hash()` returns "" twice → thinks stuck immediately
+3. Exceptions being swallowed
 
-**Add new patterns for questions that should default to "No":**
+## ROOT CAUSE
 
-Add a new section `default_no_patterns` BEFORE checkbox_patterns:
+In `_get_modal_hash()`:
+- If progress bar not found AND input count fails → returns ""
+- First iteration: last_page_hash = "", current_hash = "" → stuck_count = 1
+- Second iteration: both still "" → stuck_count = 2 → breaks immediately
 
-```python
-# Questions that should default to "No" - conflict of interest, previous employment, referrals
-default_no_patterns = [
-    # Previous employment
-    (r"previously.*employed|former.*employee|worked.*(?:at|for|here).*before|been employed by", "default_no", "no"),
-    # Referrals
-    (r"referred.*(?:by|to)|referral|who referred", "default_no", "no"),
-    # Conflict of interest
-    (r"close relative.*(?:hold|have).*role|conflict.*interest|financial.*interest", "default_no", "no"),
-    # Crypto/blockchain specific (don't have)
-    (r"ethereum.*address|ens.*name|basename|wallet.*address|crypto.*(?:wallet|address)|smart.*contract", "default_no", "no"),
-    # Government/political roles
-    (r"government.*(?:official|employee)|political.*(?:office|role)|public.*official", "default_no", "no"),
-    # Securities/regulatory
-    (r"finra|sec.*registration|securities.*license|broker.*dealer", "default_no", "no"),
-]
-```
+## FILES TO FIX
 
-**Add to answers.yaml:**
-```yaml
-# Default "No" answers for sensitive questions
-default_no:
-  no: "No"
-```
+### src/agent/linkedin_flow.py
 
-### 2. src/agent/linkedin_form_filler.py - Fix radio fallback logic
-
-**Rewrite `_fill_single_radio_group()` to be smarter about defaults:**
+**Fix 1: Add comprehensive logging to `_process_easy_apply()`:**
 
 ```python
-def _fill_single_radio_group(self, fieldset: Locator, question: str, strategy: str) -> bool:
-    """Fill a single radio group with intelligent defaults."""
-    answer = self._answers.get_answer(question, "radio")
+def _process_easy_apply(self, job_url: str) -> ApplicationResult:
+    """Process LinkedIn Easy Apply using deterministic form filler."""
+    logger.info("Using deterministic form filler for Easy Apply")
 
+    answer_engine = AnswerEngine()
+    filler = LinkedInFormFiller(self._page.raw, answer_engine)
+    
+    last_page_hash = ""
+    stuck_count = 0
+    max_stuck = 3  # Increase from 2 to 3 for more tolerance
+
+    for page_num in range(self._max_pages):
+        logger.info(f"Processing page {page_num + 1}/{self._max_pages}")
+        self._page.wait(1000)
+
+        if filler.is_confirmation_page():
+            logger.info("Confirmation page detected - application submitted!")
+            filler.close_modal()
+            return ApplicationResult(
+                status=ApplicationStatus.SUCCESS,
+                message="Application submitted",
+                pages_processed=page_num + 1,
+                url=job_url,
+            )
+
+        # Get current page hash to detect stuck
+        current_hash = self._get_modal_hash()
+        logger.debug(f"Page hash: '{current_hash}' (last: '{last_page_hash}')")
+        
+        # Only count as stuck if we have a valid hash
+        if current_hash and current_hash == last_page_hash:
+            stuck_count += 1
+            logger.warning(f"Same page hash detected ({stuck_count}/{max_stuck})")
+            if stuck_count >= max_stuck:
+                logger.warning(f"Stuck on same page {stuck_count} times, aborting")
+                break
+        else:
+            stuck_count = 0
+            last_page_hash = current_hash
+
+        # Fill the form
+        modal_found = filler.fill_current_modal()
+        logger.info(f"Page {page_num + 1}: Modal found={modal_found}")
+
+        # Click next button
+        if not filler.click_next():
+            logger.warning(f"Page {page_num + 1}: Could not find next button")
+            # Don't break immediately - try waiting and retrying once
+            self._page.wait(1000)
+            if not filler.click_next():
+                logger.warning("Next button still not found after retry, aborting")
+                break
+
+        self._page.wait(1000)
+
+    return ApplicationResult(
+        status=ApplicationStatus.FAILED,
+        message="Max pages reached or stuck",
+        pages_processed=page_num + 1,
+        url=job_url,
+    )
+```
+
+**Fix 2: Make `_get_modal_hash()` more robust:**
+
+```python
+def _get_modal_hash(self) -> str:
+    """Get a hash of the current modal state to detect if we're stuck."""
+    hash_parts = []
+    
+    # Try progress bar percentage
     try:
-        radios = fieldset.locator(LinkedInSelectors.RADIO).all()
+        progress = self._page.raw.locator("progress").first
+        if progress.is_visible(timeout=500):
+            value = progress.get_attribute("value") or ""
+            max_val = progress.get_attribute("max") or "100"
+            if value:
+                hash_parts.append(f"progress:{value}/{max_val}")
     except Exception:
+        pass
+    
+    # Try aria-valuenow on progress (LinkedIn uses this)
+    try:
+        progress_aria = self._page.raw.locator("[role='progressbar']").first
+        if progress_aria.is_visible(timeout=500):
+            value = progress_aria.get_attribute("aria-valuenow") or ""
+            if value:
+                hash_parts.append(f"aria-progress:{value}")
+    except Exception:
+        pass
+    
+    # Count form elements in modal
+    try:
+        modal_selectors = [
+            ".jobs-easy-apply-modal",
+            "[data-test-modal]",
+            ".artdeco-modal",
+            "[role='dialog']",
+        ]
+        for modal_sel in modal_selectors:
+            try:
+                modal = self._page.raw.locator(modal_sel).first
+                if modal.is_visible(timeout=300):
+                    inputs = modal.locator("input:visible").count()
+                    selects = modal.locator("select:visible").count()
+                    textareas = modal.locator("textarea:visible").count()
+                    fieldsets = modal.locator("fieldset:visible").count()
+                    hash_parts.append(f"form:{inputs}i/{selects}s/{textareas}t/{fieldsets}f")
+                    break
+            except Exception:
+                continue
+    except Exception:
+        pass
+    
+    # Get visible question text as part of hash
+    try:
+        labels = self._page.raw.locator(".jobs-easy-apply-modal .fb-form-element-label").all()
+        label_texts = []
+        for label in labels[:3]:  # First 3 labels
+            try:
+                text = label.text_content()
+                if text:
+                    label_texts.append(text[:20])  # First 20 chars
+            except Exception:
+                pass
+        if label_texts:
+            hash_parts.append(f"labels:{','.join(label_texts)}")
+    except Exception:
+        pass
+    
+    result = "|".join(hash_parts) if hash_parts else "empty"
+    logger.debug(f"Modal hash components: {result}")
+    return result
+```
+
+### src/agent/linkedin_form_filler.py
+
+**Fix 3: Add logging at start of `fill_current_modal()`:**
+
+```python
+def fill_current_modal(self) -> bool:
+    """Fill all fields in the current Easy Apply modal.
+
+    Returns:
+        True if modal was found and processed, False if no modal.
+    """
+    # Try multiple modal selectors
+    modal_selectors = [
+        '.jobs-easy-apply-modal',
+        '[data-test-modal]',
+        '.artdeco-modal',
+        '[role="dialog"]',
+    ]
+    
+    modal = None
+    for selector in modal_selectors:
+        try:
+            candidate = self._page.locator(selector).first
+            if candidate.is_visible(timeout=1000):
+                modal = candidate
+                logger.info(f"Found modal with selector: {selector}")
+                break
+        except Exception:
+            continue
+    
+    if modal is None:
+        logger.warning("No Easy Apply modal found with any selector")
         return False
 
-    if not radios:
-        return False
+    # Count fields before filling
+    try:
+        input_count = modal.locator("input:visible").count()
+        select_count = modal.locator("select:visible").count()
+        fieldset_count = modal.locator("fieldset:visible").count()
+        logger.info(f"Modal has {input_count} inputs, {select_count} selects, {fieldset_count} fieldsets")
+    except Exception as e:
+        logger.debug(f"Could not count fields: {e}")
 
-    # Build label map
-    radio_labels: list[tuple[Locator, str]] = []
-    for radio in radios:
-        label = self._get_radio_label(radio)
-        radio_labels.append((radio, label.lower() if label else ""))
+    self._fill_text_inputs(modal)
+    self._fill_selects(modal)
+    self._fill_radios(modal)
+    self._fill_skill_checkboxes(modal)
+    self._fill_checkboxes(modal)
+    self._fill_textareas(modal)
+    self._uncheck_follow_company()
 
-    # If we have an explicit answer, use it
-    if answer is not None:
-        answer_str = str(answer).lower()
-        for radio, label in radio_labels:
-            if label and answer_str in label:
-                try:
-                    if not radio.is_checked():
-                        self._click_radio_label(radio)
-                        logger.info(f"Radio [{strategy}]: {question[:40]} = {label}")
-                except Exception:
-                    pass
-                return True
-
-    # NO ANSWER - determine safe default based on question content
-    q_lower = question.lower()
-    
-    # Questions that should default to "No"
-    should_default_no = any(phrase in q_lower for phrase in [
-        "previously employed", "former employee", "worked here before",
-        "been employed by", "worked at", "worked for",
-        "referred by", "referred to", "referral",
-        "close relative", "conflict of interest", "financial interest",
-        "ethereum", "ens", "basename", "wallet", "crypto", "smart contract",
-        "government official", "political", "public official",
-        "finra", "sec registration", "securities license", "broker",
-        "convicted", "felony", "criminal",
-        "non-compete", "non-disclosure",
-        "lawsuit", "litigation", "legal action",
-    ])
-    
-    # Questions that should default to "Yes"
-    should_default_yes = any(phrase in q_lower for phrase in [
-        "legally authorized", "authorized to work", "eligible to work",
-        "background check", "drug test", "drug screen",
-        "18 years", "over 18", "of age",
-        "agree", "consent", "acknowledge", "certify", "confirm",
-        "comfortable", "willing",
-        "start immediately", "available to start",
-    ])
-    
-    # Find Yes and No options
-    yes_radio = None
-    no_radio = None
-    for radio, label in radio_labels:
-        if label in ["yes", "true"]:
-            yes_radio = radio
-        elif label in ["no", "false"]:
-            no_radio = radio
-    
-    # Apply default based on question type
-    if should_default_no and no_radio:
-        try:
-            if not no_radio.is_checked():
-                self._click_radio_label(no_radio)
-                logger.info(f"Radio default NO [{strategy}]: {question[:40]}")
-        except Exception:
-            pass
-        return True
-    
-    if should_default_yes and yes_radio:
-        try:
-            if not yes_radio.is_checked():
-                self._click_radio_label(yes_radio)
-                logger.info(f"Radio default YES [{strategy}]: {question[:40]}")
-        except Exception:
-            pass
-        return True
-    
-    # Unknown question - default to "No" as safer option
-    # (Better to under-claim than over-claim)
-    if no_radio:
-        try:
-            if not no_radio.is_checked():
-                self._click_radio_label(no_radio)
-                logger.info(f"Radio fallback NO (safe default) [{strategy}]: {question[:40]}")
-        except Exception:
-            pass
-        return True
-    
-    # Last resort - use first option
-    if radios:
-        first_radio = radios[0]
-        first_label = self._get_radio_label(first_radio)
-        try:
-            if not first_radio.is_checked():
-                self._click_radio_label(first_radio)
-                logger.info(f"Radio fallback (first option) [{strategy}]: {question[:40]} = {first_label}")
-        except Exception:
-            pass
-    
     return True
 ```
 
-### 3. src/scraper/scorer.py - Filter out external jobs early (if not already done)
+**Fix 4: Add logging to `click_next()` to show what's happening:**
 
-Check if the scorer already filters non-Easy-Apply jobs. If not, add filtering based on job_url patterns or apply_type field from JobSpy.
-
-Look for a field like `is_remote_apply`, `easy_apply`, or `apply_type` in the job data and reject jobs that don't have Easy Apply.
-
----
+```python
+def click_next(self) -> bool:
+    """Click the next/submit/review button."""
+    for selector in self.SUBMIT_BUTTON_PATTERNS:
+        try:
+            btn = self._page.locator(selector).first
+            if btn.is_visible(timeout=1000):
+                btn_text = btn.text_content() or btn.get_attribute("aria-label") or selector
+                btn.click()
+                logger.info(f"Clicked button: {btn_text[:30]}")
+                self._page.wait_for_timeout(500)
+                return True
+        except Exception as e:
+            logger.debug(f"Button selector {selector} failed: {e}")
+            continue
+    
+    logger.warning("No next/submit button found with any selector")
+    return False
+```
 
 ## SUMMARY
 
-1. **answer_engine.py**: Made `city|location` pattern more specific, added `default_no_patterns` for sensitive questions
+1. **_process_easy_apply**: Added logging for each page, increased stuck threshold to 3, only count stuck if hash is non-empty, retry click_next once before aborting
 
-2. **linkedin_form_filler.py**: Rewrote `_fill_single_radio_group()` with intelligent defaults:
-   - Questions about previous employment/referrals/crypto → default No
-   - Questions about work authorization/consent → default Yes  
-   - Unknown questions → default No (safer)
+2. **_get_modal_hash**: Made more robust - tries progress bar, aria-valuenow, multiple modal selectors, form element counts, and label text. Returns "empty" instead of "" so we can distinguish no hash from empty string
 
-3. Test against Coinbase-style forms with conflict of interest and crypto questions.
+3. **fill_current_modal**: Try multiple modal selectors, log which one worked, count fields before filling
+
+4. **click_next**: Log which button was clicked or why it failed
+
+Run again and we'll see EXACTLY what's happening on each page.
 
 ## Code Standards
 

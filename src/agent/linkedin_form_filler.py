@@ -94,25 +94,48 @@ class LinkedInFormFiller:
         self._answers = answer_engine or AnswerEngine()
 
     def fill_current_modal(self) -> bool:
-        """Fill all fields in the current Easy Apply modal. Fire and forget.
+        """Fill all fields in the current Easy Apply modal.
 
         Returns:
             True if modal was found and processed, False if no modal.
         """
-        modal = self._page.locator('.jobs-easy-apply-modal, [data-test-modal]').first
-        try:
-            if not modal.is_visible(timeout=2000):
-                logger.warning("No Easy Apply modal found")
-                return False
-        except Exception:
-            logger.warning("No Easy Apply modal found")
+        # Try multiple modal selectors
+        modal_selectors = [
+            ".jobs-easy-apply-modal",
+            "[data-test-modal]",
+            ".artdeco-modal",
+            '[role="dialog"]',
+        ]
+
+        modal = None
+        for selector in modal_selectors:
+            try:
+                candidate = self._page.locator(selector).first
+                if candidate.is_visible(timeout=1000):
+                    modal = candidate
+                    logger.info(f"Found modal with selector: {selector}")
+                    break
+            except Exception:
+                continue
+
+        if modal is None:
+            logger.warning("No Easy Apply modal found with any selector")
             return False
+
+        # Count fields before filling
+        try:
+            input_count = modal.locator("input:visible").count()
+            select_count = modal.locator("select:visible").count()
+            fieldset_count = modal.locator("fieldset:visible").count()
+            logger.info(f"Modal has {input_count} inputs, {select_count} selects, {fieldset_count} fieldsets")
+        except Exception as e:
+            logger.debug(f"Could not count fields: {e}")
 
         self._fill_text_inputs(modal)
         self._fill_selects(modal)
         self._fill_radios(modal)
-        self._fill_skill_checkboxes(modal)  # Intelligent skill matching first
-        self._fill_checkboxes(modal)  # Now only checks boxes with explicit answers
+        self._fill_skill_checkboxes(modal)
+        self._fill_checkboxes(modal)
         self._fill_textareas(modal)
         self._uncheck_follow_company()
 
@@ -919,11 +942,16 @@ class LinkedInFormFiller:
             try:
                 btn = self._page.locator(selector).first
                 if btn.is_visible(timeout=1000):
+                    btn_text = btn.text_content() or btn.get_attribute("aria-label") or selector
                     btn.click()
+                    logger.info(f"Clicked button: {btn_text[:30]}")
                     self._page.wait_for_timeout(500)
                     return True
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Button selector {selector} failed: {e}")
                 continue
+
+        logger.warning("No next/submit button found with any selector")
         return False
 
     def is_confirmation_page(self) -> bool:

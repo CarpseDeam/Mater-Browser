@@ -151,15 +151,17 @@ class LinkedInFlow:
 
         answer_engine = AnswerEngine()
         filler = LinkedInFormFiller(self._page.raw, answer_engine)
-        
+
         last_page_hash = ""
         stuck_count = 0
-        max_stuck = 2  # If same page 2 times, we're stuck
+        max_stuck = 3  # Increase tolerance
 
         for page_num in range(self._max_pages):
+            logger.info(f"Processing page {page_num + 1}/{self._max_pages}")
             self._page.wait(1000)
 
             if filler.is_confirmation_page():
+                logger.info("Confirmation page detected - application submitted!")
                 filler.close_modal()
                 return ApplicationResult(
                     status=ApplicationStatus.SUCCESS,
@@ -170,8 +172,12 @@ class LinkedInFlow:
 
             # Get current page hash to detect stuck
             current_hash = self._get_modal_hash()
-            if current_hash == last_page_hash:
+            logger.debug(f"Page hash: '{current_hash}' (last: '{last_page_hash}')")
+
+            # Only count as stuck if we have a valid hash (not empty)
+            if current_hash and current_hash != "empty" and current_hash == last_page_hash:
                 stuck_count += 1
+                logger.warning(f"Same page hash detected ({stuck_count}/{max_stuck})")
                 if stuck_count >= max_stuck:
                     logger.warning(f"Stuck on same page {stuck_count} times, aborting")
                     break
@@ -179,36 +185,89 @@ class LinkedInFlow:
                 stuck_count = 0
                 last_page_hash = current_hash
 
-            filler.fill_current_modal()
+            # Fill the form
+            modal_found = filler.fill_current_modal()
+            logger.info(f"Page {page_num + 1}: Modal found={modal_found}")
 
+            # Click next button
             if not filler.click_next():
-                logger.warning("Could not find next button")
-                break
+                logger.warning(f"Page {page_num + 1}: Could not find next button")
+                # Retry once after waiting
+                self._page.wait(1000)
+                if not filler.click_next():
+                    logger.warning("Next button still not found after retry, aborting")
+                    break
 
             self._page.wait(1000)
 
         return ApplicationResult(
             status=ApplicationStatus.FAILED,
             message="Max pages reached or stuck",
-            pages_processed=self._max_pages,
+            pages_processed=page_num + 1,
             url=job_url,
         )
 
     def _get_modal_hash(self) -> str:
         """Get a hash of the current modal state to detect if we're stuck."""
+        hash_parts = []
+
+        # Try progress bar percentage
         try:
-            # Use progress bar percentage as page identifier
             progress = self._page.raw.locator("progress").first
             if progress.is_visible(timeout=500):
                 value = progress.get_attribute("value") or ""
-                return f"progress:{value}"
+                max_val = progress.get_attribute("max") or "100"
+                if value:
+                    hash_parts.append(f"progress:{value}/{max_val}")
         except Exception:
             pass
-        
+
+        # Try aria-valuenow on progress (LinkedIn uses this)
         try:
-            # Fallback: count form elements
-            inputs = self._page.raw.locator(".jobs-easy-apply-modal input").count()
-            radios = self._page.raw.locator(".jobs-easy-apply-modal fieldset").count()
-            return f"elements:{inputs}:{radios}"
+            progress_aria = self._page.raw.locator("[role='progressbar']").first
+            if progress_aria.is_visible(timeout=500):
+                value = progress_aria.get_attribute("aria-valuenow") or ""
+                if value:
+                    hash_parts.append(f"aria-progress:{value}")
         except Exception:
-            return ""
+            pass
+
+        # Count form elements in modal
+        modal_selectors = [
+            ".jobs-easy-apply-modal",
+            "[data-test-modal]",
+            ".artdeco-modal",
+            "[role='dialog']",
+        ]
+        for modal_sel in modal_selectors:
+            try:
+                modal = self._page.raw.locator(modal_sel).first
+                if modal.is_visible(timeout=300):
+                    inputs = modal.locator("input:visible").count()
+                    selects = modal.locator("select:visible").count()
+                    textareas = modal.locator("textarea:visible").count()
+                    fieldsets = modal.locator("fieldset:visible").count()
+                    hash_parts.append(f"form:{inputs}i/{selects}s/{textareas}t/{fieldsets}f")
+                    break
+            except Exception:
+                continue
+
+        # Get visible question text as part of hash
+        try:
+            labels = self._page.raw.locator(".jobs-easy-apply-modal .fb-form-element-label").all()
+            label_texts = []
+            for label in labels[:3]:  # First 3 labels
+                try:
+                    text = label.text_content()
+                    if text:
+                        label_texts.append(text[:20])  # First 20 chars
+                except Exception:
+                    pass
+            if label_texts:
+                hash_parts.append(f"labels:{','.join(label_texts)}")
+        except Exception:
+            pass
+
+        result = "|".join(hash_parts) if hash_parts else "empty"
+        logger.debug(f"Modal hash components: {result}")
+        return result
