@@ -65,7 +65,7 @@ class AnswerEngine:
             (r"email", "personal", "email"),
             (r"phone\s*country\s*code|country\s*code.*phone", "personal", "phone_country_code"),
             (r"phone|mobile|cell", "personal", "phone"),
-            (r"city|location", "personal", "city"),
+            (r"(?:your|current|preferred)\s*(?:city|location)|where.*(?:located|live|reside)|^city$|^location$", "personal", "city"),
             (r"state|province", "personal", "state"),
             (r"zip|postal", "personal", "zip"),
             (r"linkedin", "personal", "linkedin"),

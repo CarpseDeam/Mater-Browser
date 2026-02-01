@@ -401,7 +401,7 @@ class LinkedInFormFiller:
         return ""
 
     def _fill_single_radio_group(self, fieldset: Locator, question: str, strategy: str) -> bool:
-        """Fill a single radio group. Returns True if processed."""
+        """Fill a single radio group with intelligent defaults."""
         answer = self._answers.get_answer(question, "radio")
 
         try:
@@ -409,31 +409,105 @@ class LinkedInFormFiller:
         except Exception:
             return False
 
-        if answer is None:
-            # Fallback: select first option for required radio groups
-            try:
-                if radios:
-                    first_radio = radios[0]
-                    if not first_radio.is_checked():
-                        self._click_radio_label(first_radio)
-                    label = self._get_radio_label(first_radio)
-                    logger.info(f"Fallback radio (first option): {question[:50]} = {label}")
-            except Exception as e:
-                logger.warning(f"Fallback radio failed: {e}")
-            return True
+        if not radios:
+            return False
 
-        answer_str = str(answer).lower()
+        # Build label map
+        radio_labels: list[tuple[Locator, str]] = []
         for radio in radios:
             label = self._get_radio_label(radio)
-            if label and answer_str in label.lower():
-                try:
-                    if not radio.is_checked():
-                        self._click_radio_label(radio)
-                        logger.info(f"Radio [{strategy}]: {question[:40]} = {label}")
-                except Exception:
-                    pass
-                return True
-        return False
+            radio_labels.append((radio, label.lower() if label else ""))
+
+        # If we have an explicit answer, use it
+        if answer is not None:
+            answer_str = str(answer).lower()
+            for radio, label in radio_labels:
+                if label and answer_str in label:
+                    try:
+                        if not radio.is_checked():
+                            self._click_radio_label(radio)
+                            logger.info(f"Radio [{strategy}]: {question[:40]} = {label}")
+                    except Exception:
+                        pass
+                    return True
+
+        # NO ANSWER - determine safe default based on question content
+        q_lower = question.lower()
+
+        # Questions that should default to "No"
+        should_default_no = any(phrase in q_lower for phrase in [
+            "previously employed", "former employee", "worked here before",
+            "been employed by", "worked at", "worked for",
+            "referred by", "referred to", "referral", "who referred",
+            "close relative", "conflict of interest", "financial interest",
+            "ethereum", "ens", "basename", "wallet", "crypto", "smart contract",
+            "government official", "political", "public official",
+            "finra", "sec registration", "securities license", "broker",
+            "convicted", "felony", "criminal",
+            "non-compete", "non-disclosure",
+            "lawsuit", "litigation", "legal action",
+        ])
+
+        # Questions that should default to "Yes"
+        should_default_yes = any(phrase in q_lower for phrase in [
+            "legally authorized", "authorized to work", "eligible to work",
+            "background check", "drug test", "drug screen",
+            "18 years", "over 18", "of age",
+            "agree", "consent", "acknowledge", "certify", "confirm",
+            "comfortable", "willing",
+            "start immediately", "available to start",
+        ])
+
+        # Find Yes and No options
+        yes_radio = None
+        no_radio = None
+        for radio, label in radio_labels:
+            if label in ("yes", "true"):
+                yes_radio = radio
+            elif label in ("no", "false"):
+                no_radio = radio
+
+        # Apply default based on question type
+        if should_default_no and no_radio:
+            try:
+                if not no_radio.is_checked():
+                    self._click_radio_label(no_radio)
+                    logger.info(f"Radio default NO [{strategy}]: {question[:40]}")
+            except Exception:
+                pass
+            return True
+
+        if should_default_yes and yes_radio:
+            try:
+                if not yes_radio.is_checked():
+                    self._click_radio_label(yes_radio)
+                    logger.info(f"Radio default YES [{strategy}]: {question[:40]}")
+            except Exception:
+                pass
+            return True
+
+        # Unknown question - default to "No" as safer option
+        if no_radio:
+            try:
+                if not no_radio.is_checked():
+                    self._click_radio_label(no_radio)
+                    logger.info(f"Radio fallback NO (safe) [{strategy}]: {question[:40]}")
+            except Exception:
+                pass
+            return True
+
+        # Last resort - use first option (non-Yes/No radio groups)
+        if radios:
+            first_radio = radios[0]
+            first_label = self._get_radio_label(first_radio)
+            try:
+                if not first_radio.is_checked():
+                    self._click_radio_label(first_radio)
+                    logger.info(f"Radio fallback (first) [{strategy}]: {question[:40]} = {first_label}")
+            except Exception:
+                pass
+
+        return True
 
     def _click_radio_label(self, radio: Locator) -> None:
         """Click the label for a radio button instead of the input directly.

@@ -143,6 +143,10 @@ preferences:
 yes_no:
   yes: "Yes"
 
+# Default "No" answers for sensitive questions (conflict of interest, previous employment, etc.)
+default_no:
+  no: "No"
+
 # Skills the user actually has (for multi-select checkbox matching)
 skills:
   languages:

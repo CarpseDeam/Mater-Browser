@@ -1,510 +1,202 @@
-Fix LinkedIn Easy Apply form filling - dropdowns not filling, checkboxes blindly checking everything.
+Fix critical radio button and pattern matching bugs in LinkedIn form filler.
 
-## CRITICAL BUGS TO FIX
+## BUGS FROM LOGS
 
-### Bug 1: Dropdowns not being filled
-Questions like these return None from answer_engine:
-- "Do you have at least 4-6+ years of professional experience as a Software Engineer?"
-- "How many years of experience do you have using Go, Python, or a comparable structured and opinionated language?"
-- "How many years of experience do you have using PostgreSQL or other relational databases?"
+### Bug 1: "city|location" pattern matching wrong questions
+The question "Have you previously been employed by Coinbase in a location..." is matching the pattern `city|location` and returning "Lorain, Ohio" instead of being treated as a previous employment question.
 
-### Bug 2: Multi-select checkboxes checking EVERYTHING including "None of the above"
-The `_fill_checkboxes` method in linkedin_form_filler.py has this bad fallback:
-```python
-if answer is None:
-    # ... spam check ...
-    if not cb.is_checked():
-        self._click_checkbox_label(cb)  # CHECKS EVERYTHING!
-```
+The pattern is too broad. "location" appears in many contexts.
 
-This is checking Go, Python, Java, C#, AND "None of the above" all at once.
+### Bug 2: Radio fallback defaults to "Yes" for dangerous questions
+The fallback in `_fill_single_radio_group` selects the FIRST option, which is usually "Yes". This is answering:
+- "Do you have a public Ethereum Address" → Yes (WRONG - should be No)
+- "Do you or a close relative hold a role [conflict of interest]" → Yes (WRONG - should be No) 
+- "Were you referred by a senior leader" → Yes (WRONG - should be No)
+- "Have you previously been employed by Coinbase" → Yes (WRONG - should be No)
+
+These false "Yes" answers can disqualify the application or create legal issues.
 
 ---
 
 ## FILES TO MODIFY
 
-### 1. config/answers.yaml - Add new sections
+### 1. src/agent/answer_engine.py - Fix patterns and add "No" defaults
 
-Add these new sections:
+**Fix the city/location pattern to be more specific:**
 
+Change from:
+```python
+(r"city|location", "personal", "city"),
+```
+
+To:
+```python
+(r"(?:your|current|preferred)\s*(?:city|location)|where.*(?:located|live|reside)|^city$|^location$", "personal", "city"),
+```
+
+**Add new patterns for questions that should default to "No":**
+
+Add a new section `default_no_patterns` BEFORE checkbox_patterns:
+
+```python
+# Questions that should default to "No" - conflict of interest, previous employment, referrals
+default_no_patterns = [
+    # Previous employment
+    (r"previously.*employed|former.*employee|worked.*(?:at|for|here).*before|been employed by", "default_no", "no"),
+    # Referrals
+    (r"referred.*(?:by|to)|referral|who referred", "default_no", "no"),
+    # Conflict of interest
+    (r"close relative.*(?:hold|have).*role|conflict.*interest|financial.*interest", "default_no", "no"),
+    # Crypto/blockchain specific (don't have)
+    (r"ethereum.*address|ens.*name|basename|wallet.*address|crypto.*(?:wallet|address)|smart.*contract", "default_no", "no"),
+    # Government/political roles
+    (r"government.*(?:official|employee)|political.*(?:office|role)|public.*official", "default_no", "no"),
+    # Securities/regulatory
+    (r"finra|sec.*registration|securities.*license|broker.*dealer", "default_no", "no"),
+]
+```
+
+**Add to answers.yaml:**
 ```yaml
-# Skills the user actually has (for multi-select checkbox matching)
-skills:
-  languages:
-    - "python"
-    - "sql"
-    - "javascript"
-    - "bash"
-  frameworks:
-    - "fastapi"
-    - "django"
-    - "flask"
-    - "pydantic"
-    - "sqlalchemy"
-  infrastructure:
-    - "aws"
-    - "docker"
-    - "kubernetes"
-    - "terraform"
-    - "ci/cd"
-    - "github actions"
-  databases:
-    - "postgresql"
-    - "postgres"
-    - "snowflake"
-    - "redis"
-    - "sql"
-  practices:
-    - "backend"
-    - "api"
-    - "microservices"
-    - "rest"
-    - "cloud infrastructure"
-    - "core backend"
-    - "platform services"
-    - "internal developer tooling"
-    - "ci/cd pipelines"
-    - "deployment workflows"
-
-# Dropdown option mappings - maps years of experience to dropdown text options
-experience_dropdowns:
-  # For "Do you have at least X years" questions
-  yes_no_experience:
-    - "yes"
-    - "Yes"
-  # For "How many years" dropdowns - try these in order
-  years_options:
-    - "6+"
-    - "6+ years"  
-    - "5-7 years"
-    - "5-7"
-    - "4-6 years"
-    - "4-6"
-    - "5+"
-    - "5+ years"
-    - "4+"
-    - "4+ years"
-    - "3-5 years"
-    - "3-5"
+# Default "No" answers for sensitive questions
+default_no:
+  no: "No"
 ```
 
-### 2. src/agent/answer_engine.py - Add new patterns and methods
+### 2. src/agent/linkedin_form_filler.py - Fix radio fallback logic
 
-Add these patterns to `_build_patterns()` BEFORE other patterns:
-
-```python
-# Experience confirmation patterns (Yes/No dropdowns) - MUST BE FIRST
-experience_confirmation_patterns = [
-    # "Do you have at least X years of experience" → Yes
-    (r"do you have at least.*years.*experience|at least.*years.*professional", "experience_dropdowns", "yes_no_experience"),
-    (r"do you have.*\d+.*years", "experience_dropdowns", "yes_no_experience"),
-    # Software engineer experience confirmation
-    (r"software engineer.*experience|experience.*software engineer", "experience_dropdowns", "yes_no_experience"),
-]
-
-# Multi-tech experience patterns  
-multi_tech_experience_patterns = [
-    # "How many years using Go, Python, or comparable" → return max of known techs
-    (r"years.*experience.*(?:go|python|java|c#|ruby|rust|scala)", "MULTI_TECH", "max"),
-    (r"years.*using.*(?:go|python|java|c#|ruby|rust|scala)", "MULTI_TECH", "max"),
-    # Database experience
-    (r"years.*(?:postgresql|postgres|mysql|sql|database|relational)", "technology", "postgresql"),
-]
-```
-
-Add new method `_match_multi_tech_experience()`:
+**Rewrite `_fill_single_radio_group()` to be smarter about defaults:**
 
 ```python
-def _match_multi_tech_experience(self, question: str) -> int | None:
-    """Match questions asking about experience with multiple technologies.
-    
-    E.g., "How many years using Go, Python, or comparable language?"
-    Returns the maximum experience from any mentioned technology.
-    """
-    tech_keywords = {
-        "python": "python",
-        "go": "go", 
-        "golang": "go",
-        "java": "java",
-        "c#": "csharp",
-        "csharp": "csharp",
-        "ruby": "ruby",
-        "rust": "rust",
-        "scala": "scala",
-        "javascript": "javascript",
-        "typescript": "typescript",
-        "sql": "sql",
-        "postgresql": "postgresql",
-        "postgres": "postgresql",
-        "mysql": "sql",
-        "database": "postgresql",
-        "relational": "postgresql",
-    }
-    
-    tech_config = self._config.get("technology", {})
-    max_exp = 0
-    matched_any = False
-    
-    question_lower = question.lower()
-    for keyword, config_key in tech_keywords.items():
-        if keyword in question_lower:
-            exp = tech_config.get(config_key, 0)
-            if exp > max_exp:
-                max_exp = exp
-                matched_any = True
-    
-    return max_exp if matched_any else None
-```
+def _fill_single_radio_group(self, fieldset: Locator, question: str, strategy: str) -> bool:
+    """Fill a single radio group with intelligent defaults."""
+    answer = self._answers.get_answer(question, "radio")
 
-Add new method `_get_experience_dropdown_answer()`:
-
-```python
-def _get_experience_dropdown_answer(self, question: str, field_type: str) -> str | None:
-    """Get answer for experience-related dropdown questions.
-    
-    Handles:
-    - "Do you have at least X years" → "Yes"
-    - "How many years of experience" → "6+" or best matching option
-    """
-    q_lower = question.lower()
-    
-    # Yes/No experience confirmation
-    if "do you have" in q_lower and "years" in q_lower:
-        return "Yes"
-    
-    # Years of experience - return the numeric value, let the form filler
-    # find the best matching dropdown option
-    multi_tech = self._match_multi_tech_experience(question)
-    if multi_tech is not None:
-        return str(multi_tech)
-    
-    return None
-```
-
-Modify `get_answer()` to call these new methods BEFORE the main pattern loop:
-
-```python
-def get_answer(self, question: str, field_type: str = "text", ...) -> Any | None:
-    question_lower = question.lower().strip()
-    
-    # FIRST: Check for experience dropdown questions (Yes/No and years)
-    if field_type == "select":
-        exp_answer = self._get_experience_dropdown_answer(question, field_type)
-        if exp_answer is not None:
-            logger.info(f"AnswerEngine: '{question[:50]}' -> experience_dropdown = {exp_answer}")
-            return exp_answer
-    
-    # ... rest of existing logic ...
-```
-
-### 3. src/agent/linkedin_form_filler.py - Fix checkbox and dropdown logic
-
-**Fix `_fill_checkboxes()` - REMOVE the blind fallback:**
-
-```python
-def _fill_checkboxes(self, container: Locator) -> None:
-    """Fill checkboxes - only check boxes we have explicit answers for."""
     try:
-        checkboxes = container.locator('input[type="checkbox"]').all()
-    except Exception:
-        return
-
-    for cb in checkboxes:
-        try:
-            if not cb.is_visible(timeout=1000):
-                continue
-        except Exception:
-            continue
-
-        question = self._get_question_text(cb)
-        if not question:
-            continue
-
-        # Skip spam checkboxes
-        q_lower = question.lower()
-        spam_keywords = ["follow", "marketing", "newsletter", "subscribe", "updates"]
-        if any(kw in q_lower for kw in spam_keywords):
-            logger.debug(f"Skipping spam checkbox: {question[:50]}")
-            continue
-
-        answer = self._answers.get_answer(question, "checkbox")
-        if answer is None:
-            # DO NOT auto-check unknown checkboxes!
-            logger.debug(f"No answer for checkbox, skipping: {question[:50]}")
-            continue
-
-        should_check = bool(answer)
-        try:
-            if cb.is_checked() != should_check:
-                self._click_checkbox_label(cb)
-                logger.info(f"Checkbox: {question[:40]} = {should_check}")
-        except Exception:
-            pass
-```
-
-**Add new method `_fill_skill_checkboxes()` - intelligent skill matching:**
-
-```python
-def _fill_skill_checkboxes(self, container: Locator) -> None:
-    """Fill multi-select skill checkboxes intelligently based on user's actual skills."""
-    try:
-        fieldsets = container.locator("fieldset").all()
-    except Exception:
-        return
-
-    # Load user's skills from config
-    skills_config = self._answers._config.get("skills", {})
-    all_skills: set[str] = set()
-    for category_skills in skills_config.values():
-        if isinstance(category_skills, list):
-            all_skills.update(s.lower() for s in category_skills)
-
-    for fieldset in fieldsets:
-        try:
-            question = self._get_fieldset_question(fieldset)
-            if not question:
-                continue
-            
-            q_lower = question.lower()
-            # Only process multi-select skill questions
-            if "select all" not in q_lower and "check all" not in q_lower:
-                continue
-            if "coding" not in q_lower and "language" not in q_lower and "experience" not in q_lower and "following" not in q_lower:
-                continue
-
-            checkboxes = fieldset.locator('input[type="checkbox"]').all()
-            if len(checkboxes) < 2:
-                continue
-
-            checked_any = False
-            for cb in checkboxes:
-                try:
-                    if cb.is_checked():
-                        continue
-                        
-                    label = self._get_checkbox_label(cb)
-                    if not label:
-                        continue
-                    
-                    label_lower = label.lower().strip()
-                    
-                    # NEVER check "None of the above"
-                    if "none" in label_lower and "above" in label_lower:
-                        continue
-                    
-                    # Check if this skill/option matches user's skills
-                    should_check = False
-                    
-                    # Direct skill match
-                    if label_lower in all_skills:
-                        should_check = True
-                    # Partial match (e.g., "Python" matches "python")
-                    elif any(skill in label_lower or label_lower in skill for skill in all_skills):
-                        should_check = True
-                    # Common mappings
-                    elif "python" in label_lower and "python" in all_skills:
-                        should_check = True
-                    elif "backend" in label_lower or "back-end" in label_lower or "back end" in label_lower:
-                        should_check = "backend" in all_skills or "api" in all_skills
-                    elif "cloud" in label_lower or "aws" in label_lower or "gcp" in label_lower or "azure" in label_lower:
-                        should_check = "aws" in all_skills or "cloud infrastructure" in all_skills
-                    elif "ci/cd" in label_lower or "deployment" in label_lower or "pipeline" in label_lower:
-                        should_check = "ci/cd" in all_skills or "ci/cd pipelines" in all_skills
-                    elif "platform" in label_lower or "infrastructure" in label_lower:
-                        should_check = "platform services" in all_skills or "aws" in all_skills
-                    elif "tooling" in label_lower or "developer tool" in label_lower:
-                        should_check = "internal developer tooling" in all_skills
-                    elif "core backend" in label_lower:
-                        should_check = "core backend" in all_skills or "backend" in all_skills
-                    
-                    if should_check:
-                        self._click_checkbox_label(cb)
-                        checked_any = True
-                        logger.info(f"Skill checkbox: {question[:30]} -> checked '{label}'")
-                        
-                except Exception as e:
-                    logger.debug(f"Checkbox processing error: {e}")
-                    continue
-
-            if not checked_any:
-                # If no skills matched, check first non-"none" option as fallback
-                for cb in checkboxes:
-                    label = self._get_checkbox_label(cb)
-                    if label and "none" not in label.lower():
-                        self._click_checkbox_label(cb)
-                        logger.info(f"Fallback skill checkbox: {question[:30]} -> '{label}'")
-                        break
-
-        except Exception as e:
-            logger.debug(f"Skill fieldset processing failed: {e}")
-```
-
-**Fix `_fill_single_select()` - smarter dropdown option matching:**
-
-```python
-def _fill_single_select(self, select: Locator, strategy: str) -> bool:
-    """Fill a single select dropdown with intelligent option matching."""
-    try:
-        if not select.is_visible():
-            return False
+        radios = fieldset.locator(LinkedInSelectors.RADIO).all()
     except Exception:
         return False
 
-    try:
-        current_value = select.input_value()
-        if current_value and current_value.strip():
-            logger.debug(f"Skipping pre-filled select [{strategy}]")
-            return False
-    except Exception:
-        pass
-
-    question = self._get_question_text(select)
-    if not question:
+    if not radios:
         return False
 
-    answer = self._answers.get_answer(question, "select")
-    
-    # Get all available options
-    try:
-        options = select.locator("option").all()
-        option_texts = []
-        for opt in options:
-            text = (opt.text_content() or "").strip()
-            val = opt.get_attribute("value") or ""
-            if text and "select" not in text.lower():
-                option_texts.append((val, text))
-    except Exception:
-        option_texts = []
+    # Build label map
+    radio_labels: list[tuple[Locator, str]] = []
+    for radio in radios:
+        label = self._get_radio_label(radio)
+        radio_labels.append((radio, label.lower() if label else ""))
 
+    # If we have an explicit answer, use it
     if answer is not None:
         answer_str = str(answer).lower()
-        
-        # Try exact match first
-        for val, text in option_texts:
-            if answer_str == text.lower() or answer_str == val.lower():
+        for radio, label in radio_labels:
+            if label and answer_str in label:
                 try:
-                    select.select_option(value=val, timeout=3000)
-                    logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
-                    return True
+                    if not radio.is_checked():
+                        self._click_radio_label(radio)
+                        logger.info(f"Radio [{strategy}]: {question[:40]} = {label}")
                 except Exception:
                     pass
-        
-        # Try partial/fuzzy match
-        for val, text in option_texts:
-            text_lower = text.lower()
-            # "Yes" matches "Yes", "yes", etc.
-            if answer_str in text_lower or text_lower.startswith(answer_str):
-                try:
-                    select.select_option(value=val, timeout=3000)
-                    logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
-                    return True
-                except Exception:
-                    pass
-        
-        # For numeric answers (years of experience), find best matching range
-        if answer_str.isdigit():
-            years = int(answer_str)
-            best_match = self._find_best_years_option(years, option_texts)
-            if best_match:
-                try:
-                    select.select_option(value=best_match[0], timeout=3000)
-                    logger.info(f"Selected [{strategy}]: {question[:40]} = {best_match[1]} (for {years} years)")
-                    return True
-                except Exception:
-                    pass
+                return True
 
-    # Fallback: select first non-placeholder option
-    if option_texts:
-        val, text = option_texts[0]
+    # NO ANSWER - determine safe default based on question content
+    q_lower = question.lower()
+    
+    # Questions that should default to "No"
+    should_default_no = any(phrase in q_lower for phrase in [
+        "previously employed", "former employee", "worked here before",
+        "been employed by", "worked at", "worked for",
+        "referred by", "referred to", "referral",
+        "close relative", "conflict of interest", "financial interest",
+        "ethereum", "ens", "basename", "wallet", "crypto", "smart contract",
+        "government official", "political", "public official",
+        "finra", "sec registration", "securities license", "broker",
+        "convicted", "felony", "criminal",
+        "non-compete", "non-disclosure",
+        "lawsuit", "litigation", "legal action",
+    ])
+    
+    # Questions that should default to "Yes"
+    should_default_yes = any(phrase in q_lower for phrase in [
+        "legally authorized", "authorized to work", "eligible to work",
+        "background check", "drug test", "drug screen",
+        "18 years", "over 18", "of age",
+        "agree", "consent", "acknowledge", "certify", "confirm",
+        "comfortable", "willing",
+        "start immediately", "available to start",
+    ])
+    
+    # Find Yes and No options
+    yes_radio = None
+    no_radio = None
+    for radio, label in radio_labels:
+        if label in ["yes", "true"]:
+            yes_radio = radio
+        elif label in ["no", "false"]:
+            no_radio = radio
+    
+    # Apply default based on question type
+    if should_default_no and no_radio:
         try:
-            select.select_option(value=val, timeout=3000)
-            logger.info(f"Fallback select: {question[:50]} = {text}")
-            return True
-        except Exception as e:
-            logger.warning(f"Fallback select failed: {e}")
+            if not no_radio.is_checked():
+                self._click_radio_label(no_radio)
+                logger.info(f"Radio default NO [{strategy}]: {question[:40]}")
+        except Exception:
+            pass
+        return True
+    
+    if should_default_yes and yes_radio:
+        try:
+            if not yes_radio.is_checked():
+                self._click_radio_label(yes_radio)
+                logger.info(f"Radio default YES [{strategy}]: {question[:40]}")
+        except Exception:
+            pass
+        return True
+    
+    # Unknown question - default to "No" as safer option
+    # (Better to under-claim than over-claim)
+    if no_radio:
+        try:
+            if not no_radio.is_checked():
+                self._click_radio_label(no_radio)
+                logger.info(f"Radio fallback NO (safe default) [{strategy}]: {question[:40]}")
+        except Exception:
+            pass
+        return True
+    
+    # Last resort - use first option
+    if radios:
+        first_radio = radios[0]
+        first_label = self._get_radio_label(first_radio)
+        try:
+            if not first_radio.is_checked():
+                self._click_radio_label(first_radio)
+                logger.info(f"Radio fallback (first option) [{strategy}]: {question[:40]} = {first_label}")
+        except Exception:
+            pass
     
     return True
-
-def _find_best_years_option(self, years: int, options: list[tuple[str, str]]) -> tuple[str, str] | None:
-    """Find the best dropdown option for a given number of years experience."""
-    # Priority order for matching
-    for val, text in options:
-        text_lower = text.lower()
-        
-        # Exact match like "6 years" or "6"
-        if str(years) in text and ("year" in text_lower or text.strip().isdigit()):
-            return (val, text)
-        
-        # "X+" match (e.g., "6+" for 6 years)
-        if f"{years}+" in text:
-            return (val, text)
-    
-    # Range match (e.g., "5-7 years" for 6 years)
-    import re
-    for val, text in options:
-        range_match = re.search(r"(\d+)\s*[-–]\s*(\d+)", text)
-        if range_match:
-            low, high = int(range_match.group(1)), int(range_match.group(2))
-            if low <= years <= high:
-                return (val, text)
-    
-    # "X+" where X <= years (e.g., "5+" for 6 years)
-    for val, text in options:
-        plus_match = re.search(r"(\d+)\+", text)
-        if plus_match:
-            threshold = int(plus_match.group(1))
-            if years >= threshold:
-                return (val, text)
-    
-    # Last resort: any option with a number <= years
-    for val, text in options:
-        num_match = re.search(r"(\d+)", text)
-        if num_match and int(num_match.group(1)) <= years:
-            return (val, text)
-    
-    return None
 ```
 
-**Update `fill_current_modal()` to call skill checkboxes:**
+### 3. src/scraper/scorer.py - Filter out external jobs early (if not already done)
 
-```python
-def fill_current_modal(self) -> bool:
-    """Fill all fields in the current Easy Apply modal."""
-    modal = self._page.locator('.jobs-easy-apply-modal, [data-test-modal]').first
-    try:
-        if not modal.is_visible(timeout=2000):
-            logger.warning("No Easy Apply modal found")
-            return False
-    except Exception:
-        logger.warning("No Easy Apply modal found")
-        return False
+Check if the scorer already filters non-Easy-Apply jobs. If not, add filtering based on job_url patterns or apply_type field from JobSpy.
 
-    self._fill_text_inputs(modal)
-    self._fill_selects(modal)
-    self._fill_radios(modal)
-    self._fill_skill_checkboxes(modal)  # NEW: intelligent skill matching
-    self._fill_checkboxes(modal)  # Now only checks boxes with explicit answers
-    self._fill_textareas(modal)
-    self._uncheck_follow_company()
-
-    return True
-```
+Look for a field like `is_remote_apply`, `easy_apply`, or `apply_type` in the job data and reject jobs that don't have Easy Apply.
 
 ---
 
-## SUMMARY OF CHANGES
+## SUMMARY
 
-1. **answers.yaml**: Added `skills` section (languages, frameworks, infrastructure, databases, practices) and `experience_dropdowns` section
+1. **answer_engine.py**: Made `city|location` pattern more specific, added `default_no_patterns` for sensitive questions
 
-2. **answer_engine.py**: Added patterns for "do you have at least X years" → Yes, added `_match_multi_tech_experience()` for questions with multiple techs, added `_get_experience_dropdown_answer()` called early in `get_answer()`
+2. **linkedin_form_filler.py**: Rewrote `_fill_single_radio_group()` with intelligent defaults:
+   - Questions about previous employment/referrals/crypto → default No
+   - Questions about work authorization/consent → default Yes  
+   - Unknown questions → default No (safer)
 
-3. **linkedin_form_filler.py**: 
-   - Fixed `_fill_checkboxes()` to NOT auto-check unknown boxes
-   - Added `_fill_skill_checkboxes()` for intelligent skill matching
-   - Fixed `_fill_single_select()` with `_find_best_years_option()` for experience dropdowns
-   - Updated `fill_current_modal()` to call skill checkboxes first
-
-Test by running against a LinkedIn Easy Apply job with similar questions.
+3. Test against Coinbase-style forms with conflict of interest and crypto questions.
 
 ## Code Standards
 
