@@ -25,16 +25,26 @@ This strategy avoids LLM hallucinations, reduces token costs, and provides consi
 
 ### Deterministic LinkedIn Flow
 
-#### Resilience and Stalling Prevention
-To ensure the automation remains responsive even in cases of unexpected browser behavior or network delays:
+#### Resilience and Reliability Layer (2026)
+To ensure high completion rates across diverse LinkedIn configurations, a robust reliability layer has been added:
 
 - **Flow Timeout**: Implements a hard 120-second timeout for the entire Easy Apply process to prevent infinite hangs.
-- **Page Error Handling**: Each page iteration in the modal-filling loop is wrapped in a try/except block. If more than 2 consecutive errors occur, the application is aborted to avoid wasting time.
-- **Modal Fill Timeout**: Added a 30-second timeout to `fill_current_modal` method to prevent stalling on complex or unresponsive forms.
+- **Page Error Handling**: Each page iteration in the modal-filling loop is wrapped in a try/except block. If more than 2 consecutive errors occur, the application is aborted.
+- **Modal Fill Timeout**: Added a 30-second timeout to `fill_current_modal` to prevent stalling on complex forms.
+- **Validation Error Recovery**: Automatically detects inline form validation errors and attempts to fix them using fallback answers (e.g., numeric "0" for salary/years, generic text for textareas) before retrying the next step.
+- **Stuck Recovery Mechanism**: If the modal state (hash) remains unchanged for too long, the system performs a one-time recovery attempt (scroll content down, re-fill form, and click next) before aborting.
+- **Resume Upload Handling**: Automatically selects existing resume cards if available or clicks "Choose Resume" buttons to ensure required documents are present without blocking the flow.
+- **Typeahead/Autocomplete Support**: Detects and handles `combobox` and `typeahead` inputs by typing slowly and interacting with the suggestion list.
+- **Clean State Management**: Proactively dismisses any existing modals or dialogs before starting a new application and handles the "Discard application?" confirmation when closing modals.
+- **Randomized Delays**: Replaces fixed sleep times with randomized intervals between application cycles (3-8s) and loops (5-15s) to better simulate human behavior.
 - **Cleanup**: Always executes `_close_modal` to return the browser to a clean state after success, failure, or timeout.
-To increase reliability and speed for LinkedIn applications, the system bypasses AI for Easy Apply modals:
 
-- **Direct Button Selection**: Uses optimized CSS selectors to immediately identify the "Easy Apply" button, bypassing generic DOM analysis for faster interaction.
+#### 2026 DOM Optimization
+To increase reliability and speed for LinkedIn applications, the system uses optimized 2026 selectors:
+
+- **Direct Button Selection**: Uses stable IDs (e.g., `#jobs-apply-button-id`) and data attributes (e.g., `[data-live-test-job-apply-button]`) for early detection.
+- **Aria-Label Stability**: Prioritizes case-insensitive `aria-label*` partial matches for navigation buttons (Next, Review, Submit) to handle varied translations and obfuscated classes.
+- **Progress Monitoring**: Uses the ARIA `progressbar` role and `aria-valuenow` state for precise modal state tracking.
 
 - **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. Supports a wide range of categories including personal info, experience, EEO/demographics (gender, race, veteran status, disability), salary expectations, language proficiency, and work preferences. It includes specialized logic for matching experience-related questions, including multi-technology experience calculation and smart dropdown matching. Patterns are prioritized to ensure EEO/demographic questions match correctly before generic personal information patterns. When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
 

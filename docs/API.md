@@ -28,16 +28,17 @@ Config-driven answer lookup for form questions.
 Deterministic form filler for LinkedIn Easy Apply modals.
 
 - `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups). Includes a 30-second timeout to prevent stalling on complex forms.
+    - **Resume Handling**: Automatically detects and selects existing resume cards if available.
     - **Intelligent Skill Matching**: Automatically matches multi-select skill checkboxes against the user's documented technical profile.
     - **Smart Dropdowns**: Employs fuzzy and range-based matching for experience and preference dropdowns.
     - **Intelligent Radio Defaults**: Applies safe defaults for Yes/No questions based on context (e.g., "No" for conflicts of interest, "Yes" for work authorization) when no explicit answer is found.
     - **Fail-Safe**: Uses fallback answers for unknown text fields (including numeric "0" fallbacks) to ensure completion.
-    - **Multi-Modal Support**: Employs a robust search strategy using multiple selectors (`.artdeco-modal`, `[role="dialog"]`) to find and fill the Easy Apply modal.
+    - **Multi-Modal Support**: Employs a robust search strategy using multiple 2026-optimized selectors to find and fill the Easy Apply modal.
     - Returns `True` if modal was found and processed.
-- `click_next() -> bool`: Clicks the next, submit, or review button to advance the form. Includes retry logic and detailed logging of button interactions.
-- `is_confirmation_page() -> bool`: Detects if the application success page has been reached.
-- `close_modal()`: Closes the Easy Apply modal after completion or failure.
-
+- `check_and_fix_errors() -> bool`: Identifies inline validation errors in the active modal and attempts to fix them using fallback answers. Returns `True` if errors were found and addressed.
+- `click_next() -> bool`: Clicks the next, submit, or review button within the modal. Uses case-insensitive partial matches and 2026-specific selectors for maximum reliability.
+- `is_confirmation_page() -> bool`: Detects if the application success page has been reached using text and data-test indicators.
+- `close_modal()`: Closes the Easy Apply modal and handles any "Discard application?" confirmation prompts using 2026 selectors.
 ## GUI API
 
 ### `ApplyWorker`

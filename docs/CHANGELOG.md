@@ -2,6 +2,16 @@
 
 All notable changes to this project.
 
+- 2026-03-02: feat: Add reliability layer and 2026 DOM support to LinkedIn Easy Apply
+  - Implemented automated validation error recovery in `LinkedInFormFiller` to fix and retry failed form steps
+  - Added smart resume upload handling to automatically select existing resumes within the modal
+  - Introduced stuck recovery mechanism that attempts scrolling and re-filling before aborting
+  - Updated all LinkedIn selectors (modal, buttons, progress bars) for stable 2026 DOM structure
+  - Added support for typeahead/autocomplete fields in LinkedIn forms
+  - Implemented randomized delays between application cycles to mimic human behavior
+  - Enhanced clean state management to dismiss existing modals before starting new applications
+  - Improved discard confirmation handling when closing modals
+
 - 2026-03-02: docs: Update selector update strategy and project coding standards
   - Expanded LinkedIn DOM analysis scope to include multiple modal dumps
   - Established explicit selector priority: aria-label > role > data-test* > semantic tags > CSS classes
