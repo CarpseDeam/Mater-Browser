@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-03-02: fix: Speed up non-Easy-Apply rejection and optimize LinkedIn button detection
+  - Replaced `networkidle` wait with `domcontentloaded` and a 1s delay for faster job page processing
+  - Refactored `_find_easy_apply_button` to use a fast visibility check for fallbacks after a quick 3s wait for the primary ID
+  - Removed detailed button/title diagnostics from `_handle_non_easy_apply` to reduce log noise while retaining screenshot and status checks
+  - Added DataFrame column logging to `JobSpyClient` for enhanced scraper visibility
+
 - 2026-03-02: feat: Add diagnostic page dump for failed button detection and force Easy Apply filtering
   - Added diagnostic logging to `LinkedInFlow._handle_non_easy_apply`: logs current URL, page title, and top 20 buttons (including visibility, id, and ARIA labels)
   - Implemented automatic screenshot saving to `data/debug_screenshots/` when the "Easy Apply" button is missing to aid in selector debugging

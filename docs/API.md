@@ -14,7 +14,7 @@ Orchestrates the job application flow for LinkedIn Easy Apply.
 ### `LinkedInFlow`
 
 - `__init__(page: Page, tabs: TabManager, max_pages: int)`: Initializes the LinkedIn-specific flow.
-- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job. Uses a direct button-check strategy with a `networkidle` wait state. If the Easy Apply button is not found, it performs a diagnostic page dump (logging URL, title, and buttons) and saves a screenshot to `data/debug_screenshots/` for troubleshooting. Returns `NEEDS_LOGIN` if redirected to an authentication page. Employs a multi-selector fallback strategy with a hard 120-second timeout.
+- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job. Uses a direct button-check strategy with a `domcontentloaded` wait and a 1s stabilization delay. If the Easy Apply button is not found, it saves a screenshot to `data/debug_screenshots/` for troubleshooting and performs status checks (already applied/closed). Returns `NEEDS_LOGIN` if redirected to an authentication page. Employs a fast multi-selector fallback strategy with a hard 120-second timeout.
 
 ### `JobQueue` (Data Model)
 

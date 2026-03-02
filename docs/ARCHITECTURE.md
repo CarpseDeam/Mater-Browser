@@ -17,10 +17,9 @@ The system is optimized exclusively for LinkedIn "Easy Apply" flows. External jo
 
 ### Direct Application Flow (2026 Optimization)
 To maximize speed and reliability, the application flow uses a direct-check strategy:
-- **Instant Skip**: Bypasses full page classification for the primary flow. It waits for the `networkidle` state to ensure XHR-loaded job details are ready, then performs a multi-selector check for the Easy Apply button. If no button is found (using stable 2026 selectors and fallbacks), it instantly checks for "Already applied" or "Job closed" phrases and skips the job.
-- **Failure Diagnostics**: If the "Easy Apply" button is missing and the job is not clearly "applied" or "closed," the system performs a diagnostic dump:
+- **Instant Skip**: Bypasses full page classification for the primary flow. It waits for the `domcontentloaded` state and a 1s stabilization delay to ensure job details are accessible, then performs a multi-selector check for the Easy Apply button. If no button is found (using stable 2026 selectors and fallbacks), it instantly checks for "Already applied" or "Job closed" phrases and skips the job.
+- **Failure Diagnostics**: If the "Easy Apply" button is missing and the job is not clearly "applied" or "closed," the system performs a diagnostic check:
     - **Authentication Check**: Verifies if the session was redirected to a login or checkpoint page, returning a `NEEDS_LOGIN` status if so.
-    - **DOM Snapshot**: Logs the page title and metadata (visibility, ID, text, ARIA label, and CSS class) for the first 20 buttons on the page to identify selector drift.
     - **Visual Evidence**: Saves a full-page screenshot to `data/debug_screenshots/no_easy_apply_{job_id}.png` for manual inspection.
 - **Click Blocker Dismissal**: Automatically removes non-modal overlays (chat bubbles, cookie banners, toasts) that could intercept the click before attempting to open the modal.
 - **Modal Wait & Retry**: Implements a dedicated `_wait_for_modal` sequence with 2026-specific selectors and a one-time retry (using fallback button detection) if the initial click fails to open the modal.
