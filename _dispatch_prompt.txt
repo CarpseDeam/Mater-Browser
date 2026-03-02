@@ -1,54 +1,103 @@
-## Task: Analyze LinkedIn DOM dump and update selectors
+## Task: Analyze LinkedIn Easy Apply modal DOM dumps and update all selectors
 
 **Project:** C:\Projects\Mater-Browser
 
-## Step 1: Analyze the DOM dump
+## Step 1: Analyze ALL modal dumps
 
-Read `C:\Projects\Mater-Browser\data\full_dom_dump.json` and extract:
+Read these files and extract EVERY relevant selector:
+- `data/dump_modal_page1.json`
+- `data/dump_modal_page2.json` 
+- `data/dump_modal_page3.json`
+- `data/dump_modal2_page1.json`
+- `data/full_dom_dump.json` (search results page - for apply button selectors)
 
-1. **Every button** where text, aria-label, or className contains "apply" — print full details (text, aria, class, html preview, visibility)
-2. **Every modal/dialog** — print class, role, aria-label, visibility  
-3. **Every progress indicator** — print class, aria-valuenow, aria-valuemax
-4. **Every button** that contains "next", "submit", "review", "continue", "dismiss", "close", "discard" in text or aria-label — print full details
-5. **Every input, select, textarea** — print type, name, class, aria-label, placeholder, associated label text
-6. **Every fieldset** with radio buttons — print legend, radio values, labels
-7. **Every label** with class containing "form-element" or "fb-" — print text and class
-8. **Every aria-label** on the page that contains "easy", "apply", "submit", "next", "review", "dismiss", "close"
+For EACH dump, print to stdout:
 
-Print all of this to stdout so we can see what LinkedIn actually uses.
+### A) Apply-related buttons
+Every button where text, aria-label, or class contains "apply", "easy apply". Print: text, aria-label, full className, outerHTML preview, visibility
 
-## Step 2: Compare with current selectors
+### B) Modal containers
+Every element with role="dialog", class containing "modal", "overlay", "dialog". Print: tag, class, role, aria-label, visibility
 
-Read these files and compare what the DOM dump shows vs what the code uses:
-- `src/agent/page_classifier.py` — LINKEDIN_EASY_APPLY_SELECTORS, _classify_apply_button logic, dismiss selectors
-- `src/agent/linkedin_form_filler.py` — LinkedInSelectors class, SUBMIT_BUTTON_PATTERNS, click_next method, fill methods
-- `src/agent/linkedin_flow.py` — _close_modal dismiss selectors, _get_modal_hash selectors, is_confirmation_page checks
+### C) Navigation buttons (CRITICAL)
+Every button containing "next", "submit", "review", "continue" in text or aria-label. Print: full text, aria-label, full className, outerHTML, visibility
 
-For each selector in the code, report:
-- MATCH: selector exists in the DOM dump
-- MISS: selector does NOT exist in the DOM dump  
-- NEW: selector exists in DOM but code doesn't use it
+### D) Dismiss/close buttons  
+Every button containing "dismiss", "close", "discard", "cancel" in text or aria-label. Print: text, aria-label, class, outerHTML
 
-## Step 3: Update the code
+### E) Progress indicators
+Every progress, progressbar, or class containing "progress", "completeness", "stepper". Print: tag, class, role, aria-valuenow, aria-valuemax, value, max
 
-Based on the analysis, update all three files with the correct selectors from the actual LinkedIn DOM. Key things to fix:
+### F) Form inputs
+Every input with visibility. Print: type, name, id, class, aria-label, placeholder, aria-required, associated data-test attributes
 
-1. **page_classifier.py**: Update LINKEDIN_EASY_APPLY_SELECTORS to match what's actually on the page. Fix _classify_apply_button if the button text/aria doesn't contain "easy" (LinkedIn may have changed the button text format).
+### G) Selects/dropdowns
+Every select element. Print: name, id, class, aria-label, option values and text
 
-2. **linkedin_form_filler.py**: Update LinkedInSelectors class with actual CSS classes from the dump. Update SUBMIT_BUTTON_PATTERNS with actual button selectors. Update click_next to find buttons that actually exist.
+### H) Textareas
+Every textarea. Print: name, id, class, aria-label, placeholder
 
-3. **linkedin_flow.py**: Update _close_modal with dismiss button selectors that actually exist. Update _get_modal_hash with actual progress bar and form element selectors.
+### I) Fieldsets with radios
+Every fieldset. Print: legend text, all data-test* attributes, radio values, radio labels, radio IDs
 
-## Important
-- The DOM dump is from a LIVE LinkedIn page as of today (March 2, 2026)
-- LinkedIn changes their DOM frequently — use what the dump shows, not what you think it should be
-- Keep fallback selectors for resilience but put the ones from the dump FIRST
-- Don't remove old selectors entirely — just reorder so working ones come first
+### J) Labels
+Every label or element with class containing "label", "fb-form", "form-element". Print: text, class, for attribute
+
+### K) Error indicators
+Elements with class containing "error", "feedback", "validation", "invalid". Print: text, class
+
+### L) Confirmation/success indicators  
+Elements with text containing "application sent", "submitted", "success". Or class containing "post-apply". Print: text, class, tag
+
+### M) File upload inputs
+Every input[type=file] or elements with class/id containing "upload", "resume", "document". Print: id, name, class, accept attribute
+
+## Step 2: Cross-reference with current code
+
+Read all three files:
+- `src/agent/page_classifier.py`
+- `src/agent/linkedin_form_filler.py`  
+- `src/agent/linkedin_flow.py`
+
+For EVERY selector/pattern in the code, classify as:
+- **HIT**: Found in at least one DOM dump
+- **MISS**: Not found in ANY dump - likely broken/stale
+- **PARTIAL**: Similar but not exact match
+
+For selectors found in dumps but NOT in code:
+- **NEW**: Important selector the code should use
+
+Print a clear report.
+
+## Step 3: Update ALL selector references
+
+Update all three files based on the analysis. LinkedIn uses obfuscated CSS classes that rotate. ALWAYS prefer in this order:
+1. aria-label attributes (most stable)
+2. role attributes
+3. data-test* attributes  
+4. Semantic selectors like tag[type="..."]
+5. CSS classes as LAST resort
+
+### page_classifier.py
+- Update LINKEDIN_EASY_APPLY_SELECTORS — confirmed working selectors FIRST
+- Fix _classify_apply_button with actual button text/aria patterns
+- Update dismiss_overlays if needed
+
+### linkedin_form_filler.py  
+- Update LinkedInSelectors class with confirmed working selectors
+- Update SUBMIT_BUTTON_PATTERNS with actual nav button patterns
+- Update click_next(), fill methods, is_confirmation_page()
+
+### linkedin_flow.py
+- Update _close_modal() dismiss selectors
+- Update _get_modal_hash() progress bar and form element selectors
+
+Keep old selectors as fallbacks but put confirmed working ones FIRST.
 
 ## Code Standards
 - Static typing everywhere
 - logging module
-- Keep functions under 25 lines
+- Functions under 25 lines
 
 ## Verification
 ```
@@ -56,3 +105,36 @@ cd C:\Projects\Mater-Browser
 python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; from src.agent.page_classifier import PageClassifier; print('OK')"
 ```
 
+
+## Code Standards
+
+Write code that looks inevitable. Follow these constraints:
+
+**Restraint**
+- Solve it in one file if possible
+- No abstractions until the third time you need them
+- No classes if functions will do
+- No inheritance - use composition
+
+**Functions**
+- Max 25 lines, aim for 15
+- One level of nesting max
+- Name describes exactly what it does: `extract_billable_hours()` not `process_data()`
+- Input → transform → output. No side effects unless that's the point.
+
+**Files**
+- Max 200 lines for new files
+- One clear responsibility
+- If you're adding a second "system" to a file, stop and split
+
+**No Ceremony**
+- No AbstractFactory, no IServiceProvider, no Manager classes
+- No code "just in case" - solve the actual problem
+- Delete commented-out code, don't keep it
+
+**Data**
+- Use dataclasses or plain dicts, not classes with only __init__ and getters
+- Data flows obviously - reader should predict what happens next
+- No global state
+
+The best code is code you delete. Every line is a liability.
