@@ -112,6 +112,17 @@ class JobScorer:
                     matched_value=pattern,
                 )
 
+        # Check blocked companies
+        company_lower = job.company.lower() if job.company else ""
+        for company in self._config.blocked_companies:
+            if company in company_lower:
+                return FilterResult(
+                    passed=False,
+                    reason=f"blocked company: '{company}'",
+                    rule_type=RuleType.BLOCKED_COMPANY,
+                    matched_value=company,
+                )
+
         # Check location exclusions
         location_lower = job.location.lower() if job.location else ""
         for loc in self._config.location_exclusions:

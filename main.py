@@ -1,4 +1,4 @@
-"""Mater-Browser: DOM-aware browser automation for job applications."""
+"""Mater-Browser: LinkedIn Easy Apply automation."""
 import logging
 from pathlib import Path
 
@@ -8,7 +8,6 @@ from src.browser.connection import BrowserConnection
 from src.browser.tabs import TabManager
 from src.profile.manager import load_profile
 from src.agent.application import ApplicationAgent, ApplicationStatus
-from src.extractor.dom_service import DomService
 
 logger = logging.getLogger(__name__)
 
@@ -43,18 +42,14 @@ def main() -> None:
 
         agent = ApplicationAgent(
             tab_manager=tabs,
-            profile=profile,
-            resume_path=resume_path,
             max_pages=15,
-            claude_model=settings.claude.model,
         )
 
         print("\n" + "=" * 50)
-        print("Mater-Browser Ready")
+        print("Mater-Browser Ready - LinkedIn Easy Apply Only")
         print("=" * 50)
         print("\nCommands:")
-        print("  apply <url>  - Apply to a job")
-        print("  test         - Test on httpbin form")
+        print("  apply <url>  - Apply to a LinkedIn job")
         print("  quit         - Exit")
         print()
 
@@ -72,16 +67,6 @@ def main() -> None:
 
             if command in ("quit", "exit"):
                 break
-
-            elif command == "test":
-                page.goto("https://httpbin.org/forms/post")
-                page.wait(2000)
-
-                dom_service = DomService(page)
-                dom_state = dom_service.extract()
-
-                print(f"\nExtracted {dom_state.elementCount} elements:")
-                print(dom_service.format_for_llm(dom_state))
 
             elif command == "apply":
                 if len(parts) < 2:

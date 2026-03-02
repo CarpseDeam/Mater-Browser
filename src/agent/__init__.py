@@ -1,22 +1,4 @@
-"""Claude agent integration for form analysis."""
-from .actions import (
-    Action,
-    ActionPlan,
-    ClickAction,
-    FillAction,
-    SelectAction,
-    UploadAction,
-    WaitAction,
-)
-from .claude import ClaudeAgent
+"""LinkedIn Easy Apply agent."""
+from .application import ApplicationAgent
 
-__all__ = [
-    "Action",
-    "ActionPlan",
-    "ClickAction",
-    "FillAction",
-    "SelectAction",
-    "UploadAction",
-    "WaitAction",
-    "ClaudeAgent",
-]
+__all__ = ["ApplicationAgent"]

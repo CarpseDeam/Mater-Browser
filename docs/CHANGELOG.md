@@ -2,6 +2,11 @@
 
 All notable changes to this project.
 
+- 2026-01-31: fix: Fix LinkedIn Easy Apply flow getting stuck immediately
+  - Enhanced `LinkedInFlow` with robust modal state hashing (progress bar, aria-valuenow, multiple selectors, element counts, and labels)
+  - Improved `LinkedInFormFiller` to support multiple modal selectors (`.artdeco-modal`, `[role="dialog"]`) for broader compatibility
+  - Added comprehensive logging for page processing, modal detection, and button interaction
+  - Implemented retry logic for the next/submit button and increased stuck detection tolerance
 - 2026-01-31: fix: Fix critical radio button and pattern matching bugs in LinkedIn form filler
   - Refined `city|location` pattern in `AnswerEngine` to be more specific, preventing false positives on employment history questions
   - Rewrote `_fill_single_radio_group` in `LinkedInFormFiller` with intelligent defaults:

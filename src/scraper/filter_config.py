@@ -17,6 +17,7 @@ class RuleType(Enum):
     TITLE_EXCLUSION = "title_exclusion"
     BLOCKED_DOMAIN = "blocked_domain"
     BLOCKED_URL_PATTERN = "blocked_url_pattern"
+    BLOCKED_COMPANY = "blocked_company"
     DESCRIPTION_EXCLUSION = "description_exclusion"
     STACK_EXCLUSION = "stack_exclusion"
     ROLE_EXCLUSION = "role_exclusion"
@@ -68,6 +69,7 @@ class FilterConfig:
 
     blocked_domains: list[str] = field(default_factory=list)
     blocked_url_patterns: list[str] = field(default_factory=list)
+    blocked_companies: list[str] = field(default_factory=list)
     location_exclusions: list[str] = field(default_factory=list)
 
     positive_signals: list[str] = field(default_factory=list)
@@ -116,6 +118,7 @@ class FilterConfig:
             role_exclusions=[r.lower() for r in role_exclusions],
             blocked_domains=[d.lower() for d in data.get("blocked_domains", [])],
             blocked_url_patterns=[p.lower() for p in data.get("blocked_url_patterns", [])],
+            blocked_companies=[c.lower() for c in data.get("blocked_companies", [])],
             location_exclusions=[loc.lower() for loc in data.get("location_exclusions", [])],
             positive_signals=[s.lower() for s in data.get("positive_signals", [])],
             title_keywords=[k.lower() for k in data.get("title_keywords", [])],

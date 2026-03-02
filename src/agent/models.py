@@ -23,16 +23,7 @@ LOOP_DETECTION_THRESHOLD: int = 3
 LOOP_ELEMENT_COUNT_TOLERANCE: int = 5
 
 
-class JobSource(Enum):
-    """Source platform for job listing."""
-    LINKEDIN = "linkedin"
-    INDEED = "indeed"
-    DICE = "dice"
-    DIRECT = "direct"
-
-
 LINKEDIN_PATTERNS: list[str] = ["linkedin.com/jobs", "linkedin.com/job"]
-INDEED_PATTERNS: list[str] = ["indeed.com/viewjob", "indeed.com/jobs", "indeed.com/rc"]
 
 
 LOGIN_URL_PATTERNS: dict[str, list[str]] = {
@@ -75,15 +66,3 @@ class ApplicationResult:
     message: str
     pages_processed: int = 0
     url: str = ""
-
-
-ACCOUNT_CREATION_URL_PATTERNS: list[str] = [
-    "/login", "/signin", "/sign-in", "/signup", "/sign-up",
-    "/register", "/create-account", "/authenticate",
-    "icims.com", "myworkdayjobs.com", "taleo.net",
-]
-
-ACCOUNT_CREATION_CONTENT: list[str] = [
-    "sign in", "log in", "create an account", "register now",
-    "confirm password", "already have an account", "forgot password",
-]

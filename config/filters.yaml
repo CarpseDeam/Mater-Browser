@@ -176,6 +176,10 @@ location_exclusions:
   - "malaysia"
   - "singapore"
 
+blocked_companies:
+  # Companies to exclude from applications (case-insensitive)
+  - "crossing hurdles"
+
 positive_signals:
   # Boost score if description mentions these
   - "python"

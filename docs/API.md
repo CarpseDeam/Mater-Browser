@@ -35,7 +35,9 @@ Deterministic form filler for LinkedIn Easy Apply modals.
     - **Smart Dropdowns**: Employs fuzzy and range-based matching for experience and preference dropdowns.
     - **Intelligent Radio Defaults**: Applies safe defaults for Yes/No questions based on context (e.g., "No" for conflicts of interest, "Yes" for work authorization) when no explicit answer is found.
     - **Fail-Safe**: Uses fallback answers for unknown text fields (including numeric "0" fallbacks) to ensure completion.
-    - Returns `True` if modal was found and processed.- `click_next() -> bool`: Clicks the next, submit, or review button to advance the form.
+    - **Multi-Modal Support**: Employs a robust search strategy using multiple selectors (`.artdeco-modal`, `[role="dialog"]`) to find and fill the Easy Apply modal.
+    - Returns `True` if modal was found and processed.
+- `click_next() -> bool`: Clicks the next, submit, or review button to advance the form. Includes retry logic and detailed logging of button interactions.
 - `is_confirmation_page() -> bool`: Detects if the application success page has been reached.
 - `close_modal()`: Closes the Easy Apply modal after completion or failure.
 

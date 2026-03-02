@@ -1,254 +1,95 @@
-Fix LinkedIn Easy Apply flow getting stuck immediately - missing logging and broken stuck detection.
+## Task: Clean up Mater-Browser — Remove all bloat, LinkedIn Easy Apply only
 
-## PROBLEM
+**Project:** C:\Projects\Mater-Browser
 
-The logs show:
-```
-19:34:07 - Using deterministic form filler for Easy Apply
-19:34:19 - Stuck on same page 2 times, aborting
-```
+## What to DELETE (files to remove entirely):
 
-NO form filler logs in between (no "Filled", "Selected", "Radio", etc.). This means either:
-1. The modal isn't being found but silently failing
-2. `_get_modal_hash()` returns "" twice → thinks stuck immediately
-3. Exceptions being swallowed
+### Dead Claude-based form filling (replaced by deterministic filler):
+1. `src/agent/claude.py` — old Claude API form analysis
+2. `src/agent/prompts.py` — system prompts for Claude form filling
+3. `src/agent/actions.py` — action models for Claude plans (FillAction, SelectAction, etc.)
 
-## ROOT CAUSE
+### Dead Indeed flow (LinkedIn Easy Apply only):
+4. `src/agent/external_flow.py` — Indeed/external ATS flow
+5. `src/agent/indeed_form_filler.py` — Indeed form filling
+6. `src/agent/indeed_helpers.py` — Indeed resume cards, modals
 
-In `_get_modal_hash()`:
-- If progress bar not found AND input count fails → returns ""
-- First iteration: last_page_hash = "", current_hash = "" → stuck_count = 1
-- Second iteration: both still "" → stuck_count = 2 → breaks immediately
+### Dead infrastructure (not wired in or superseded):
+7. `src/agent/zero_actions_handler.py` — handled Claude 0-actions, dead since no Claude form filling
+8. `src/agent/vision_fallback.py` — screenshot + Claude vision button finding, expensive and unreliable
+9. `src/agent/navigation_helpers.py` — duplicate click_next, is_complete, try_resume_upload all reimplemented in linkedin_form_filler.py and linkedin_flow.py
+10. `src/agent/loop_detector.py` — superseded by stuck_detection.py AND linkedin_flow's own hash-based detection
+11. `src/agent/stuck_detection.py` — FormProcessorStuckDetection not wired into LinkedIn flow (linkedin_flow has its own stuck detection via _get_modal_hash)
+12. `src/workflow/application.py` — entire old workflow using ClaudeAgent, completely superseded by linkedin_flow.py
 
-## FILES TO FIX
+### Dead feedback system (broken, never worked):
+13. `src/feedback/auto_repairer.py` — sends wrong payload format to bridge, always fails silently
+14. `src/feedback/config_suggester.py` — feeds auto_repairer, dead chain
+15. `src/feedback/failure_summarizer.py` — feeds auto_repairer, dead chain
 
-### src/agent/linkedin_flow.py
+**NOTE:** KEEP `src/feedback/failure_logger.py` — it's used by answer_engine.py for logging unknown questions. That's useful data.
 
-**Fix 1: Add comprehensive logging to `_process_easy_apply()`:**
+### Dead directories after cleanup:
+16. `src/workflow/` directory — empty after removing application.py (delete the whole dir including __init__.py)
 
+## What to MODIFY:
+
+### `src/agent/application.py` — Simplify to LinkedIn-only
+Current code routes to LinkedInFlow or ExternalFlow. Remove ExternalFlow routing entirely.
+- Remove import of `ExternalFlow`
+- Remove import of `INDEED_PATTERNS` from models
+- Remove the Indeed/Direct detection in `_detect_source()`
+- If source is not LinkedIn, return SKIPPED immediately
+- Remove `JobSource.DICE` and `JobSource.DIRECT` usage
+
+The simplified flow should be:
 ```python
-def _process_easy_apply(self, job_url: str) -> ApplicationResult:
-    """Process LinkedIn Easy Apply using deterministic form filler."""
-    logger.info("Using deterministic form filler for Easy Apply")
-
-    answer_engine = AnswerEngine()
-    filler = LinkedInFormFiller(self._page.raw, answer_engine)
-    
-    last_page_hash = ""
-    stuck_count = 0
-    max_stuck = 3  # Increase from 2 to 3 for more tolerance
-
-    for page_num in range(self._max_pages):
-        logger.info(f"Processing page {page_num + 1}/{self._max_pages}")
-        self._page.wait(1000)
-
-        if filler.is_confirmation_page():
-            logger.info("Confirmation page detected - application submitted!")
-            filler.close_modal()
-            return ApplicationResult(
-                status=ApplicationStatus.SUCCESS,
-                message="Application submitted",
-                pages_processed=page_num + 1,
-                url=job_url,
-            )
-
-        # Get current page hash to detect stuck
-        current_hash = self._get_modal_hash()
-        logger.debug(f"Page hash: '{current_hash}' (last: '{last_page_hash}')")
-        
-        # Only count as stuck if we have a valid hash
-        if current_hash and current_hash == last_page_hash:
-            stuck_count += 1
-            logger.warning(f"Same page hash detected ({stuck_count}/{max_stuck})")
-            if stuck_count >= max_stuck:
-                logger.warning(f"Stuck on same page {stuck_count} times, aborting")
-                break
-        else:
-            stuck_count = 0
-            last_page_hash = current_hash
-
-        # Fill the form
-        modal_found = filler.fill_current_modal()
-        logger.info(f"Page {page_num + 1}: Modal found={modal_found}")
-
-        # Click next button
-        if not filler.click_next():
-            logger.warning(f"Page {page_num + 1}: Could not find next button")
-            # Don't break immediately - try waiting and retrying once
-            self._page.wait(1000)
-            if not filler.click_next():
-                logger.warning("Next button still not found after retry, aborting")
-                break
-
-        self._page.wait(1000)
-
-    return ApplicationResult(
-        status=ApplicationStatus.FAILED,
-        message="Max pages reached or stuck",
-        pages_processed=page_num + 1,
-        url=job_url,
-    )
+def apply(self, job_url: str) -> ApplicationResult:
+    if not self._is_linkedin(job_url):
+        return ApplicationResult(status=ApplicationStatus.SKIPPED, message="Not LinkedIn", url=job_url)
+    # ... LinkedIn flow only
 ```
 
-**Fix 2: Make `_get_modal_hash()` more robust:**
+### `src/agent/models.py` — Clean up dead references
+- Remove `JobSource.DICE` and `JobSource.DIRECT` (keep LINKEDIN and INDEED for potential future)
+- Remove `INDEED_PATTERNS` 
+- Remove `ACCOUNT_CREATION_URL_PATTERNS` and `ACCOUNT_CREATION_CONTENT` (these are duplicated in page_classifier.py which has its own)
+- Keep everything else (timeouts, ApplicationStatus, ApplicationResult, etc.)
 
-```python
-def _get_modal_hash(self) -> str:
-    """Get a hash of the current modal state to detect if we're stuck."""
-    hash_parts = []
-    
-    # Try progress bar percentage
-    try:
-        progress = self._page.raw.locator("progress").first
-        if progress.is_visible(timeout=500):
-            value = progress.get_attribute("value") or ""
-            max_val = progress.get_attribute("max") or "100"
-            if value:
-                hash_parts.append(f"progress:{value}/{max_val}")
-    except Exception:
-        pass
-    
-    # Try aria-valuenow on progress (LinkedIn uses this)
-    try:
-        progress_aria = self._page.raw.locator("[role='progressbar']").first
-        if progress_aria.is_visible(timeout=500):
-            value = progress_aria.get_attribute("aria-valuenow") or ""
-            if value:
-                hash_parts.append(f"aria-progress:{value}")
-    except Exception:
-        pass
-    
-    # Count form elements in modal
-    try:
-        modal_selectors = [
-            ".jobs-easy-apply-modal",
-            "[data-test-modal]",
-            ".artdeco-modal",
-            "[role='dialog']",
-        ]
-        for modal_sel in modal_selectors:
-            try:
-                modal = self._page.raw.locator(modal_sel).first
-                if modal.is_visible(timeout=300):
-                    inputs = modal.locator("input:visible").count()
-                    selects = modal.locator("select:visible").count()
-                    textareas = modal.locator("textarea:visible").count()
-                    fieldsets = modal.locator("fieldset:visible").count()
-                    hash_parts.append(f"form:{inputs}i/{selects}s/{textareas}t/{fieldsets}f")
-                    break
-            except Exception:
-                continue
-    except Exception:
-        pass
-    
-    # Get visible question text as part of hash
-    try:
-        labels = self._page.raw.locator(".jobs-easy-apply-modal .fb-form-element-label").all()
-        label_texts = []
-        for label in labels[:3]:  # First 3 labels
-            try:
-                text = label.text_content()
-                if text:
-                    label_texts.append(text[:20])  # First 20 chars
-            except Exception:
-                pass
-        if label_texts:
-            hash_parts.append(f"labels:{','.join(label_texts)}")
-    except Exception:
-        pass
-    
-    result = "|".join(hash_parts) if hash_parts else "empty"
-    logger.debug(f"Modal hash components: {result}")
-    return result
-```
+### `src/agent/__init__.py` — Remove any exports of deleted modules
 
-### src/agent/linkedin_form_filler.py
+### `src/feedback/__init__.py` — Remove exports of deleted feedback modules (keep failure_logger)
 
-**Fix 3: Add logging at start of `fill_current_modal()`:**
+### `src/agent/page_classifier.py` — Remove import of VisionFallback
+- The PageClassifier does NOT import VisionFallback directly (ZeroActionsHandler does), but verify no references exist to deleted modules.
 
-```python
-def fill_current_modal(self) -> bool:
-    """Fill all fields in the current Easy Apply modal.
+### `src/executor/runner.py` — Check if it imports anything from deleted modules (actions.py specifically)
+- The ActionRunner likely imports from `actions.py`. If it does, AND it's only used by the deleted workflow, then `src/executor/runner.py` and the `src/executor/` directory can also be deleted.
+- READ runner.py first to check before deciding.
 
-    Returns:
-        True if modal was found and processed, False if no modal.
-    """
-    # Try multiple modal selectors
-    modal_selectors = [
-        '.jobs-easy-apply-modal',
-        '[data-test-modal]',
-        '.artdeco-modal',
-        '[role="dialog"]',
-    ]
-    
-    modal = None
-    for selector in modal_selectors:
-        try:
-            candidate = self._page.locator(selector).first
-            if candidate.is_visible(timeout=1000):
-                modal = candidate
-                logger.info(f"Found modal with selector: {selector}")
-                break
-        except Exception:
-            continue
-    
-    if modal is None:
-        logger.warning("No Easy Apply modal found with any selector")
-        return False
+### `src/extractor/dom_service.py` — Check if it's still used
+- The DomService is used by the old ClaudeAgent workflow and old runner. If linkedin_form_filler.py and linkedin_flow.py don't use it, the entire `src/extractor/` directory might be dead too.
+- READ the imports in linkedin_flow.py and linkedin_form_filler.py first — they use Playwright directly, not DomService.
+- If nothing in the remaining code imports from `src/extractor/`, delete the entire `src/extractor/` directory.
 
-    # Count fields before filling
-    try:
-        input_count = modal.locator("input:visible").count()
-        select_count = modal.locator("select:visible").count()
-        fieldset_count = modal.locator("fieldset:visible").count()
-        logger.info(f"Modal has {input_count} inputs, {select_count} selects, {fieldset_count} fieldsets")
-    except Exception as e:
-        logger.debug(f"Could not count fields: {e}")
+## Code Standards:
+- Static typing everywhere
+- No bare `except:` 
+- Use `logging` module
+- Guard clauses, fail fast
+- f-strings
+- Keep functions under 25 lines where possible
+- No unnecessary comments
 
-    self._fill_text_inputs(modal)
-    self._fill_selects(modal)
-    self._fill_radios(modal)
-    self._fill_skill_checkboxes(modal)
-    self._fill_checkboxes(modal)
-    self._fill_textareas(modal)
-    self._uncheck_follow_company()
+## Process:
+1. Read all imports across the surviving files to build a dependency graph
+2. Delete files that are confirmed dead (no remaining imports)
+3. Modify application.py and models.py
+4. Clean up __init__.py files  
+5. Delete empty directories
+6. Verify the project still imports cleanly: `python -c "from src.agent.application import ApplicationAgent; print('OK')"`
+7. Delete all `__pycache__` directories to clean up stale bytecode
 
-    return True
-```
-
-**Fix 4: Add logging to `click_next()` to show what's happening:**
-
-```python
-def click_next(self) -> bool:
-    """Click the next/submit/review button."""
-    for selector in self.SUBMIT_BUTTON_PATTERNS:
-        try:
-            btn = self._page.locator(selector).first
-            if btn.is_visible(timeout=1000):
-                btn_text = btn.text_content() or btn.get_attribute("aria-label") or selector
-                btn.click()
-                logger.info(f"Clicked button: {btn_text[:30]}")
-                self._page.wait_for_timeout(500)
-                return True
-        except Exception as e:
-            logger.debug(f"Button selector {selector} failed: {e}")
-            continue
-    
-    logger.warning("No next/submit button found with any selector")
-    return False
-```
-
-## SUMMARY
-
-1. **_process_easy_apply**: Added logging for each page, increased stuck threshold to 3, only count stuck if hash is non-empty, retry click_next once before aborting
-
-2. **_get_modal_hash**: Made more robust - tries progress bar, aria-valuenow, multiple modal selectors, form element counts, and label text. Returns "empty" instead of "" so we can distinguish no hash from empty string
-
-3. **fill_current_modal**: Try multiple modal selectors, log which one worked, count fields before filling
-
-4. **click_next**: Log which button was clicked or why it failed
-
-Run again and we'll see EXACTLY what's happening on each page.
 
 ## Code Standards
 

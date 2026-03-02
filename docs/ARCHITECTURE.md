@@ -31,13 +31,14 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 - **Answer Engine**: Matches form questions (via labels, placeholders, or ARIA attributes) against a predefined configuration in `config/answers.yaml` using regex and fuzzy matching. Supports a wide range of categories including personal info, experience, EEO/demographics (gender, race, veteran status, disability), salary expectations, language proficiency, and work preferences. It includes specialized logic for matching experience-related questions, including multi-technology experience calculation and smart dropdown matching. Patterns are prioritized to ensure EEO/demographic questions match correctly before generic personal information patterns. When an unknown question is encountered, it is automatically logged to the `FailureLogger` with the associated job metadata and a page snapshot.
 
-- **Form Filler**: Automatically identifies and fills text inputs, textareas, selects, radio buttons, and checkboxes in the LinkedIn modal using a multi-stage selector strategy. 
+- **Form Filler**: Automatically identifies and fills text inputs, textareas, selects, radio buttons, and checkboxes in the LinkedIn modal using a multi-stage selector strategy.
+    - **Multi-Modal Selectors**: Employs a robust search strategy across multiple modal selectors (`.jobs-easy-apply-modal`, `.artdeco-modal`, `[role="dialog"]`) to handle variations in LinkedIn's UI across different job listings.
     - **Intelligent Skill Matching**: For "Select all that apply" checkbox groups, it matches available options against the user's documented skills in `answers.yaml` to provide accurate technical profiles.
     - **Smart Dropdowns**: Implements multi-stage matching for select options (exact, partial, and numeric range for years of experience) to ensure the best answer is selected even when phrasing differs.
     - **Automation**: Includes specialized handling for autocomplete location fields and automatically unchecks the "follow company" option to maintain user privacy.
+    - **Robust Advancement**: Includes retry logic for the next/submit button with detailed logging of button text and interaction outcomes.
 
-- **Fail-Safe**: To ensure applications never stall on required fields:
-    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.  
+- **Fail-Safe**: To ensure applications never stall on required fields:    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.  
     - **Radio Groups**: Uses intelligent defaults based on question content to ensure safe and accurate applications. It automatically defaults to "No" for sensitive topics (previous employment, conflict of interest, referrals, crypto, legal actions) and "Yes" for essential requirements (work authorization, background checks, consent). For unknown Yes/No questions, it defaults to "No" as a safer option before falling back to the first available choice for non-binary groups.
     - **Select/Dropdowns**: If no matching option is found in the configuration, it selects the first non-placeholder option as a last resort.
     - **Checkboxes**: For single checkboxes, it checks the box by default unless it contains spam keywords. For multi-select skill groups, it checks the first relevant option if no skills match.
@@ -80,7 +81,7 @@ The `AutoRepairer` component provides self-healing capabilities by automatically
 ## Loop & Stuck Detection
 The system prevents infinite loops using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`) for generic flows, and specialized modal hashing in `LinkedInFlow`.
 
-- **LinkedIn Modal Hashing**: Monitors the Easy Apply modal for state changes by hashing the progress bar value and form element counts. If the state remains identical across multiple attempts to advance, the flow is halted to prevent infinite loops.
+- **LinkedIn Modal Hashing**: Monitors the Easy Apply modal for state changes using a comprehensive hashing strategy. It incorporates the progress bar percentage, `aria-valuenow` state, form element counts (inputs, selects, textareas, fieldsets), and visible question labels. This multi-factor hash allows for precise detection of stuck states even when the UI slightly changes. If the state remains identical across multiple attempts (up to a tolerance of 3), the flow is halted to prevent infinite loops.
 - **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state in generic flows.
 - **URL Tracking**: Monitors normalized URL visit counts and element counts to detect repetitions even if content slightly changes.
 - **Pattern Detection**: Identifies repeating sequences of pages (e.g., A-B-A-B or A-B-C-A-B-C) to break out of circular navigation loops.
