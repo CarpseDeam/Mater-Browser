@@ -6,21 +6,20 @@ System architecture documentation.
 
 The `PageClassifier` is responsible for identifying the current state of a job application page and locating the primary action buttons.
 - **Classification Logic**: Uses a combination of URL patterns, page content (e.g., "already applied", "job closed"), and DOM element analysis.
-- **Apply Button Detection**: Prioritizes direct selector matching for known platforms (e.g., LinkedIn) to ensure high reliability. If no direct match is found, it employs a Similo-style weighted scoring system to find the most likely "Apply" button. It distinguishes between:
-    - **Easy Apply**: Internal application flows (e.g., LinkedIn Easy Apply, Indeed Smart Apply).
-    - **External Link**: Buttons that lead away from the platform to a company-specific ATS, detected via ARIA labels, roles (`role="link"`), and text patterns (e.g., "Apply on company site"). The system proactively detects "External-only" jobs (e.g., Indeed's "Apply on company site" or LinkedIn's external links) and skips them early to prioritize Easy Apply flows. For legitimate external transitions, it involves modularized redirection logic to capture both popup-based and same-tab navigations, with immediate transitions to captured URLs to avoid analysis timeouts.
-- **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays from platforms like LinkedIn and Dice.
+- **Apply Button Detection**: Prioritizes direct selector matching for LinkedIn to ensure high reliability. If no direct match is found, it employs a Similo-style weighted scoring system to find the most likely "Apply" button. It distinguishes between:
+    - **Easy Apply**: Internal application flows (specifically LinkedIn Easy Apply).
+    - **External Link**: Buttons that lead away from the platform to a company-specific ATS. The system proactively detects "External-only" jobs and skips them early to prioritize Easy Apply flows.
+- **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays.
 
-## Easy Apply Only Strategy
+## LinkedIn Easy Apply Strategy
 
-The system is optimized for LinkedIn and Indeed "Easy Apply" flows. External job applications that redirect to third-party ATS (Workday, Greenhouse, etc.) are automatically detected and skipped to ensure high reliability and deterministic behavior.
+The system is optimized exclusively for LinkedIn "Easy Apply" flows. External job applications or other platforms are automatically detected and skipped to ensure high reliability and deterministic behavior.
 
 ## Form Processing
 
-The `ApplicationAgent` orchestrates the interaction with web forms using platform-specific deterministic fillers:
+The `ApplicationAgent` orchestrates the interaction with web forms using a platform-specific deterministic filler:
 
 1. **LinkedIn Easy Apply**: Uses `LinkedInFormFiller` and `AnswerEngine` for rapid, non-AI modal filling.
-2. **Indeed Easy Apply**: Uses `IndeedFormFiller` and `AnswerEngine` to handle Indeed's multi-step Smart Apply flow.
 
 This strategy avoids LLM hallucinations, reduces token costs, and provides consistent results based on the user's `answers.yaml` configuration.
 
@@ -38,70 +37,36 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
     - **Automation**: Includes specialized handling for autocomplete location fields and automatically unchecks the "follow company" option to maintain user privacy.
     - **Robust Advancement**: Includes retry logic for the next/submit button with detailed logging of button text and interaction outcomes.
 
-- **Fail-Safe**: To ensure applications never stall on required fields:    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.  
-    - **Radio Groups**: Uses intelligent defaults based on question content to ensure safe and accurate applications. It automatically defaults to "No" for sensitive topics (previous employment, conflict of interest, referrals, crypto, legal actions) and "Yes" for essential requirements (work authorization, background checks, consent). For unknown Yes/No questions, it defaults to "No" as a safer option before falling back to the first available choice for non-binary groups.
+- **Fail-Safe**: To ensure applications never stall on required fields:
+    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.
+    - **Radio Groups**: Uses intelligent defaults based on question content to ensure safe and accurate applications. It automatically defaults to "No" for sensitive topics (previous employment, conflict of interest, referrals, crypto, legal actions) and "Yes" for essential requirements (work authorization, background checks, consent). For unknown Yes/No questions, it defaults to "No" as a safer option before falling back to the first available choice for non-binary groups.  
     - **Select/Dropdowns**: If no matching option is found in the configuration, it selects the first non-placeholder option as a last resort.
     - **Checkboxes**: For single checkboxes, it checks the box by default unless it contains spam keywords. For multi-select skill groups, it checks the first relevant option if no skills match.
     - **Logging**: All unknown questions are still logged to the `FailureLogger` for future configuration updates.
 
-### Deterministic Indeed Flow
+## Failure Logging
 
-Similar to LinkedIn, the Indeed Easy Apply flow uses a deterministic approach:  
-
-- **Selector Precision**: Uses researched REAL selectors from live Indeed DOM (as of Jan 2026) to identify form fields and navigation buttons, including support for "rich-text-question-input" areas.
-
-- **State Management**: Detects review and confirmation pages to ensure the application is submitted correctly.
-
-- **Answer Integration**: Leverages the same `AnswerEngine` used by LinkedIn for consistent profile information across platforms.
-## Success Detection
-
-The `SuccessDetector` component is responsible for determining if an application has been successfully submitted. It employs a multi-layered approach:
-1. **URL Signal**: Matches current URL against known success patterns (e.g., `/thank-you`, `/confirmation`).
-2. **Content Signal**: Scans page text for confirmation phrases (e.g., "application submitted").
-3. **State Signal**: Detects when form elements disappear from the page, indicating a successful transition. Only active if a form has been previously filled during the session to avoid false positives.
-
-## Failure Logging & Feedback
-
-To enable continuous improvement and automated recovery, the system includes a structured failure logging and analysis layer.
-- **Failure Categorization**: Failures are classified into specific types such as `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, `crash`, and `react_select_fail`.
+To enable continuous improvement, the system includes a structured failure logging layer.
+- **Failure Categorization**: Failures are classified into specific types such as `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, and `crash`.
 - **Contextual Data**: Each failure captures relevant context, including the job URL, page snapshots, and specific details (e.g., the exact question text for `unknown_question`).
 - **Persistence**: Failures are stored in a thread-safe JSONL format in the `data/` directory.
-- **Summarization & Analysis**: The `FailureSummarizer` groups similar failures (using fuzzy matching for questions) and ranks them by frequency. This allows developers to quickly identify the most impactful issues.
-- **Fix Generation**: The `ConfigSuggester` translates failure summaries into actionable fix instructions. For `unknown_question` types, it automatically generates regex patterns and configuration keys. For other types, it identifies the target files and provides context for manual or semi-automated resolution.        
-
-## Self-Healing Automation
-
-The `AutoRepairer` component provides self-healing capabilities by automatically addressing recurring failures.
-- **Thread Safety**: Uses a dedicated `threading.Lock` to ensure atomic operations on the failure counter and repair state, preventing race conditions in multi-threaded environments.
-- **Threshold-Based Repair**: Triggers a repair cycle when the number of unaddressed failures reaches a configurable threshold (default: 5).
-- **Automated Dispatch**: When triggered, it generates a failure summary and fix suggestions formatted as a detailed Markdown specification. This spec, along with the local `project_path`, is dispatched to a bridge server (default: `http://localhost:5001/dispatch`) which interfaces with Claude Code via a `content` payload.
-- **Cooldown Mechanism**: Prevents redundant repair attempts by enforcing a cooldown period (default: 10 minutes) between dispatches.
-- **Non-Blocking Execution**: Runs repairs asynchronously to ensure that the main automation loop continues uninterrupted.
 
 ## Loop & Stuck Detection
-The system prevents infinite loops using `FormProcessorStuckDetection` (in `src/agent/stuck_detection.py`) for generic flows, and specialized modal hashing in `LinkedInFlow`.
+The system prevents infinite loops in the `LinkedInFlow` using specialized modal hashing.
 
 - **LinkedIn Modal Hashing**: Monitors the Easy Apply modal for state changes using a comprehensive hashing strategy. It incorporates the progress bar percentage, `aria-valuenow` state, form element counts (inputs, selects, textareas, fieldsets), and visible question labels. This multi-factor hash allows for precise detection of stuck states even when the UI slightly changes. If the state remains identical across multiple attempts (up to a tolerance of 3), the flow is halted to prevent infinite loops.
-- **Content Hashing**: Uses MD5 hashes of page content to detect when the browser is stuck on the exact same state in generic flows.
-- **URL Tracking**: Monitors normalized URL visit counts and element counts to detect repetitions even if content slightly changes.
-- **Pattern Detection**: Identifies repeating sequences of pages (e.g., A-B-A-B or A-B-C-A-B-C) to break out of circular navigation loops.
 
-## Action Execution
-...
 ## Job Scoring & Filtering
 
 The `JobScorer` filters and ranks job listings using a centralized `FilterConfig` system:
-- **Centralized Configuration**: All rules (title/stack/role exclusions, keywords, blocked domains, location exclusions) and scoring weights are managed via `FilterConfig` (loaded from `config/filters.yaml`).
+- **Centralized Configuration**: All rules (title/stack/role exclusions, keywords, blocked domains, location exclusions, blocked companies) and scoring weights are managed via `FilterConfig` (loaded from `config/filters.yaml`).
 - **Granular Filtering**: Uses `FilterResult` to provide specific reasons for rejection, classified by `RuleType`.
-- **Statistical Tracking**: Employs `FilterStats` to track rejection breakdowns across job batches.
-- **Flexible Relevance**: Configurable keyword requirements (e.g., "Python") can be set as strict filters or as scoring boosts via `positive_signals` to handle truncated job descriptions.
-- **External ATS & Domain Blocking**: Automatically filters jobs from blocked domains or external ATS patterns that require account creation.
 - **Exclusion Rules**:
     - **TITLE_HARD_EXCLUSIONS**: Immediate filtering of non-relevant roles (Staff/Principal, Mobile, DevOps, etc.).
-    - **LOCATION_EXCLUSION**: Rejects jobs based on geographic location patterns (e.g., excluding offshore roles).
+    - **LOCATION_EXCLUSION**: Rejects jobs based on geographic location patterns.
+    - **BLOCKED_COMPANIES**: Explicitly excludes specified companies from the application queue.
 
 ## Platform Support
 
 - **LinkedIn**: Fully supported for Easy Apply flows. Primary target for automated applications.
-- **Indeed**: SmartApply flow implemented but currently disabled for scraping by default due to platform unreliability.
-- **External**: Automatically detected and skipped to maintain high success rates on supported platforms.
+- **Other Platforms**: Automatically detected and skipped to maintain high success rates on the supported platform.

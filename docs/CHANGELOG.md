@@ -2,6 +2,16 @@
 
 All notable changes to this project.
 
+- 2026-03-02: refactor: Clean up Mater-Browser — Remove all bloat, LinkedIn Easy Apply only
+  - Removed all Claude-based form filling infrastructure (`src/agent/claude.py`, `prompts.py`, `actions.py`)
+  - Removed Indeed-specific flow and form filling (`src/agent/external_flow.py`, `indeed_form_filler.py`, `indeed_helpers.py`)
+  - Deleted obsolete infrastructure including `vision_fallback.py`, `zero_actions_handler.py`, `navigation_helpers.py`, `loop_detector.py`, and `stuck_detection.py`
+  - Simplified `ApplicationAgent` and `LinkedInFlow` to focus exclusively on LinkedIn Easy Apply
+  - Removed redundant `executor` and `extractor` modules, favoring direct Playwright interaction
+  - Streamlined feedback system by removing `auto_repairer.py`, `config_suggester.py`, and `failure_summarizer.py`
+  - Cleaned up `models.py` and configuration files to remove Indeed and other dead references
+  - Updated `main.py` and GUI components to reflect the LinkedIn-only focus
+
 - 2026-01-31: fix: Fix LinkedIn Easy Apply flow getting stuck immediately
   - Enhanced `LinkedInFlow` with robust modal state hashing (progress bar, aria-valuenow, multiple selectors, element counts, and labels)
   - Improved `LinkedInFormFiller` to support multiple modal selectors (`.artdeco-modal`, `[role="dialog"]`) for broader compatibility
