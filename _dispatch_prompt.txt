@@ -1,47 +1,22 @@
-## Task: Fix Easy Apply button detection — add networkidle wait and fallback selectors
+## Task: Add diagnostic page dump when Easy Apply button not found + clear queue
 
 **Project:** C:\Projects\Mater-Browser
-**File:** `src/agent/linkedin_flow.py`
 
-## Problem
-Easy Apply button not found because LinkedIn loads job details via XHR after domcontentloaded.
+### File: `src/agent/linkedin_flow.py`
 
-## Changes needed in apply() method:
+Replace the `_handle_non_easy_apply` method with a version that dumps diagnostic info before returning. The diagnostics should log:
 
-1. After the `domcontentloaded` wait, add `networkidle` wait:
-```python
-try:
-    self._page.raw.wait_for_load_state("networkidle", timeout=8000)
-except Exception:
-    pass
-```
+1. `logger.warning(f"DIAGNOSTIC: Current URL: {self._page.raw.url}")` — check if we got redirected to login
+2. If URL contains "login" or "checkpoint", return NEEDS_LOGIN status
+3. Dump first 20 buttons on page: for each button log visibility, id, text_content[:60], aria-label[:60], class[:80]
+4. Log page title
+5. Save screenshot to `data/debug_screenshots/no_easy_apply_{job_id}.png`
+6. Then do the existing already-applied/closed checks and return
 
-2. Replace single `#jobs-apply-button-id` locator/wait with call to new `_find_easy_apply_button()` method
+Keep the method signature and return type the same. Add `from pathlib import Path` and `import re` at the top of the method (or at file level).
 
-3. Add new method:
-```python
-def _find_easy_apply_button(self) -> Optional[Locator]:
-    """Find Easy Apply button using multiple selectors."""
-    selectors_with_timeouts = [
-        ('#jobs-apply-button-id', 5000),
-        ('[data-live-test-job-apply-button]', 2000),
-        ('button.jobs-apply-button', 2000),
-        ('button[aria-label^="Easy Apply"]', 2000),
-    ]
-    for selector, timeout in selectors_with_timeouts:
-        try:
-            btn = self._page.raw.locator(selector).first
-            btn.wait_for(state="visible", timeout=timeout)
-            logger.info(f"Found Easy Apply button via: {selector}")
-            return btn
-        except Exception:
-            continue
-    return None
-```
-
-4. Import Locator at top: `from playwright.sync_api import Locator`
-
-5. Update retry click section to use `self._find_easy_apply_button()` instead of hardcoded selector
+### File: `data/job_queue.json`
+Overwrite with `[]`
 
 ## Verification
 ```

@@ -1,6 +1,8 @@
 """LinkedIn Easy Apply flow handler."""
 import logging
+import re
 import time
+from pathlib import Path
 from typing import Optional
 
 from playwright.sync_api import Locator
@@ -182,6 +184,59 @@ class LinkedInFlow:
 
     def _handle_non_easy_apply(self, job_url: str) -> ApplicationResult:
         """Handle case where Easy Apply button not found."""
+        # 1. Log current URL to check for redirects
+        current_url = self._page.raw.url
+        logger.warning(f"DIAGNOSTIC: Current URL: {current_url}")
+
+        # 2. Check if redirected to login/checkpoint
+        if "login" in current_url.lower() or "checkpoint" in current_url.lower():
+            logger.warning("Redirected to login or checkpoint page")
+            return ApplicationResult(
+                status=ApplicationStatus.NEEDS_LOGIN,
+                message="Redirected to login",
+                url=job_url,
+            )
+
+        # 3. Dump first 20 buttons on page
+        try:
+            buttons = self._page.raw.locator("button").all()[:20]
+            logger.warning(f"DIAGNOSTIC: Found {len(buttons)} buttons (showing first 20)")
+            for idx, btn in enumerate(buttons):
+                try:
+                    visibility = btn.is_visible(timeout=100)
+                    btn_id = btn.get_attribute("id") or ""
+                    text = (btn.text_content() or "")[:60]
+                    aria_label = (btn.get_attribute("aria-label") or "")[:60]
+                    btn_class = (btn.get_attribute("class") or "")[:80]
+                    logger.warning(
+                        f"  Button {idx}: visible={visibility}, id={btn_id}, "
+                        f"text={text}, aria-label={aria_label}, class={btn_class}"
+                    )
+                except Exception as e:
+                    logger.warning(f"  Button {idx}: Error reading properties - {e}")
+        except Exception as e:
+            logger.warning(f"DIAGNOSTIC: Error dumping buttons - {e}")
+
+        # 4. Log page title
+        try:
+            title = self._page.raw.title()
+            logger.warning(f"DIAGNOSTIC: Page title: {title}")
+        except Exception as e:
+            logger.warning(f"DIAGNOSTIC: Error getting page title - {e}")
+
+        # 5. Save screenshot
+        try:
+            job_id_match = re.search(r'/(\d+)/?$', job_url)
+            job_id = job_id_match.group(1) if job_id_match else "unknown"
+            screenshot_dir = Path("data/debug_screenshots")
+            screenshot_dir.mkdir(parents=True, exist_ok=True)
+            screenshot_path = screenshot_dir / f"no_easy_apply_{job_id}.png"
+            self._page.raw.screenshot(path=str(screenshot_path))
+            logger.warning(f"DIAGNOSTIC: Screenshot saved to {screenshot_path}")
+        except Exception as e:
+            logger.warning(f"DIAGNOSTIC: Error saving screenshot - {e}")
+
+        # 6. Check for already applied/closed
         try:
             content_lower = self._page.raw.content().lower()[:3000]
         except Exception:

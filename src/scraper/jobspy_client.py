@@ -133,6 +133,7 @@ class JobSpyClient:
                 country_indeed=self.country,
                 is_remote=remote_only,
                 job_type=job_type,
+                easy_apply=True,
             )
 
             if df is None or df.empty:
