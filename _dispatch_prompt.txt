@@ -1,108 +1,102 @@
-## Task: Analyze LinkedIn Easy Apply modal DOM dumps and update all selectors
+## Task: Add reliability layer to LinkedIn Easy Apply bot
 
 **Project:** C:\Projects\Mater-Browser
 
-## Step 1: Analyze ALL modal dumps
+## Overview
+Add 7 reliability improvements. Each is independent — implement all.
 
-Read these files and extract EVERY relevant selector:
-- `data/dump_modal_page1.json`
-- `data/dump_modal_page2.json` 
-- `data/dump_modal_page3.json`
-- `data/dump_modal2_page1.json`
-- `data/full_dom_dump.json` (search results page - for apply button selectors)
+## 1. Validation Error Recovery (`src/agent/linkedin_form_filler.py`)
 
-For EACH dump, print to stdout:
+Add method to LinkedInFormFiller:
+```python
+def check_and_fix_errors(self) -> bool:
+    """Check for validation errors and attempt to fix them. Returns True if errors found."""
+```
 
-### A) Apply-related buttons
-Every button where text, aria-label, or class contains "apply", "easy apply". Print: text, aria-label, full className, outerHTML preview, visibility
+Look for `.artdeco-inline-feedback--error`, `.artdeco-inline-feedback__message`, `[data-test-form-element-error-message]`, `.fb-form-element-error-text`. For each error, find the associated input (traverse up to form section, find the input/select/textarea within), fill with fallback. Log errors and fixes.
 
-### B) Modal containers
-Every element with role="dialog", class containing "modal", "overlay", "dialog". Print: tag, class, role, aria-label, visibility
+Then in `src/agent/linkedin_flow.py` `_process_easy_apply`, after `click_next()` succeeds, add error check:
+```python
+self._page.wait(500)
+if filler.check_and_fix_errors():
+    logger.info("Fixed validation errors, retrying next")
+    filler.click_next()
+    self._page.wait(500)
+```
 
-### C) Navigation buttons (CRITICAL)
-Every button containing "next", "submit", "review", "continue" in text or aria-label. Print: full text, aria-label, full className, outerHTML, visibility
+## 2. Resume Upload Handling (`src/agent/linkedin_form_filler.py`)
 
-### D) Dismiss/close buttons  
-Every button containing "dismiss", "close", "discard", "cancel" in text or aria-label. Print: text, aria-label, class, outerHTML
+Add method:
+```python
+def _handle_resume_upload(self, modal: Locator) -> None:
+    """Handle resume upload - select existing resume if available."""
+```
 
-### E) Progress indicators
-Every progress, progressbar, or class containing "progress", "completeness", "stepper". Print: tag, class, role, aria-valuenow, aria-valuemax, value, max
+1. Check if resume already selected (look for selected card state, checkmark)
+2. If not, click first available resume card: `[data-test-document-upload-card]`, `.jobs-document-upload-redesign-card`, `button[aria-label*="resume" i]`
+3. Also try "Choose Resume": `button[aria-label="Choose Resume"]`, `button:has-text("Choose")`
+4. Don't block if no upload needed — just log and move on
 
-### F) Form inputs
-Every input with visibility. Print: type, name, id, class, aria-label, placeholder, aria-required, associated data-test attributes
+Call from `fill_current_modal` BEFORE other fields.
 
-### G) Selects/dropdowns
-Every select element. Print: name, id, class, aria-label, option values and text
+## 3. Typeahead/Autocomplete Fields (`src/agent/linkedin_form_filler.py`)
 
-### H) Textareas
-Every textarea. Print: name, id, class, aria-label, placeholder
+Add method:
+```python
+def _is_typeahead_field(self, inp: Locator) -> bool:
+    """Check if input is a typeahead/autocomplete field."""
+```
 
-### I) Fieldsets with radios
-Every fieldset. Print: legend text, all data-test* attributes, radio values, radio labels, radio IDs
+Check: parent has "typeahead" or "text-entity-list" in class, `role="combobox"`, `aria-autocomplete="list"`, parent has `[data-test-text-entity-list-form-component]`.
 
-### J) Labels
-Every label or element with class containing "label", "fb-form", "form-element". Print: text, class, for attribute
+Update `_fill_single_text_input`: if `_is_typeahead_field(inp)` is True, use autocomplete fill (type slowly, wait for suggestions, click first or Enter). Rename `_fill_autocomplete_location` to `_fill_autocomplete_field`.
 
-### K) Error indicators
-Elements with class containing "error", "feedback", "validation", "invalid". Print: text, class
+## 4. Clean State Before Each Job (`src/agent/linkedin_flow.py`)
 
-### L) Confirmation/success indicators  
-Elements with text containing "application sent", "submitted", "success". Or class containing "post-apply". Print: text, class, tag
+Add method:
+```python
+def _ensure_clean_state(self) -> None:
+    """Dismiss any open modals/dialogs before starting new application."""
+```
 
-### M) File upload inputs
-Every input[type=file] or elements with class/id containing "upload", "resume", "document". Print: id, name, class, accept attribute
+Check for visible `[role="dialog"]`, `.artdeco-modal`. If found, dismiss. Press Escape as fallback. Wait 500ms. Call at START of `apply()` before navigation.
 
-## Step 2: Cross-reference with current code
+## 5. Queue Re-validation (`src/automation/runner.py`)
 
-Read all three files:
-- `src/agent/page_classifier.py`
-- `src/agent/linkedin_form_filler.py`  
-- `src/agent/linkedin_flow.py`
+Read `_apply_to_job` — it already calls `self._scorer.check_filter(job)`. Verify this works correctly. If already there, no changes. Just verify.
 
-For EVERY selector/pattern in the code, classify as:
-- **HIT**: Found in at least one DOM dump
-- **MISS**: Not found in ANY dump - likely broken/stale
-- **PARTIAL**: Similar but not exact match
+## 6. Randomized Delays (`src/automation/runner.py`)
 
-For selectors found in dumps but NOT in code:
-- **NEW**: Important selector the code should use
+Replace fixed delays with randomized:
+```python
+APPLY_DELAY_MIN_SECONDS: float = 3.0
+APPLY_DELAY_MAX_SECONDS: float = 8.0
+CYCLE_COOLDOWN_MIN_SECONDS: float = 5.0
+CYCLE_COOLDOWN_MAX_SECONDS: float = 15.0
+```
 
-Print a clear report.
+Use `random.uniform(min, max)` for both `time.sleep` calls in `_run_apply_cycle` and `_run_loop`.
 
-## Step 3: Update ALL selector references
+Import `random` at top.
 
-Update all three files based on the analysis. LinkedIn uses obfuscated CSS classes that rotate. ALWAYS prefer in this order:
-1. aria-label attributes (most stable)
-2. role attributes
-3. data-test* attributes  
-4. Semantic selectors like tag[type="..."]
-5. CSS classes as LAST resort
+## 7. Better Stuck Recovery (`src/agent/linkedin_flow.py`)
 
-### page_classifier.py
-- Update LINKEDIN_EASY_APPLY_SELECTORS — confirmed working selectors FIRST
-- Fix _classify_apply_button with actual button text/aria patterns
-- Update dismiss_overlays if needed
-
-### linkedin_form_filler.py  
-- Update LinkedInSelectors class with confirmed working selectors
-- Update SUBMIT_BUTTON_PATTERNS with actual nav button patterns
-- Update click_next(), fill methods, is_confirmation_page()
-
-### linkedin_flow.py
-- Update _close_modal() dismiss selectors
-- Update _get_modal_hash() progress bar and form element selectors
-
-Keep old selectors as fallbacks but put confirmed working ones FIRST.
+In `_process_easy_apply`, when `stuck_count >= max_stuck`, before breaking, try ONE recovery:
+1. Call `filler.check_and_fix_errors()` 
+2. Scroll modal content down: `modal.evaluate("el => el.scrollTop += 300")`
+3. Re-fill modal: `filler.fill_current_modal()`
+4. Try `filler.click_next()` 
+5. If click_next succeeds, reset stuck_count and continue
+6. If fails, THEN abort and close modal
 
 ## Code Standards
-- Static typing everywhere
-- logging module
-- Functions under 25 lines
+- Static typing, logging module, guard clauses, functions under 25 lines, f-strings
+- Import `random` where needed
 
 ## Verification
 ```
 cd C:\Projects\Mater-Browser
-python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; from src.agent.page_classifier import PageClassifier; print('OK')"
+python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; from src.agent.page_classifier import PageClassifier; from src.automation.runner import AutomationRunner; print('OK')"
 ```
 
 

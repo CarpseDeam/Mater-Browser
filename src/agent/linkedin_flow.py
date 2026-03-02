@@ -57,6 +57,42 @@ class LinkedInFlow:
         logger.warning(f"No popup URL captured after {max_attempts} attempts")
         return None
 
+    def _ensure_clean_state(self) -> None:
+        """Dismiss any open modals/dialogs before starting new application."""
+        try:
+            dialog = self._page.raw.locator("[role='dialog']").first
+            if dialog.is_visible(timeout=500):
+                logger.info("Dismissing open dialog")
+                dismiss_selectors = [
+                    "button[aria-label*='Dismiss' i]",
+                    "[data-test-modal-close-btn]",
+                    "button.artdeco-modal__dismiss",
+                ]
+                for selector in dismiss_selectors:
+                    try:
+                        btn = self._page.raw.locator(selector).first
+                        if btn.is_visible(timeout=500):
+                            btn.click()
+                            self._page.wait(500)
+                            return
+                    except Exception:
+                        continue
+
+                self._page.raw.keyboard.press("Escape")
+                self._page.wait(500)
+
+        except Exception:
+            pass
+
+        try:
+            modal = self._page.raw.locator(".artdeco-modal").first
+            if modal.is_visible(timeout=500):
+                logger.info("Dismissing open modal")
+                self._page.raw.keyboard.press("Escape")
+                self._page.wait(500)
+        except Exception:
+            pass
+
     def apply(self, job_url: str) -> ApplicationResult:
         """
         Handle LinkedIn Easy Apply flow.
@@ -65,6 +101,8 @@ class LinkedInFlow:
         LinkedIn uses SPA routing which can cause ERR_ABORTED on goto().
         """
         logger.info("Using LinkedIn Easy Apply flow")
+
+        self._ensure_clean_state()
 
         if not self._page.goto(job_url):
             return ApplicationResult(
@@ -144,26 +182,67 @@ class LinkedInFlow:
                 url=job_url,
             )
 
-        self._page.wait(MEDIUM_WAIT_MS)
+        self._page.wait(LONG_WAIT_MS)
+
+        # Verify modal appeared
+        modal_appeared = False
+        for sel in [".jobs-easy-apply-modal", ".artdeco-modal", '[role="dialog"]']:
+            try:
+                if self._page.raw.locator(sel).first.is_visible(timeout=2000):
+                    modal_appeared = True
+                    break
+            except Exception:
+                continue
+
+        if not modal_appeared:
+            logger.warning("Easy Apply modal did not appear after clicking button")
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Easy Apply modal did not open",
+                url=job_url,
+            )
 
         return self._process_easy_apply(job_url)
 
     def _close_modal(self) -> None:
-        """Close Easy Apply modal to clean up for next job."""
-        try:
-            dismiss_selectors = [
-                'button[aria-label="Dismiss"]',
-                '[data-test-modal-close-btn]',
-                'button.artdeco-modal__dismiss',
-            ]
-            for selector in dismiss_selectors:
+        """Close Easy Apply modal and handle discard confirmation."""
+        # Try dismiss button first
+        dismiss_selectors = [
+            'button[aria-label="Dismiss"]',
+            '[data-test-modal-close-btn]',
+            'button.artdeco-modal__dismiss',
+        ]
+        for selector in dismiss_selectors:
+            try:
                 btn = self._page.raw.locator(selector).first
                 if btn.is_visible(timeout=1000):
                     btn.click()
                     self._page.wait(500)
-                    return
+                    break
+            except Exception:
+                continue
+
+        # Handle "Discard application?" confirmation
+        try:
+            discard_btn = self._page.raw.locator('button[data-test-dialog-primary-btn]').first
+            if discard_btn.is_visible(timeout=1000):
+                discard_btn.click()
+                self._page.wait(500)
+                return
         except Exception:
             pass
+
+        # Try clicking "Discard" by text
+        try:
+            discard_text = self._page.raw.locator('button:has-text("Discard")').first
+            if discard_text.is_visible(timeout=1000):
+                discard_text.click()
+                self._page.wait(500)
+                return
+        except Exception:
+            pass
+
+        # Nuclear: Escape
         try:
             self._page.raw.keyboard.press("Escape")
             self._page.wait(500)
@@ -216,9 +295,39 @@ class LinkedInFlow:
                     stuck_count += 1
                     logger.warning(f"Same page hash detected ({stuck_count}/{max_stuck})")
                     if stuck_count >= max_stuck:
-                        logger.warning(f"Stuck on same page {stuck_count} times, aborting")
-                        self._close_modal()
-                        break
+                        logger.warning("Attempting stuck recovery before aborting")
+                        recovery_success = False
+
+                        try:
+                            if filler.check_and_fix_errors():
+                                logger.info("Fixed errors during stuck recovery")
+
+                            try:
+                                modal = self._page.raw.locator(".jobs-easy-apply-modal").first
+                                if modal.is_visible(timeout=500):
+                                    modal.evaluate("el => el.scrollTop += 300")
+                                    logger.info("Scrolled modal content down")
+                            except Exception:
+                                pass
+
+                            self._page.wait(500)
+                            filler.fill_current_modal()
+                            self._page.wait(500)
+
+                            if filler.click_next():
+                                logger.info("Stuck recovery successful - continuing")
+                                stuck_count = 0
+                                recovery_success = True
+                            else:
+                                logger.warning("Stuck recovery failed - next button not found")
+
+                        except Exception as e:
+                            logger.warning(f"Stuck recovery exception: {e}")
+
+                        if not recovery_success:
+                            logger.warning(f"Stuck on same page {max_stuck} times, aborting")
+                            self._close_modal()
+                            break
                 else:
                     stuck_count = 0
                     last_page_hash = current_hash
@@ -249,6 +358,10 @@ class LinkedInFlow:
                         break
 
                 self._page.wait(500)
+                if filler.check_and_fix_errors():
+                    logger.info("Fixed validation errors, retrying next")
+                    filler.click_next()
+                    self._page.wait(500)
                 if filler.is_confirmation_page():
                     logger.info("Confirmation page detected after click")
                     filler.close_modal()
@@ -279,10 +392,10 @@ class LinkedInFlow:
         )
 
     def _get_modal_hash(self) -> str:
-        """Get a hash of the current modal state to detect if we're stuck."""
+        """Get a hash of the current modal state to detect if we're stuck (2026 structure)."""
         hash_parts = []
 
-        # Try progress bar percentage
+        # Try progress bar percentage (standard HTML5)
         try:
             progress = self._page.raw.locator("progress").first
             if progress.is_visible(timeout=500):
@@ -293,22 +406,23 @@ class LinkedInFlow:
         except Exception:
             pass
 
-        # Try aria-valuenow on progress (LinkedIn uses this)
+        # Try aria-valuenow on progressbar role (LinkedIn 2026 uses this)
         try:
             progress_aria = self._page.raw.locator("[role='progressbar']").first
             if progress_aria.is_visible(timeout=500):
                 value = progress_aria.get_attribute("aria-valuenow") or ""
+                max_val = progress_aria.get_attribute("aria-valuemax") or "100"
                 if value:
-                    hash_parts.append(f"aria-progress:{value}")
+                    hash_parts.append(f"aria-progress:{value}/{max_val}")
         except Exception:
             pass
 
-        # Count form elements in modal
+        # Count form elements in modal (priority order for 2026)
         modal_selectors = [
-            ".jobs-easy-apply-modal",
-            "[data-test-modal]",
-            ".artdeco-modal",
-            "[role='dialog']",
+            ".jobs-easy-apply-modal",  # Primary modal class
+            "[role='dialog']",  # ARIA dialog role (most reliable)
+            ".artdeco-modal",  # Artdeco modal system
+            "[data-test-modal]",  # Test attribute fallback
         ]
         for modal_sel in modal_selectors:
             try:

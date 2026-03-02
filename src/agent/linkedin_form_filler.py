@@ -16,7 +16,7 @@ MODAL_FILL_TIMEOUT_SECONDS: float = 30.0
 
 
 class LinkedInSelectors:
-    """Industry-standard selectors from established LinkedIn Easy Apply bots."""
+    """LinkedIn Easy Apply selectors updated for 2026 DOM structure."""
 
     # Form structure
     FORM_SECTION = ".jobs-easy-apply-form-section__grouping"
@@ -47,12 +47,13 @@ class LinkedInSelectors:
     QUESTION_LABEL = ".fb-form-element-label"
     VISUALLY_HIDDEN = ".visually-hidden"
 
-    # Buttons
+    # Buttons (updated for 2026)
+    EASY_APPLY_BUTTON_ID = "#jobs-apply-button-id"  # Confirmed stable ID
     EASY_APPLY_BUTTON = "button.jobs-apply-button"
-    REVIEW_BUTTON = "button[aria-label='Review your application']"
-    SUBMIT_BUTTON = "button[aria-label='Submit application']"
+    REVIEW_BUTTON = "button[aria-label*='Review']"  # Changed from exact match to contains
+    SUBMIT_BUTTON = "button[aria-label*='Submit']"  # Changed from exact match to contains
     PRIMARY_BUTTON = ".artdeco-button--primary"
-    NEXT_BUTTON = "button[aria-label='Continue to next step']"
+    NEXT_BUTTON = "button[aria-label*='next' i]"  # Case-insensitive contains
 
     # File upload
     RESUME_INPUT = "[id*='jobs-document-upload-file-input-upload-resume']"
@@ -73,28 +74,98 @@ class LinkedInSelectors:
     POST_APPLY_MODAL = "[data-test-modal-id='post-apply-modal']"
     MODAL_HEADER_SENT = ".artdeco-modal__header:has-text('Application sent')"
 
+    # Modal structure (2026 confirmed)
+    MODAL_CONTAINER = ".jobs-easy-apply-modal"
+    MODAL_DIALOG = "[role='dialog']"
+    MODAL_DISMISS = "button[aria-label*='Dismiss' i]"
+
 
 class LinkedInFormFiller:
     """Fill LinkedIn Easy Apply forms using config-driven answers."""
 
     SUBMIT_BUTTON_PATTERNS = [
-        # Final submit (most specific first)
+        # Specific aria-labels (most reliable)
         'button[aria-label="Submit application"]',
-        # Next/Continue/Review
-        'button[aria-label*="Submit" i]',
-        'button[aria-label*="Review" i]',
-        'button[aria-label*="Next" i]',
-        '.artdeco-button--primary',
+        'button[aria-label="Review your application"]',
+        'button[aria-label="Continue to next step"]',
+        # Aria partial matches
+        'button[aria-label*="Submit"]',
+        'button[aria-label*="Review"]',
+        'button[aria-label*="Next"]',
+        # Text content matches (Playwright-native)
         'button:has-text("Submit application")',
         'button:has-text("Review")',
         'button:has-text("Next")',
         'button:has-text("Continue")',
-        'button[type="submit"]',
     ]
 
     def __init__(self, page: Page, answer_engine: AnswerEngine | None = None) -> None:
         self._page = page
         self._answers = answer_engine or AnswerEngine()
+
+    def check_and_fix_errors(self) -> bool:
+        """Check for validation errors and attempt to fix them. Returns True if errors found."""
+        modal = self._find_modal()
+        if not modal:
+            return False
+
+        error_selectors = [
+            ".artdeco-inline-feedback--error",
+            ".artdeco-inline-feedback__message",
+            "[data-test-form-element-error-message]",
+            ".fb-form-element-error-text",
+        ]
+
+        errors_found = False
+        for selector in error_selectors:
+            try:
+                error_elements = modal.locator(selector).all()
+                for error_el in error_elements:
+                    if not error_el.is_visible(timeout=500):
+                        continue
+
+                    errors_found = True
+                    error_text = (error_el.text_content() or "").strip()
+                    logger.warning(f"Validation error: {error_text[:50]}")
+
+                    form_section = error_el.locator("xpath=ancestor::*[contains(@class, 'form-element') or contains(@class, 'form-section')]").first
+                    if form_section.count() == 0:
+                        continue
+
+                    for input_sel in ["input", "select", "textarea"]:
+                        try:
+                            input_el = form_section.locator(input_sel).first
+                            if input_el.count() > 0 and input_el.is_visible(timeout=500):
+                                question = self._get_question_text(input_el)
+                                input_type = input_el.get_attribute("type") or "text"
+
+                                if input_sel == "select":
+                                    try:
+                                        options = input_el.locator("option").all()
+                                        if len(options) > 1:
+                                            val = options[1].get_attribute("value") or ""
+                                            if val:
+                                                input_el.select_option(value=val)
+                                                logger.info(f"Fixed error by selecting first option: {question[:40]}")
+                                    except Exception:
+                                        pass
+                                elif input_type == "number":
+                                    input_el.fill("0")
+                                    logger.info(f"Fixed error with fallback numeric: {question[:40]}")
+                                else:
+                                    fallback = FALLBACK_TEXTAREA if input_sel == "textarea" else FALLBACK_TEXT
+                                    input_el.fill(fallback)
+                                    logger.info(f"Fixed error with fallback text: {question[:40]}")
+                                break
+                        except Exception as e:
+                            logger.debug(f"Could not fix error: {e}")
+                            continue
+
+            except Exception as e:
+                logger.debug(f"Error checking selector {selector}: {e}")
+                continue
+
+        return errors_found
 
     def fill_current_modal(self) -> bool:
         """Fill all fields in the current Easy Apply modal.
@@ -134,6 +205,7 @@ class LinkedInFormFiller:
         except Exception as e:
             logger.debug(f"Could not count fields: {e}")
 
+        self._handle_resume_upload(modal)
         self._fill_text_inputs(modal)
         if time.time() - start_time > MODAL_FILL_TIMEOUT_SECONDS:
             logger.warning(f"Modal fill timeout after {time.time() - start_time:.1f}s")
@@ -163,6 +235,62 @@ class LinkedInFormFiller:
         self._uncheck_follow_company()
 
         return True
+
+    def _handle_resume_upload(self, modal: Locator) -> None:
+        """Handle resume upload - select existing resume if available."""
+        try:
+            resume_cards = modal.locator("[data-test-document-upload-card]").all()
+            if not resume_cards:
+                resume_cards = modal.locator(".jobs-document-upload-redesign-card").all()
+            if not resume_cards:
+                resume_cards = modal.locator("button[aria-label*='resume' i]").all()
+
+            if resume_cards:
+                for card in resume_cards:
+                    if not card.is_visible(timeout=500):
+                        continue
+
+                    try:
+                        aria_checked = card.get_attribute("aria-checked")
+                        if aria_checked == "true":
+                            logger.info("Resume already selected")
+                            return
+                    except Exception:
+                        pass
+
+                    try:
+                        checkmark = card.locator("[data-test-icon='checkmark']").first
+                        if checkmark.count() > 0 and checkmark.is_visible(timeout=300):
+                            logger.info("Resume already selected (checkmark)")
+                            return
+                    except Exception:
+                        pass
+
+                try:
+                    resume_cards[0].click(timeout=2000)
+                    logger.info("Selected first available resume")
+                    return
+                except Exception as e:
+                    logger.debug(f"Could not click resume card: {e}")
+
+            choose_resume_selectors = [
+                "button[aria-label='Choose Resume']",
+                "button:has-text('Choose')",
+            ]
+            for selector in choose_resume_selectors:
+                try:
+                    btn = modal.locator(selector).first
+                    if btn.is_visible(timeout=500):
+                        btn.click(timeout=2000)
+                        logger.info("Clicked Choose Resume button")
+                        return
+                except Exception:
+                    continue
+
+            logger.debug("No resume upload needed or found")
+
+        except Exception as e:
+            logger.debug(f"Resume upload handling error: {e}")
 
     def _fill_text_inputs(self, container: Locator) -> None:
         """Fill text input fields using multiple selector strategies."""
@@ -194,6 +322,32 @@ class LinkedInFormFiller:
                 if inp_id:
                     filled_ids.add(inp_id)
 
+    def _is_typeahead_field(self, inp: Locator) -> bool:
+        """Check if input is a typeahead/autocomplete field."""
+        try:
+            role = inp.get_attribute("role")
+            if role == "combobox":
+                return True
+
+            autocomplete = inp.get_attribute("aria-autocomplete")
+            if autocomplete == "list":
+                return True
+
+            parent = inp.locator("xpath=..").first
+            if parent.count() > 0:
+                parent_class = parent.get_attribute("class") or ""
+                if "typeahead" in parent_class or "text-entity-list" in parent_class:
+                    return True
+
+                test_attr = parent.get_attribute("data-test-text-entity-list-form-component")
+                if test_attr:
+                    return True
+
+        except Exception:
+            pass
+
+        return False
+
     def _fill_single_text_input(self, inp: Locator, strategy: str) -> bool:
         """Fill a single text input. Returns True if field was processed."""
         try:
@@ -217,8 +371,8 @@ class LinkedInFormFiller:
         answer = self._answers.get_answer(question, field_type)
 
         if answer is not None:
-            if self._is_location_field(question):
-                self._fill_autocomplete_location(inp, str(answer), question)
+            if self._is_location_field(question) or self._is_typeahead_field(inp):
+                self._fill_autocomplete_field(inp, str(answer), question)
             else:
                 try:
                     inp.fill(str(answer))
@@ -889,10 +1043,10 @@ class LinkedInFormFiller:
         q_lower = question.lower()
         return any(kw in q_lower for kw in ["location", "city", "where are you located"])
 
-    def _fill_autocomplete_location(self, inp: Locator, answer: str, question: str) -> None:
-        """Fill LinkedIn autocomplete location field.
-        
-        LinkedIn location fields require typing to trigger suggestions,
+    def _fill_autocomplete_field(self, inp: Locator, answer: str, question: str) -> None:
+        """Fill LinkedIn autocomplete/typeahead field.
+
+        LinkedIn autocomplete fields require typing to trigger suggestions,
         then selecting from the dropdown.
         """
         try:
@@ -968,14 +1122,19 @@ class LinkedInFormFiller:
         return ""
 
     def click_next(self) -> bool:
-        """Click the next/submit/review button."""
+        """Click the next/submit/review button within the Easy Apply modal."""
+        modal = self._find_modal()
+        if not modal:
+            logger.warning("No modal found for click_next")
+            return False
+
         for selector in self.SUBMIT_BUTTON_PATTERNS:
             try:
-                btn = self._page.locator(selector).first
+                btn = modal.locator(selector).first
                 if btn.is_visible(timeout=1000):
                     btn_text = btn.text_content() or btn.get_attribute("aria-label") or selector
                     btn.click()
-                    logger.info(f"Clicked button: {btn_text[:30]}")
+                    logger.info(f"Clicked button: {btn_text[:50]}")
                     try:
                         self._page.wait_for_timeout(500)
                     except Exception:
@@ -985,8 +1144,25 @@ class LinkedInFormFiller:
                 logger.debug(f"Button selector {selector} failed: {e}")
                 continue
 
-        logger.warning("No next/submit button found with any selector")
+        logger.warning("No next/submit button found in modal")
         return False
+
+    def _find_modal(self) -> Locator | None:
+        """Find the active Easy Apply modal."""
+        modal_selectors = [
+            ".jobs-easy-apply-modal",
+            "[data-test-modal]",
+            ".artdeco-modal",
+            '[role="dialog"]',
+        ]
+        for selector in modal_selectors:
+            try:
+                modal = self._page.locator(selector).first
+                if modal.is_visible(timeout=500):
+                    return modal
+            except Exception:
+                continue
+        return None
 
     def is_confirmation_page(self) -> bool:
         """Check if we're on the confirmation/success page."""
@@ -997,6 +1173,9 @@ class LinkedInFormFiller:
             S.POST_APPLY_MODAL,
             S.MODAL_HEADER_SENT,
             'h2:has-text("Application sent")',
+            'h3:has-text("Application sent")',
+            '[data-test-modal-id*="post-apply"]',
+            'text="Your application was sent"',
         ]
         for indicator in indicators:
             try:
@@ -1008,12 +1187,23 @@ class LinkedInFormFiller:
         return False
 
     def close_modal(self) -> None:
-        """Close the Easy Apply modal."""
+        """Close the Easy Apply modal using 2026 selectors."""
+        S = LinkedInSelectors
+        dismiss_selectors = [
+            S.MODAL_DISMISS,  # button[aria-label*='Dismiss' i]
+            '[data-test-modal-close-btn]',
+            'button.artdeco-modal__dismiss',
+        ]
+        for selector in dismiss_selectors:
+            try:
+                close_btn = self._page.locator(selector).first
+                if close_btn.is_visible(timeout=1000):
+                    close_btn.click()
+                    return
+            except Exception:
+                continue
+        # Fallback: Escape key
         try:
-            close_btn = self._page.locator(
-                '[data-test-modal-close-btn], button[aria-label="Dismiss"]'
-            ).first
-            if close_btn.is_visible(timeout=1000):
-                close_btn.click()
+            self._page.keyboard.press("Escape")
         except Exception:
             pass

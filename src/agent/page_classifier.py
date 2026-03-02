@@ -35,11 +35,13 @@ NEGATIVE_TEXT_SIGNALS = ["save", "later", "dismiss", "close", "cancel", "not now
 EXTERNAL_ARIA_PHRASES = ["on company website", "company site", "external site"]
 
 LINKEDIN_EASY_APPLY_SELECTORS = [
-    'button[data-control-name="jobdetails_topcard_inapply"]',
-    'button.jobs-apply-button',
-    'button[aria-label*="Easy Apply"]',
-    'button.jobs-apply-button--top-card',
-    '[data-testid="jobs-apply-button"]',
+    '#jobs-apply-button-id',  # Stable ID - most reliable
+    '[data-live-test-job-apply-button]',  # Data attribute - very stable
+    'button.jobs-apply-button',  # Class selector - confirmed working
+    'button[aria-label^="Easy Apply"]',  # Aria label starts with "Easy Apply"
+    'button.jobs-apply-button--top-card',  # Top card variant
+    'button[data-control-name="jobdetails_topcard_inapply"]',  # Legacy but keep as fallback
+    '[data-testid="jobs-apply-button"]',  # Test ID fallback
 ]
 
 
@@ -70,11 +72,18 @@ class PageClassifier:
         return self._classify_apply_button(candidate) if candidate else PageType.UNKNOWN
 
     def _classify_apply_button(self, candidate: ElementCandidate) -> PageType:
+        # Direct LinkedIn selector match is always Easy Apply
+        if candidate.score >= 10.0:
+            return PageType.EASY_APPLY
+
         text_lower = candidate.text.lower()
         aria_lower = (candidate.aria_label or "").lower()
         role_lower = (candidate.role or "").lower()
 
-        if "easy" in text_lower or "easy" in aria_lower:
+        # LinkedIn 2026 format: "Easy Apply to [job title] at [company]"
+        if "easy" in text_lower or aria_lower.startswith("easy apply to"):
+            return PageType.EASY_APPLY
+        if "easy apply" in aria_lower:
             return PageType.EASY_APPLY
 
         is_external = (
@@ -104,7 +113,7 @@ class PageClassifier:
         for selector in LINKEDIN_EASY_APPLY_SELECTORS:
             try:
                 locator = self._page.locator(selector).first
-                if locator.is_visible(timeout=500):
+                if locator.is_visible(timeout=750):
                     text = locator.text_content() or ""
                     aria_label = locator.get_attribute("aria-label")
                     data_testid = locator.get_attribute("data-testid")

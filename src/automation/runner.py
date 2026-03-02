@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import queue
+import random
 import threading
 import time
 from dataclasses import dataclass
@@ -29,8 +30,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-APPLY_DELAY_SECONDS: float = 2.0
-CYCLE_COOLDOWN_SECONDS: float = 5.0
+APPLY_DELAY_MIN_SECONDS: float = 3.0
+APPLY_DELAY_MAX_SECONDS: float = 8.0
+CYCLE_COOLDOWN_MIN_SECONDS: float = 5.0
+CYCLE_COOLDOWN_MAX_SECONDS: float = 15.0
 DEFAULT_SEARCH_LOCATION: str = "remote"
 MAX_CONSECUTIVE_FAILURES: int = 5
 FAILURE_COOLDOWN_SECONDS: float = 60.0
@@ -234,7 +237,8 @@ class AutomationRunner:
                 if self._stop_flag.is_set():
                     break
 
-                time.sleep(CYCLE_COOLDOWN_SECONDS)
+                cooldown = random.uniform(CYCLE_COOLDOWN_MIN_SECONDS, CYCLE_COOLDOWN_MAX_SECONDS)
+                time.sleep(cooldown)
 
         except Exception as e:
             logger.exception(f"Automation loop error: {e}")
@@ -317,7 +321,8 @@ class AutomationRunner:
                     time.sleep(FAILURE_COOLDOWN_SECONDS)
                     self._consecutive_failures = 0
 
-            time.sleep(APPLY_DELAY_SECONDS)
+            delay = random.uniform(APPLY_DELAY_MIN_SECONDS, APPLY_DELAY_MAX_SECONDS)
+            time.sleep(delay)
 
         term = self._stats.current_search
         self._emit("cycle_complete", {"search_term": term})
