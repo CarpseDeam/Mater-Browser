@@ -30,7 +30,7 @@ To ensure the automation remains responsive even in cases of unexpected browser 
 
 - **Flow Timeout**: Implements a hard 120-second timeout for the entire Easy Apply process to prevent infinite hangs.
 - **Page Error Handling**: Each page iteration in the modal-filling loop is wrapped in a try/except block. If more than 2 consecutive errors occur, the application is aborted to avoid wasting time.
-- **Modal Fill Timeout**: Added a 30-second timeout to the `fill_current_modal` method to prevent stalling on complex or unresponsive forms.
+- **Modal Fill Timeout**: Added a 30-second timeout to `fill_current_modal` method to prevent stalling on complex or unresponsive forms.
 - **Cleanup**: Always executes `_close_modal` to return the browser to a clean state after success, failure, or timeout.
 To increase reliability and speed for LinkedIn applications, the system bypasses AI for Easy Apply modals:
 
@@ -40,13 +40,14 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 
 - **Form Filler**: Automatically identifies and fills text inputs, textareas, selects, radio buttons, and checkboxes in the LinkedIn modal using a multi-stage selector strategy.
     - **Multi-Modal Selectors**: Employs a robust search strategy across multiple modal selectors (`.jobs-easy-apply-modal`, `.artdeco-modal`, `[role="dialog"]`) to handle variations in LinkedIn's UI across different job listings.
+    - **Selector Priority**: To handle obfuscated CSS classes, selectors are prioritized in this order: `aria-label` attributes (most stable), `role` attributes, `data-test*` attributes, semantic tags (e.g., `tag[type='...']`), and finally CSS classes as a last resort.
     - **Intelligent Skill Matching**: For "Select all that apply" checkbox groups, it matches available options against the user's documented skills in `answers.yaml` to provide accurate technical profiles.
     - **Smart Dropdowns**: Implements multi-stage matching for select options (exact, partial, and numeric range for years of experience) to ensure the best answer is selected even when phrasing differs.
     - **Automation**: Includes specialized handling for autocomplete location fields and automatically unchecks the "follow company" option to maintain user privacy.
     - **Robust Advancement**: Includes retry logic for the next/submit button with detailed logging of button text and interaction outcomes.
 
 - **Fail-Safe**: To ensure applications never stall on required fields:
-    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.
+    - **Text/Textarea**: Uses generic fallback answers ("See resume" or referral text) if no answer is configured. For fields identified as numeric (e.g., salary, years, rate), it uses "0" as a fallback to satisfy validation requirements.  
     - **Radio Groups**: Uses intelligent defaults based on question content to ensure safe and accurate applications. It automatically defaults to "No" for sensitive topics (previous employment, conflict of interest, referrals, crypto, legal actions) and "Yes" for essential requirements (work authorization, background checks, consent). For unknown Yes/No questions, it defaults to "No" as a safer option before falling back to the first available choice for non-binary groups.  
     - **Select/Dropdowns**: If no matching option is found in the configuration, it selects the first non-placeholder option as a last resort.
     - **Checkboxes**: For single checkboxes, it checks the box by default unless it contains spam keywords. For multi-select skill groups, it checks the first relevant option if no skills match.
@@ -55,7 +56,7 @@ To increase reliability and speed for LinkedIn applications, the system bypasses
 ## Failure Logging
 
 To enable continuous improvement, the system includes a structured failure logging layer.
-- **Failure Categorization**: Failures are classified into specific types such as `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, and `crash`.
+- **Failure Categorization**: Failures are classified into specific types such as `unknown_question`, `stuck_loop`, `validation_error`, `timeout`, and `crash`. 
 - **Contextual Data**: Each failure captures relevant context, including the job URL, page snapshots, and specific details (e.g., the exact question text for `unknown_question`).
 - **Persistence**: Failures are stored in a thread-safe JSONL format in the `data/` directory.
 
@@ -78,3 +79,12 @@ The `JobScorer` filters and ranks job listings using a centralized `FilterConfig
 
 - **LinkedIn**: Fully supported for Easy Apply flows. Primary target for automated applications.
 - **Other Platforms**: Automatically detected and skipped to maintain high success rates on the supported platform.
+
+## Code Standards
+
+To maintain a lean and predictable codebase, the system adheres to strict architectural constraints:
+- **Function Size**: Max 25 lines per function to ensure single-responsibility and readability.
+- **File Size**: New files are limited to 200 lines to prevent bloat and promote modularity.
+- **Low Nesting**: A maximum of one level of nesting is permitted within functions.
+- **Composition Over Inheritance**: Favors functional composition and simple data structures (dataclasses, dicts) over complex class hierarchies.
+- **Minimal Abstraction**: Avoids ceremony (Factories, Managers) in favor of direct, predictable data flow.

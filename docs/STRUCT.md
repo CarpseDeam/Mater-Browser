@@ -47,3 +47,12 @@
 - `assets/` - Static resources and icons
 - `run.py` - CLI entry point for the automation runner
 - `gui.py` - Entry point for the graphical interface
+
+## Development Constraints
+
+To ensure a maintainable and highly modular system, the codebase is governed by these strict constraints:
+- **Function Size**: Max 25 lines (aiming for 15) with a maximum of one level of nesting.
+- **File Size**: New files are limited to 200 lines to prevent monolithic components.
+- **Functional Composition**: Prefer simple functions and functional composition over complex class hierarchies and inheritance.
+- **Data Management**: Use `dataclasses` or plain `dicts` for structured data, avoiding redundant classes with only getters and setters.
+- **Predictable Flow**: Favor direct, predictable data flow with no hidden side effects or global state.
