@@ -2,6 +2,15 @@
 
 All notable changes to this project.
 
+- 2026-03-02: refactor: Rewrite LinkedIn apply() to bypass classifier and skip non-Easy-Apply jobs instantly
+  - Replaced `PageClassifier` dependency in main `apply()` flow with direct `#jobs-apply-button-id` check
+  - Implemented `_handle_non_easy_apply` to instantly skip closed or already applied jobs
+  - Added `_dismiss_click_blockers` to remove overlays (messages, cookies, toasts) before clicking
+  - Improved modal detection with `_wait_for_modal` supporting multiple 2026-optimized selectors
+  - Enhanced `JobQueue` with `in_progress` state tracking to prevent duplicate processing
+  - Added `recover_stuck_jobs` to reset `in_progress` jobs on startup or cycle start
+  - Fixed duplicate job attempts within a single apply cycle in `AutomationRunner`
+
 - 2026-03-02: feat: Add reliability layer and 2026 DOM support to LinkedIn Easy Apply
   - Implemented automated validation error recovery in `LinkedInFormFiller` to fix and retry failed form steps
   - Added smart resume upload handling to automatically select existing resumes within the modal

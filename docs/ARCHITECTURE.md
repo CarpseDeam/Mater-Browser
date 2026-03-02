@@ -15,6 +15,12 @@ The `PageClassifier` is responsible for identifying the current state of a job a
 
 The system is optimized exclusively for LinkedIn "Easy Apply" flows. External job applications or other platforms are automatically detected and skipped to ensure high reliability and deterministic behavior.
 
+### Direct Application Flow (2026 Optimization)
+To maximize speed and reliability, the application flow uses a direct-check strategy:
+- **Instant Skip**: Bypasses full page classification for the primary flow. It directly checks for the `#jobs-apply-button-id` (the most stable 2026 selector). If not found, it instantly checks for "Already applied" or "Job closed" phrases and skips the job.
+- **Click Blocker Dismissal**: Automatically removes non-modal overlays (chat bubbles, cookie banners, toasts) that could intercept the click before attempting to open the modal.
+- **Modal Wait & Retry**: Implements a dedicated `_wait_for_modal` sequence with 2026-specific selectors and a one-time retry if the initial click fails to open the modal.
+
 ## Form Processing
 
 The `ApplicationAgent` orchestrates the interaction with web forms using a platform-specific deterministic filler:

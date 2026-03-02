@@ -14,7 +14,17 @@ Orchestrates the job application flow for LinkedIn Easy Apply.
 ### `LinkedInFlow`
 
 - `__init__(page: Page, tabs: TabManager, max_pages: int)`: Initializes the LinkedIn-specific flow.
-- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job. Includes a hard 120-second timeout and per-page error resilience.
+- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job. Uses a direct button-check strategy (bypassing `PageClassifier` for the main flow) with a hard 120-second timeout and per-page error resilience. Instantly skips jobs that are closed or already applied.
+
+### `JobQueue` (Data Model)
+
+Managed via `src/queue/manager.py`.
+
+- `get_next() -> Optional[JobListing]`: Retrieves the next pending job with the highest score and marks it as `in_progress`.
+- `mark_applied(url: str)`: Marks a job as successfully applied.
+- `mark_failed(url: str, reason: str)`: Marks a job as failed with a reason.
+- `recover_stuck_jobs() -> int`: Resets all `in_progress` jobs to `failed` (used at startup or cycle start).
+- `_load()`: Automatically resets any `in_progress` jobs to `pending` when the queue is loaded from disk.
 
 ### `AnswerEngine`
 
