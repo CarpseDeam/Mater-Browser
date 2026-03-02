@@ -1,5 +1,6 @@
 """Deterministic form filler for LinkedIn Easy Apply."""
 import logging
+import time
 
 from playwright.sync_api import Page, Locator
 
@@ -10,6 +11,8 @@ logger = logging.getLogger(__name__)
 # Fallback answers for unknown questions
 FALLBACK_TEXT = "See resume"
 FALLBACK_TEXTAREA = "Please refer to my resume and LinkedIn profile for detailed information on my experience and qualifications."
+
+MODAL_FILL_TIMEOUT_SECONDS: float = 30.0
 
 
 class LinkedInSelectors:
@@ -99,7 +102,8 @@ class LinkedInFormFiller:
         Returns:
             True if modal was found and processed, False if no modal.
         """
-        # Try multiple modal selectors
+        start_time = time.time()
+
         modal_selectors = [
             ".jobs-easy-apply-modal",
             "[data-test-modal]",
@@ -122,7 +126,6 @@ class LinkedInFormFiller:
             logger.warning("No Easy Apply modal found with any selector")
             return False
 
-        # Count fields before filling
         try:
             input_count = modal.locator("input:visible").count()
             select_count = modal.locator("select:visible").count()
@@ -132,10 +135,30 @@ class LinkedInFormFiller:
             logger.debug(f"Could not count fields: {e}")
 
         self._fill_text_inputs(modal)
+        if time.time() - start_time > MODAL_FILL_TIMEOUT_SECONDS:
+            logger.warning(f"Modal fill timeout after {time.time() - start_time:.1f}s")
+            return True
+
         self._fill_selects(modal)
+        if time.time() - start_time > MODAL_FILL_TIMEOUT_SECONDS:
+            logger.warning(f"Modal fill timeout after {time.time() - start_time:.1f}s")
+            return True
+
         self._fill_radios(modal)
+        if time.time() - start_time > MODAL_FILL_TIMEOUT_SECONDS:
+            logger.warning(f"Modal fill timeout after {time.time() - start_time:.1f}s")
+            return True
+
         self._fill_skill_checkboxes(modal)
+        if time.time() - start_time > MODAL_FILL_TIMEOUT_SECONDS:
+            logger.warning(f"Modal fill timeout after {time.time() - start_time:.1f}s")
+            return True
+
         self._fill_checkboxes(modal)
+        if time.time() - start_time > MODAL_FILL_TIMEOUT_SECONDS:
+            logger.warning(f"Modal fill timeout after {time.time() - start_time:.1f}s")
+            return True
+
         self._fill_textareas(modal)
         self._uncheck_follow_company()
 
@@ -197,17 +220,25 @@ class LinkedInFormFiller:
             if self._is_location_field(question):
                 self._fill_autocomplete_location(inp, str(answer), question)
             else:
-                inp.fill(str(answer))
-                logger.info(f"Filled [{strategy}]: {question[:40]} = {answer}")
+                try:
+                    inp.fill(str(answer))
+                    logger.info(f"Filled [{strategy}]: {question[:40]} = {answer}")
+                except Exception as e:
+                    logger.warning(f"Failed to fill text input [{strategy}]: {question[:40]} - {e}")
+                    return False
         else:
             # Numeric fields need numbers, not "See resume"
             numeric_keywords = ["salary", "rate", "amount", "years", "months", "compensation", "pkr", "usd", "number"]
-            if field_type == "number" or any(kw in question.lower() for kw in numeric_keywords):
-                inp.fill("0")
-                logger.info(f"Fallback numeric: {question[:50]} = 0")
-            else:
-                inp.fill(FALLBACK_TEXT)
-                logger.info(f"Fallback text: {question[:50]}")
+            try:
+                if field_type == "number" or any(kw in question.lower() for kw in numeric_keywords):
+                    inp.fill("0")
+                    logger.info(f"Fallback numeric: {question[:50]} = 0")
+                else:
+                    inp.fill(FALLBACK_TEXT)
+                    logger.info(f"Fallback text: {question[:50]}")
+            except Exception as e:
+                logger.warning(f"Failed to fill fallback [{strategy}]: {question[:40]} - {e}")
+                return False
         return True
 
     def _get_element_id(self, element: Locator) -> str:
@@ -285,8 +316,8 @@ class LinkedInFormFiller:
                         select.select_option(value=val, timeout=3000)
                         logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
                         return True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to select exact match [{strategy}]: {question[:40]} - {e}")
 
             # Try partial/fuzzy match
             for val, text in option_texts:
@@ -296,8 +327,8 @@ class LinkedInFormFiller:
                         select.select_option(value=val, timeout=3000)
                         logger.info(f"Selected [{strategy}]: {question[:40]} = {text}")
                         return True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to select fuzzy match [{strategy}]: {question[:40]} - {e}")
 
             # For numeric answers (years of experience), find best matching range
             if answer_str.isdigit():
@@ -308,8 +339,8 @@ class LinkedInFormFiller:
                         select.select_option(value=best_match[0], timeout=3000)
                         logger.info(f"Selected [{strategy}]: {question[:40]} = {best_match[1]} (for {years} years)")
                         return True
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to select years match [{strategy}]: {question[:40]} - {e}")
 
         # Fallback: select first non-placeholder option
         if option_texts:
@@ -319,7 +350,7 @@ class LinkedInFormFiller:
                 logger.info(f"Fallback select: {question[:50]} = {text}")
                 return True
             except Exception as e:
-                logger.warning(f"Fallback select failed: {e}")
+                logger.warning(f"Fallback select failed [{strategy}]: {question[:40]} - {e}")
 
         return True
 
@@ -450,8 +481,8 @@ class LinkedInFormFiller:
                         if not radio.is_checked():
                             self._click_radio_label(radio)
                             logger.info(f"Radio [{strategy}]: {question[:40]} = {label}")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to click radio [{strategy}]: {question[:40]} - {e}")
                     return True
 
         # NO ANSWER - determine safe default based on question content
@@ -588,8 +619,8 @@ class LinkedInFormFiller:
                 if cb.is_checked() != should_check:
                     self._click_checkbox_label(cb)
                     logger.info(f"Checkbox: {question[:40]} = {should_check}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to toggle checkbox: {question[:40]} - {e}")
 
     def _click_checkbox_label(self, checkbox: Locator) -> None:
         """Click the label for a checkbox instead of the input directly."""
@@ -945,7 +976,10 @@ class LinkedInFormFiller:
                     btn_text = btn.text_content() or btn.get_attribute("aria-label") or selector
                     btn.click()
                     logger.info(f"Clicked button: {btn_text[:30]}")
-                    self._page.wait_for_timeout(500)
+                    try:
+                        self._page.wait_for_timeout(500)
+                    except Exception:
+                        pass
                     return True
             except Exception as e:
                 logger.debug(f"Button selector {selector} failed: {e}")

@@ -186,7 +186,7 @@ class PageClassifier:
 
     def dismiss_overlays(self) -> None:
         try:
-            self._page.evaluate(self._get_overlay_removal_js())
+            self._page.evaluate(self._get_overlay_removal_js(), timeout=3000)
         except Exception:
             pass
 

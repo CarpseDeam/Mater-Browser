@@ -1,5 +1,6 @@
 """LinkedIn Easy Apply flow handler."""
 import logging
+import time
 from typing import Optional
 
 from ..browser.page import Page
@@ -17,6 +18,8 @@ from .answer_engine import AnswerEngine
 from .linkedin_form_filler import LinkedInFormFiller
 
 logger = logging.getLogger(__name__)
+
+EASY_APPLY_TIMEOUT_SECONDS: float = 120.0
 
 
 class LinkedInFlow:
@@ -126,6 +129,14 @@ class LinkedInFlow:
                 url=job_url,
             )
 
+        if page_type != PageType.EASY_APPLY:
+            logger.info("Not Easy Apply - skipping (Easy Apply only)")
+            return ApplicationResult(
+                status=ApplicationStatus.SKIPPED,
+                message="Not Easy Apply - Easy Apply only",
+                url=job_url,
+            )
+
         if not classifier.click_apply_button():
             return ApplicationResult(
                 status=ApplicationStatus.NO_APPLY_BUTTON,
@@ -135,15 +146,29 @@ class LinkedInFlow:
 
         self._page.wait(MEDIUM_WAIT_MS)
 
-        if page_type != PageType.EASY_APPLY:
-            logger.info("Not Easy Apply - skipping (Easy Apply only)")
-            return ApplicationResult(
-                status=ApplicationStatus.SKIPPED,
-                message="Not Easy Apply - Easy Apply only",
-                url=job_url,
-            )
-
         return self._process_easy_apply(job_url)
+
+    def _close_modal(self) -> None:
+        """Close Easy Apply modal to clean up for next job."""
+        try:
+            dismiss_selectors = [
+                'button[aria-label="Dismiss"]',
+                '[data-test-modal-close-btn]',
+                'button.artdeco-modal__dismiss',
+            ]
+            for selector in dismiss_selectors:
+                btn = self._page.raw.locator(selector).first
+                if btn.is_visible(timeout=1000):
+                    btn.click()
+                    self._page.wait(500)
+                    return
+        except Exception:
+            pass
+        try:
+            self._page.raw.keyboard.press("Escape")
+            self._page.wait(500)
+        except Exception:
+            pass
 
     def _process_easy_apply(self, job_url: str) -> ApplicationResult:
         """Process LinkedIn Easy Apply using deterministic form filler."""
@@ -152,54 +177,100 @@ class LinkedInFlow:
         answer_engine = AnswerEngine()
         filler = LinkedInFormFiller(self._page.raw, answer_engine)
 
+        start_time = time.time()
         last_page_hash = ""
         stuck_count = 0
-        max_stuck = 3  # Increase tolerance
+        max_stuck = 3
+        page_errors = 0
 
         for page_num in range(self._max_pages):
-            logger.info(f"Processing page {page_num + 1}/{self._max_pages}")
-            self._page.wait(1000)
-
-            if filler.is_confirmation_page():
-                logger.info("Confirmation page detected - application submitted!")
-                filler.close_modal()
+            elapsed = time.time() - start_time
+            if elapsed > EASY_APPLY_TIMEOUT_SECONDS:
+                logger.warning(f"Easy Apply timeout after {elapsed:.1f}s")
+                self._close_modal()
                 return ApplicationResult(
-                    status=ApplicationStatus.SUCCESS,
-                    message="Application submitted",
+                    status=ApplicationStatus.FAILED,
+                    message="Easy Apply timeout",
                     pages_processed=page_num + 1,
                     url=job_url,
                 )
 
-            # Get current page hash to detect stuck
-            current_hash = self._get_modal_hash()
-            logger.debug(f"Page hash: '{current_hash}' (last: '{last_page_hash}')")
-
-            # Only count as stuck if we have a valid hash (not empty)
-            if current_hash and current_hash != "empty" and current_hash == last_page_hash:
-                stuck_count += 1
-                logger.warning(f"Same page hash detected ({stuck_count}/{max_stuck})")
-                if stuck_count >= max_stuck:
-                    logger.warning(f"Stuck on same page {stuck_count} times, aborting")
-                    break
-            else:
-                stuck_count = 0
-                last_page_hash = current_hash
-
-            # Fill the form
-            modal_found = filler.fill_current_modal()
-            logger.info(f"Page {page_num + 1}: Modal found={modal_found}")
-
-            # Click next button
-            if not filler.click_next():
-                logger.warning(f"Page {page_num + 1}: Could not find next button")
-                # Retry once after waiting
+            try:
+                logger.info(f"Processing page {page_num + 1}/{self._max_pages}")
                 self._page.wait(1000)
-                if not filler.click_next():
-                    logger.warning("Next button still not found after retry, aborting")
+
+                if filler.is_confirmation_page():
+                    logger.info("Confirmation page detected - application submitted!")
+                    filler.close_modal()
+                    return ApplicationResult(
+                        status=ApplicationStatus.SUCCESS,
+                        message="Application submitted",
+                        pages_processed=page_num + 1,
+                        url=job_url,
+                    )
+
+                current_hash = self._get_modal_hash()
+                logger.debug(f"Page hash: '{current_hash}' (last: '{last_page_hash}')")
+
+                if current_hash and current_hash != "empty" and current_hash == last_page_hash:
+                    stuck_count += 1
+                    logger.warning(f"Same page hash detected ({stuck_count}/{max_stuck})")
+                    if stuck_count >= max_stuck:
+                        logger.warning(f"Stuck on same page {stuck_count} times, aborting")
+                        self._close_modal()
+                        break
+                else:
+                    stuck_count = 0
+                    last_page_hash = current_hash
+
+                modal_found = filler.fill_current_modal()
+                logger.info(f"Page {page_num + 1}: Modal found={modal_found}")
+
+                if not modal_found:
+                    if filler.is_confirmation_page():
+                        logger.info("Confirmation page detected after fill")
+                        filler.close_modal()
+                        return ApplicationResult(
+                            status=ApplicationStatus.SUCCESS,
+                            message="Application submitted",
+                            pages_processed=page_num + 1,
+                            url=job_url,
+                        )
+                    logger.warning("No modal found, aborting")
+                    self._close_modal()
                     break
 
-            self._page.wait(1000)
+                if not filler.click_next():
+                    logger.warning(f"Page {page_num + 1}: Could not find next button")
+                    self._page.wait(1000)
+                    if not filler.click_next():
+                        logger.warning("Next button still not found after retry, aborting")
+                        self._close_modal()
+                        break
 
+                self._page.wait(500)
+                if filler.is_confirmation_page():
+                    logger.info("Confirmation page detected after click")
+                    filler.close_modal()
+                    return ApplicationResult(
+                        status=ApplicationStatus.SUCCESS,
+                        message="Application submitted",
+                        pages_processed=page_num + 1,
+                        url=job_url,
+                    )
+
+                page_errors = 0
+
+            except Exception as e:
+                logger.warning(f"Error on page {page_num + 1}: {e}")
+                page_errors += 1
+                if page_errors >= 2:
+                    logger.warning("Two consecutive page errors, aborting")
+                    self._close_modal()
+                    break
+                continue
+
+        self._close_modal()
         return ApplicationResult(
             status=ApplicationStatus.FAILED,
             message="Max pages reached or stuck",

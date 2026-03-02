@@ -1,94 +1,139 @@
-## Task: Clean up Mater-Browser — Remove all bloat, LinkedIn Easy Apply only
+## Task: Add resilience safeguards to LinkedIn Easy Apply flow
 
 **Project:** C:\Projects\Mater-Browser
 
-## What to DELETE (files to remove entirely):
+## Goal
+Make Easy Apply flow bulletproof: if anything goes wrong, close the modal, return FAILED quickly, and let the runner move to the next job. Never hang.
 
-### Dead Claude-based form filling (replaced by deterministic filler):
-1. `src/agent/claude.py` — old Claude API form analysis
-2. `src/agent/prompts.py` — system prompts for Claude form filling
-3. `src/agent/actions.py` — action models for Claude plans (FillAction, SelectAction, etc.)
+## Changes needed:
 
-### Dead Indeed flow (LinkedIn Easy Apply only):
-4. `src/agent/external_flow.py` — Indeed/external ATS flow
-5. `src/agent/indeed_form_filler.py` — Indeed form filling
-6. `src/agent/indeed_helpers.py` — Indeed resume cards, modals
+### 1. `src/agent/linkedin_flow.py` — Wrap `_process_easy_apply` with overall timeout and per-page error handling
 
-### Dead infrastructure (not wired in or superseded):
-7. `src/agent/zero_actions_handler.py` — handled Claude 0-actions, dead since no Claude form filling
-8. `src/agent/vision_fallback.py` — screenshot + Claude vision button finding, expensive and unreliable
-9. `src/agent/navigation_helpers.py` — duplicate click_next, is_complete, try_resume_upload all reimplemented in linkedin_form_filler.py and linkedin_flow.py
-10. `src/agent/loop_detector.py` — superseded by stuck_detection.py AND linkedin_flow's own hash-based detection
-11. `src/agent/stuck_detection.py` — FormProcessorStuckDetection not wired into LinkedIn flow (linkedin_flow has its own stuck detection via _get_modal_hash)
-12. `src/workflow/application.py` — entire old workflow using ClaudeAgent, completely superseded by linkedin_flow.py
+**A) Add a hard timeout wrapper around the entire `_process_easy_apply` method.**
 
-### Dead feedback system (broken, never worked):
-13. `src/feedback/auto_repairer.py` — sends wrong payload format to bridge, always fails silently
-14. `src/feedback/config_suggester.py` — feeds auto_repairer, dead chain
-15. `src/feedback/failure_summarizer.py` — feeds auto_repairer, dead chain
+Use a simple wall-clock approach (not threading) — track `time.time()` at start, check elapsed at each loop iteration. If elapsed > EASY_APPLY_TIMEOUT_SECONDS (default 120 seconds), break and return FAILED. Import `time` at top.
 
-**NOTE:** KEEP `src/feedback/failure_logger.py` — it's used by answer_engine.py for logging unknown questions. That's useful data.
-
-### Dead directories after cleanup:
-16. `src/workflow/` directory — empty after removing application.py (delete the whole dir including __init__.py)
-
-## What to MODIFY:
-
-### `src/agent/application.py` — Simplify to LinkedIn-only
-Current code routes to LinkedInFlow or ExternalFlow. Remove ExternalFlow routing entirely.
-- Remove import of `ExternalFlow`
-- Remove import of `INDEED_PATTERNS` from models
-- Remove the Indeed/Direct detection in `_detect_source()`
-- If source is not LinkedIn, return SKIPPED immediately
-- Remove `JobSource.DICE` and `JobSource.DIRECT` usage
-
-The simplified flow should be:
+Add constant at module level:
 ```python
-def apply(self, job_url: str) -> ApplicationResult:
-    if not self._is_linkedin(job_url):
-        return ApplicationResult(status=ApplicationStatus.SKIPPED, message="Not LinkedIn", url=job_url)
-    # ... LinkedIn flow only
+EASY_APPLY_TIMEOUT_SECONDS: float = 120.0
 ```
 
-### `src/agent/models.py` — Clean up dead references
-- Remove `JobSource.DICE` and `JobSource.DIRECT` (keep LINKEDIN and INDEED for potential future)
-- Remove `INDEED_PATTERNS` 
-- Remove `ACCOUNT_CREATION_URL_PATTERNS` and `ACCOUNT_CREATION_CONTENT` (these are duplicated in page_classifier.py which has its own)
-- Keep everything else (timeouts, ApplicationStatus, ApplicationResult, etc.)
+**B) Wrap each page iteration body in try/except.**
 
-### `src/agent/__init__.py` — Remove any exports of deleted modules
+Inside the `for page_num in range(self._max_pages):` loop, wrap the body (from modal hash check through click_next) in a try/except that catches `Exception`. On exception:
+- Log the error at WARNING level with the page number
+- Increment a `page_errors` counter
+- If `page_errors >= 2` consecutive, break the loop
+- Otherwise `continue` to retry the page
 
-### `src/feedback/__init__.py` — Remove exports of deleted feedback modules (keep failure_logger)
+**C) Add confirmation check immediately after click_next succeeds.**
 
-### `src/agent/page_classifier.py` — Remove import of VisionFallback
-- The PageClassifier does NOT import VisionFallback directly (ZeroActionsHandler does), but verify no references exist to deleted modules.
+After `filler.click_next()` returns True, wait 500ms then immediately check `filler.is_confirmation_page()`. If True, close modal and return SUCCESS. This catches the case where Submit was clicked (not just Next), avoiding an unnecessary extra loop iteration.
 
-### `src/executor/runner.py` — Check if it imports anything from deleted modules (actions.py specifically)
-- The ActionRunner likely imports from `actions.py`. If it does, AND it's only used by the deleted workflow, then `src/executor/runner.py` and the `src/executor/` directory can also be deleted.
-- READ runner.py first to check before deciding.
+**D) Always close the modal on exit (success or failure).**
 
-### `src/extractor/dom_service.py` — Check if it's still used
-- The DomService is used by the old ClaudeAgent workflow and old runner. If linkedin_form_filler.py and linkedin_flow.py don't use it, the entire `src/extractor/` directory might be dead too.
-- READ the imports in linkedin_flow.py and linkedin_form_filler.py first — they use Playwright directly, not DomService.
-- If nothing in the remaining code imports from `src/extractor/`, delete the entire `src/extractor/` directory.
+Add a helper method:
 
-## Code Standards:
+```python
+def _close_modal(self) -> None:
+    """Close Easy Apply modal to clean up for next job."""
+    try:
+        dismiss_selectors = [
+            'button[aria-label="Dismiss"]',
+            '[data-test-modal-close-btn]',
+            'button.artdeco-modal__dismiss',
+        ]
+        for selector in dismiss_selectors:
+            btn = self._page.raw.locator(selector).first
+            if btn.is_visible(timeout=1000):
+                btn.click()
+                self._page.wait(500)
+                return
+    except Exception:
+        pass
+    try:
+        self._page.raw.keyboard.press("Escape")
+        self._page.wait(500)
+    except Exception:
+        pass
+```
+
+Call this before EVERY return from `_process_easy_apply` that isn't SUCCESS (on success, call after `filler.close_modal()` as fallback).
+
+**E) Handle the "modal not found" case in the loop.**
+
+If `filler.fill_current_modal()` returns False (no modal found), check if it's a confirmation page. If not, break immediately — don't keep looping on a missing modal.
+
+### 2. `src/agent/linkedin_form_filler.py` — Improve error visibility and add safety
+
+**A) Promote key exception logs from `debug` to `warning`.**
+
+In these methods, change `logger.debug` to `logger.warning` for exception catches that indicate real problems:
+- `_fill_single_text_input` — when fill operation itself fails
+- `_fill_single_select` — when select_option fails  
+- `_fill_single_radio_group` — when radio click fails
+- `_fill_checkboxes` — when checkbox toggle fails
+- `click_next` — when button click fails
+
+Do NOT promote "element not visible" or "skipping pre-filled" messages — those are normal flow.
+
+**B) Add a timeout to `fill_current_modal` method.**
+
+Track wall-clock time. If filling takes longer than 30 seconds, log a warning and return True (partial fill is better than hanging).
+
+Add constant at module level:
+```python
+MODAL_FILL_TIMEOUT_SECONDS: float = 30.0
+```
+
+**C) Make `click_next` more resilient after clicking.**
+
+After clicking a button, catch any post-click exception (page may navigate/detach after Submit):
+
+```python
+btn.click()
+logger.info(f"Clicked button: {btn_text[:30]}")
+try:
+    self._page.wait_for_timeout(500)
+except Exception:
+    pass  # Page may have navigated after submit
+return True
+```
+
+### 3. `src/agent/linkedin_flow.py` — Fix classify-then-click ordering
+
+Currently clicks apply button BEFORE checking `page_type != PageType.EASY_APPLY`. Reorder:
+
+1. Classify page
+2. Handle PAYMENT, ACCOUNT_CREATION, LOGIN, ALREADY_APPLIED, CLOSED, EXTERNAL → return early
+3. Check `page_type != EASY_APPLY` → return SKIPPED 
+4. THEN click the Easy Apply button
+5. Process the modal
+
+### 4. `src/agent/page_classifier.py` — Add timeout to overlay dismiss
+
+Wrap the `evaluate` call:
+```python
+def dismiss_overlays(self) -> None:
+    try:
+        self._page.evaluate(self._get_overlay_removal_js(), timeout=3000)
+    except Exception:
+        pass
+```
+
+## Code Standards
 - Static typing everywhere
-- No bare `except:` 
-- Use `logging` module
+- `logging` module, never print()
 - Guard clauses, fail fast
-- f-strings
-- Keep functions under 25 lines where possible
-- No unnecessary comments
+- Keep functions under 25 lines
+- f-strings for formatting
 
-## Process:
-1. Read all imports across the surviving files to build a dependency graph
-2. Delete files that are confirmed dead (no remaining imports)
-3. Modify application.py and models.py
-4. Clean up __init__.py files  
-5. Delete empty directories
-6. Verify the project still imports cleanly: `python -c "from src.agent.application import ApplicationAgent; print('OK')"`
-7. Delete all `__pycache__` directories to clean up stale bytecode
+## Verification
+After changes:
+```
+cd C:\Projects\Mater-Browser
+python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; print('OK')"
+```
 
 
 ## Code Standards
