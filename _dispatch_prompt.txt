@@ -1,27 +1,57 @@
-## Task: Add diagnostic page dump when Easy Apply button not found + clear queue
+## Task: Speed up non-Easy-Apply rejection + add diagnostic logging to scraper
 
 **Project:** C:\Projects\Mater-Browser
 
-### File: `src/agent/linkedin_flow.py`
+## Fix 1: `src/agent/linkedin_flow.py` — Speed up button detection
 
-Replace the `_handle_non_easy_apply` method with a version that dumps diagnostic info before returning. The diagnostics should log:
+Replace `_find_easy_apply_button` with faster version:
+```python
+def _find_easy_apply_button(self) -> Optional[Locator]:
+    """Find Easy Apply button. Fast — gives up quickly if not present."""
+    try:
+        btn = self._page.raw.locator('#jobs-apply-button-id')
+        btn.wait_for(state="visible", timeout=3000)
+        logger.info("Found Easy Apply button via: #jobs-apply-button-id")
+        return btn
+    except Exception:
+        pass
+    for selector in ['[data-live-test-job-apply-button]', 'button.jobs-apply-button', 'button[aria-label^="Easy Apply"]']:
+        try:
+            btn = self._page.raw.locator(selector).first
+            if btn.is_visible(timeout=500):
+                logger.info(f"Found Easy Apply button via: {selector}")
+                return btn
+        except Exception:
+            continue
+    return None
+```
 
-1. `logger.warning(f"DIAGNOSTIC: Current URL: {self._page.raw.url}")` — check if we got redirected to login
-2. If URL contains "login" or "checkpoint", return NEEDS_LOGIN status
-3. Dump first 20 buttons on page: for each button log visibility, id, text_content[:60], aria-label[:60], class[:80]
-4. Log page title
-5. Save screenshot to `data/debug_screenshots/no_easy_apply_{job_id}.png`
-6. Then do the existing already-applied/closed checks and return
+Replace the wait sequence in `apply()` — remove `networkidle`, keep only:
+```python
+try:
+    self._page.raw.wait_for_load_state("domcontentloaded", timeout=8000)
+except Exception:
+    pass
+self._page.wait(1000)
+```
 
-Keep the method signature and return type the same. Add `from pathlib import Path` and `import re` at the top of the method (or at file level).
+In `_handle_non_easy_apply`, remove the button dump loop (the 20-button iteration). Keep: URL log, login check, screenshot, already-applied/closed checks.
 
-### File: `data/job_queue.json`
-Overwrite with `[]`
+## Fix 2: `src/scraper/jobspy_client.py` — Log DataFrame columns
+
+After `df = scrape_jobs(...)`, add:
+```python
+if df is not None and not df.empty:
+    logger.info(f"JobSpy columns: {list(df.columns)}")
+```
+
+## Fix 3: `data/job_queue.json` — Clear it
+Write `[]`
 
 ## Verification
 ```
 cd C:\Projects\Mater-Browser
-python -c "from src.agent.linkedin_flow import LinkedInFlow; print('OK')"
+python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.scraper.jobspy_client import JobSpyClient; print('OK')"
 ```
 
 

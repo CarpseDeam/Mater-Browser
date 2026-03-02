@@ -140,6 +140,8 @@ class JobSpyClient:
                 logger.warning("No jobs found")
                 return []
 
+            logger.info(f"JobSpy columns: {list(df.columns)}")
+
             jobs = []
             for _, row in df.iterrows():
                 try:

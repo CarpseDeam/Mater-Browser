@@ -109,17 +109,11 @@ class LinkedInFlow:
                 url=job_url,
             )
 
-        self._page.wait(LONG_WAIT_MS)
         try:
-            self._page.raw.wait_for_load_state("domcontentloaded", timeout=5000)
+            self._page.raw.wait_for_load_state("domcontentloaded", timeout=8000)
         except Exception:
             pass
-
-        # Wait for network to settle (XHR loads job details)
-        try:
-            self._page.raw.wait_for_load_state("networkidle", timeout=8000)
-        except Exception:
-            pass
+        self._page.wait(1000)
 
         # Find Easy Apply button with fallback selectors
         easy_apply_btn = self._find_easy_apply_button()
@@ -165,19 +159,20 @@ class LinkedInFlow:
         return self._process_easy_apply(job_url)
 
     def _find_easy_apply_button(self) -> Optional[Locator]:
-        """Find Easy Apply button using multiple selectors."""
-        selectors_with_timeouts = [
-            ('#jobs-apply-button-id', 5000),
-            ('[data-live-test-job-apply-button]', 2000),
-            ('button.jobs-apply-button', 2000),
-            ('button[aria-label^="Easy Apply"]', 2000),
-        ]
-        for selector, timeout in selectors_with_timeouts:
+        """Find Easy Apply button. Fast — gives up quickly if not present."""
+        try:
+            btn = self._page.raw.locator('#jobs-apply-button-id')
+            btn.wait_for(state="visible", timeout=3000)
+            logger.info("Found Easy Apply button via: #jobs-apply-button-id")
+            return btn
+        except Exception:
+            pass
+        for selector in ['[data-live-test-job-apply-button]', 'button.jobs-apply-button', 'button[aria-label^="Easy Apply"]']:
             try:
                 btn = self._page.raw.locator(selector).first
-                btn.wait_for(state="visible", timeout=timeout)
-                logger.info(f"Found Easy Apply button via: {selector}")
-                return btn
+                if btn.is_visible(timeout=500):
+                    logger.info(f"Found Easy Apply button via: {selector}")
+                    return btn
             except Exception:
                 continue
         return None
@@ -197,34 +192,7 @@ class LinkedInFlow:
                 url=job_url,
             )
 
-        # 3. Dump first 20 buttons on page
-        try:
-            buttons = self._page.raw.locator("button").all()[:20]
-            logger.warning(f"DIAGNOSTIC: Found {len(buttons)} buttons (showing first 20)")
-            for idx, btn in enumerate(buttons):
-                try:
-                    visibility = btn.is_visible(timeout=100)
-                    btn_id = btn.get_attribute("id") or ""
-                    text = (btn.text_content() or "")[:60]
-                    aria_label = (btn.get_attribute("aria-label") or "")[:60]
-                    btn_class = (btn.get_attribute("class") or "")[:80]
-                    logger.warning(
-                        f"  Button {idx}: visible={visibility}, id={btn_id}, "
-                        f"text={text}, aria-label={aria_label}, class={btn_class}"
-                    )
-                except Exception as e:
-                    logger.warning(f"  Button {idx}: Error reading properties - {e}")
-        except Exception as e:
-            logger.warning(f"DIAGNOSTIC: Error dumping buttons - {e}")
-
-        # 4. Log page title
-        try:
-            title = self._page.raw.title()
-            logger.warning(f"DIAGNOSTIC: Page title: {title}")
-        except Exception as e:
-            logger.warning(f"DIAGNOSTIC: Error getting page title - {e}")
-
-        # 5. Save screenshot
+        # 3. Save screenshot
         try:
             job_id_match = re.search(r'/(\d+)/?$', job_url)
             job_id = job_id_match.group(1) if job_id_match else "unknown"
@@ -236,7 +204,7 @@ class LinkedInFlow:
         except Exception as e:
             logger.warning(f"DIAGNOSTIC: Error saving screenshot - {e}")
 
-        # 6. Check for already applied/closed
+        # 4. Check for already applied/closed
         try:
             content_lower = self._page.raw.content().lower()[:3000]
         except Exception:
