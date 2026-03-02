@@ -5,7 +5,7 @@ from typing import Optional
 
 from ..browser.page import Page
 from ..browser.tabs import TabManager
-from .page_classifier import PageClassifier, PageType
+from .page_classifier import PageClassifier, PageType, ALREADY_APPLIED_PHRASES, CLOSED_PHRASES
 from .models import (
     ApplicationStatus,
     ApplicationResult,
@@ -94,115 +94,114 @@ class LinkedInFlow:
             pass
 
     def apply(self, job_url: str) -> ApplicationResult:
-        """
-        Handle LinkedIn Easy Apply flow.
-
-        Easy Apply opens a modal on the same page - no navigation required.
-        LinkedIn uses SPA routing which can cause ERR_ABORTED on goto().
-        """
+        """Handle LinkedIn Easy Apply flow."""
         logger.info("Using LinkedIn Easy Apply flow")
-
         self._ensure_clean_state()
 
         if not self._page.goto(job_url):
             return ApplicationResult(
                 status=ApplicationStatus.ERROR,
-                message="Navigation to job page failed",
+                message="Navigation failed",
                 url=job_url,
             )
 
         self._page.wait(LONG_WAIT_MS)
-
         try:
             self._page.raw.wait_for_load_state("domcontentloaded", timeout=5000)
         except Exception:
             pass
 
-        classifier = PageClassifier(self._page.raw)
-        page_type = classifier.classify()
-        logger.info(f"Page classification: {page_type.value}")
+        # Direct Easy Apply button check — 5s timeout
+        easy_apply_btn = self._page.raw.locator('#jobs-apply-button-id')
+        try:
+            easy_apply_btn.wait_for(state="visible", timeout=5000)
+        except Exception:
+            return self._handle_non_easy_apply(job_url)
 
-        if page_type == PageType.PAYMENT_DANGER:
-            logger.warning(f"PAYMENT PAGE DETECTED - aborting application: {self._page.url}")
+        # Dismiss overlays
+        self._dismiss_click_blockers()
+
+        # Click the actual button we found
+        try:
+            easy_apply_btn.click(timeout=3000)
+            logger.info("Clicked Easy Apply button")
+        except Exception as e:
+            logger.warning(f"Click failed: {e}")
             return ApplicationResult(
                 status=ApplicationStatus.FAILED,
-                message="Payment page detected - safety abort",
+                message="Could not click Easy Apply button",
                 url=job_url,
             )
 
-        if page_type == PageType.ACCOUNT_CREATION:
-            logger.warning(f"ACCOUNT CREATION PAGE DETECTED - aborting: {self._page.url}")
-            return ApplicationResult(
-                status=ApplicationStatus.FAILED,
-                message="Account creation page detected - safety abort",
-                url=job_url,
-            )
-
-        if page_type == PageType.LOGIN_REQUIRED:
-            return ApplicationResult(
-                status=ApplicationStatus.NEEDS_LOGIN,
-                message="Login required for LINKEDIN - please authenticate in browser",
-                url=job_url,
-            )
-
-        if page_type == PageType.ALREADY_APPLIED:
-            return ApplicationResult(
-                status=ApplicationStatus.FAILED,
-                message="Already applied to this job",
-                url=job_url,
-            )
-
-        if page_type == PageType.CLOSED:
-            return ApplicationResult(
-                status=ApplicationStatus.FAILED,
-                message="Job is closed or no longer accepting applications",
-                url=job_url,
-            )
-
-        if page_type == PageType.EXTERNAL_LINK:
-            logger.info("External job detected - skipping (Easy Apply only)")
-            return ApplicationResult(
-                status=ApplicationStatus.SKIPPED,
-                message="External application - Easy Apply only",
-                url=job_url,
-            )
-
-        if page_type != PageType.EASY_APPLY:
-            logger.info("Not Easy Apply - skipping (Easy Apply only)")
-            return ApplicationResult(
-                status=ApplicationStatus.SKIPPED,
-                message="Not Easy Apply - Easy Apply only",
-                url=job_url,
-            )
-
-        if not classifier.click_apply_button():
-            return ApplicationResult(
-                status=ApplicationStatus.NO_APPLY_BUTTON,
-                message="Could not find Easy Apply button",
-                url=job_url,
-            )
-
-        self._page.wait(LONG_WAIT_MS)
-
-        # Verify modal appeared
-        modal_appeared = False
-        for sel in [".jobs-easy-apply-modal", ".artdeco-modal", '[role="dialog"]']:
+        # Wait for modal to appear
+        if not self._wait_for_modal():
+            # Retry click once
+            self._dismiss_click_blockers()
             try:
-                if self._page.raw.locator(sel).first.is_visible(timeout=2000):
-                    modal_appeared = True
-                    break
+                btn = self._page.raw.locator('#jobs-apply-button-id')
+                if btn.is_visible(timeout=1000):
+                    btn.click(timeout=2000)
+                    if not self._wait_for_modal():
+                        return ApplicationResult(
+                            status=ApplicationStatus.FAILED,
+                            message="Easy Apply modal did not open",
+                            url=job_url,
+                        )
             except Exception:
-                continue
-
-        if not modal_appeared:
-            logger.warning("Easy Apply modal did not appear after clicking button")
-            return ApplicationResult(
-                status=ApplicationStatus.FAILED,
-                message="Easy Apply modal did not open",
-                url=job_url,
-            )
+                return ApplicationResult(
+                    status=ApplicationStatus.FAILED,
+                    message="Easy Apply modal did not open",
+                    url=job_url,
+                )
 
         return self._process_easy_apply(job_url)
+
+    def _handle_non_easy_apply(self, job_url: str) -> ApplicationResult:
+        """Handle case where Easy Apply button not found."""
+        try:
+            content_lower = self._page.raw.content().lower()[:3000]
+        except Exception:
+            content_lower = ""
+
+        if any(p in content_lower for p in ALREADY_APPLIED_PHRASES):
+            return ApplicationResult(status=ApplicationStatus.FAILED, message="Already applied", url=job_url)
+        if any(p in content_lower for p in CLOSED_PHRASES):
+            return ApplicationResult(status=ApplicationStatus.FAILED, message="Job closed", url=job_url)
+
+        logger.info("No Easy Apply button found — skipping")
+        return ApplicationResult(status=ApplicationStatus.SKIPPED, message="Not Easy Apply", url=job_url)
+
+    def _dismiss_click_blockers(self) -> None:
+        """Remove overlays that can intercept button clicks."""
+        try:
+            self._page.raw.evaluate('''() => {
+                document.querySelector('.msg-overlay-list-bubble')?.remove();
+                document.querySelectorAll('.artdeco-toast-item').forEach(n => n.remove());
+                document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(
+                    el => el.offsetParent && el.remove()
+                );
+            }''')
+        except Exception:
+            pass
+
+    def _wait_for_modal(self) -> bool:
+        """Wait for Easy Apply modal to appear. Returns True if found."""
+        self._page.wait(2000)
+        modal_selectors = [
+            ".jobs-easy-apply-modal",
+            ".artdeco-modal--is-open",
+            ".artdeco-modal",
+            '[role="dialog"]',
+        ]
+        for sel in modal_selectors:
+            try:
+                self._page.raw.locator(sel).first.wait_for(state="visible", timeout=3000)
+                logger.info(f"Modal appeared via: {sel}")
+                return True
+            except Exception:
+                continue
+        logger.warning("Modal not found after waiting")
+        return False
 
     def _close_modal(self) -> None:
         """Close Easy Apply modal and handle discard confirmation."""

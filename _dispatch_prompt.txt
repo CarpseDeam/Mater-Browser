@@ -1,102 +1,150 @@
-## Task: Add reliability layer to LinkedIn Easy Apply bot
+## Task: Rewrite apply() to skip non-Easy-Apply jobs instantly and fix modal opening
 
 **Project:** C:\Projects\Mater-Browser
 
-## Overview
-Add 7 reliability improvements. Each is independent — implement all.
+## Problem
+Bot wastes time navigating to every job, running full classifier, then discovering it's not Easy Apply. When it IS Easy Apply, it clicks the wrong button (score 4.80 from DomExtractor) and modal doesn't open.
 
-## 1. Validation Error Recovery (`src/agent/linkedin_form_filler.py`)
+## Solution: Rewrite `apply()` in `src/agent/linkedin_flow.py`
 
-Add method to LinkedInFormFiller:
+Replace the ENTIRE `apply()` method. No more PageClassifier for the main flow — just check for `#jobs-apply-button-id` directly.
+
+Add this import at top of file:
 ```python
-def check_and_fix_errors(self) -> bool:
-    """Check for validation errors and attempt to fix them. Returns True if errors found."""
+from .page_classifier import ALREADY_APPLIED_PHRASES, CLOSED_PHRASES
 ```
 
-Look for `.artdeco-inline-feedback--error`, `.artdeco-inline-feedback__message`, `[data-test-form-element-error-message]`, `.fb-form-element-error-text`. For each error, find the associated input (traverse up to form section, find the input/select/textarea within), fill with fallback. Log errors and fixes.
+New `apply()` method — replace the existing one completely:
 
-Then in `src/agent/linkedin_flow.py` `_process_easy_apply`, after `click_next()` succeeds, add error check:
 ```python
-self._page.wait(500)
-if filler.check_and_fix_errors():
-    logger.info("Fixed validation errors, retrying next")
-    filler.click_next()
-    self._page.wait(500)
+def apply(self, job_url: str) -> ApplicationResult:
+    """Handle LinkedIn Easy Apply flow."""
+    logger.info("Using LinkedIn Easy Apply flow")
+    self._ensure_clean_state()
+
+    if not self._page.goto(job_url):
+        return ApplicationResult(
+            status=ApplicationStatus.ERROR,
+            message="Navigation failed",
+            url=job_url,
+        )
+
+    self._page.wait(LONG_WAIT_MS)
+    try:
+        self._page.raw.wait_for_load_state("domcontentloaded", timeout=5000)
+    except Exception:
+        pass
+
+    # Direct Easy Apply button check — 5s timeout
+    easy_apply_btn = self._page.raw.locator('#jobs-apply-button-id')
+    try:
+        easy_apply_btn.wait_for(state="visible", timeout=5000)
+    except Exception:
+        return self._handle_non_easy_apply(job_url)
+
+    # Dismiss overlays
+    self._dismiss_click_blockers()
+
+    # Click the actual button we found
+    try:
+        easy_apply_btn.click(timeout=3000)
+        logger.info("Clicked Easy Apply button")
+    except Exception as e:
+        logger.warning(f"Click failed: {e}")
+        return ApplicationResult(
+            status=ApplicationStatus.FAILED,
+            message="Could not click Easy Apply button",
+            url=job_url,
+        )
+
+    # Wait for modal to appear
+    if not self._wait_for_modal():
+        # Retry click once
+        self._dismiss_click_blockers()
+        try:
+            btn = self._page.raw.locator('#jobs-apply-button-id')
+            if btn.is_visible(timeout=1000):
+                btn.click(timeout=2000)
+                if not self._wait_for_modal():
+                    return ApplicationResult(
+                        status=ApplicationStatus.FAILED,
+                        message="Easy Apply modal did not open",
+                        url=job_url,
+                    )
+        except Exception:
+            return ApplicationResult(
+                status=ApplicationStatus.FAILED,
+                message="Easy Apply modal did not open",
+                url=job_url,
+            )
+
+    return self._process_easy_apply(job_url)
 ```
 
-## 2. Resume Upload Handling (`src/agent/linkedin_form_filler.py`)
+Also add these new helper methods to LinkedInFlow:
 
-Add method:
 ```python
-def _handle_resume_upload(self, modal: Locator) -> None:
-    """Handle resume upload - select existing resume if available."""
+def _handle_non_easy_apply(self, job_url: str) -> ApplicationResult:
+    """Handle case where Easy Apply button not found."""
+    try:
+        content_lower = self._page.raw.content().lower()[:3000]
+    except Exception:
+        content_lower = ""
+    
+    if any(p in content_lower for p in ALREADY_APPLIED_PHRASES):
+        return ApplicationResult(status=ApplicationStatus.FAILED, message="Already applied", url=job_url)
+    if any(p in content_lower for p in CLOSED_PHRASES):
+        return ApplicationResult(status=ApplicationStatus.FAILED, message="Job closed", url=job_url)
+    
+    logger.info("No Easy Apply button found — skipping")
+    return ApplicationResult(status=ApplicationStatus.SKIPPED, message="Not Easy Apply", url=job_url)
+
+def _dismiss_click_blockers(self) -> None:
+    """Remove overlays that can intercept button clicks."""
+    try:
+        self._page.raw.evaluate('''() => {
+            document.querySelector('.msg-overlay-list-bubble')?.remove();
+            document.querySelectorAll('.artdeco-toast-item').forEach(n => n.remove());
+            document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(
+                el => el.offsetParent && el.remove()
+            );
+        }''')
+    except Exception:
+        pass
+
+def _wait_for_modal(self) -> bool:
+    """Wait for Easy Apply modal to appear. Returns True if found."""
+    self._page.wait(2000)
+    modal_selectors = [
+        ".jobs-easy-apply-modal",
+        ".artdeco-modal--is-open",
+        ".artdeco-modal",
+        '[role="dialog"]',
+    ]
+    for sel in modal_selectors:
+        try:
+            self._page.raw.locator(sel).first.wait_for(state="visible", timeout=3000)
+            logger.info(f"Modal appeared via: {sel}")
+            return True
+        except Exception:
+            continue
+    logger.warning("Modal not found after waiting")
+    return False
 ```
 
-1. Check if resume already selected (look for selected card state, checkmark)
-2. If not, click first available resume card: `[data-test-document-upload-card]`, `.jobs-document-upload-redesign-card`, `button[aria-label*="resume" i]`
-3. Also try "Choose Resume": `button[aria-label="Choose Resume"]`, `button:has-text("Choose")`
-4. Don't block if no upload needed — just log and move on
-
-Call from `fill_current_modal` BEFORE other fields.
-
-## 3. Typeahead/Autocomplete Fields (`src/agent/linkedin_form_filler.py`)
-
-Add method:
-```python
-def _is_typeahead_field(self, inp: Locator) -> bool:
-    """Check if input is a typeahead/autocomplete field."""
-```
-
-Check: parent has "typeahead" or "text-entity-list" in class, `role="combobox"`, `aria-autocomplete="list"`, parent has `[data-test-text-entity-list-form-component]`.
-
-Update `_fill_single_text_input`: if `_is_typeahead_field(inp)` is True, use autocomplete fill (type slowly, wait for suggestions, click first or Enter). Rename `_fill_autocomplete_location` to `_fill_autocomplete_field`.
-
-## 4. Clean State Before Each Job (`src/agent/linkedin_flow.py`)
-
-Add method:
-```python
-def _ensure_clean_state(self) -> None:
-    """Dismiss any open modals/dialogs before starting new application."""
-```
-
-Check for visible `[role="dialog"]`, `.artdeco-modal`. If found, dismiss. Press Escape as fallback. Wait 500ms. Call at START of `apply()` before navigation.
-
-## 5. Queue Re-validation (`src/automation/runner.py`)
-
-Read `_apply_to_job` — it already calls `self._scorer.check_filter(job)`. Verify this works correctly. If already there, no changes. Just verify.
-
-## 6. Randomized Delays (`src/automation/runner.py`)
-
-Replace fixed delays with randomized:
-```python
-APPLY_DELAY_MIN_SECONDS: float = 3.0
-APPLY_DELAY_MAX_SECONDS: float = 8.0
-CYCLE_COOLDOWN_MIN_SECONDS: float = 5.0
-CYCLE_COOLDOWN_MAX_SECONDS: float = 15.0
-```
-
-Use `random.uniform(min, max)` for both `time.sleep` calls in `_run_apply_cycle` and `_run_loop`.
-
-Import `random` at top.
-
-## 7. Better Stuck Recovery (`src/agent/linkedin_flow.py`)
-
-In `_process_easy_apply`, when `stuck_count >= max_stuck`, before breaking, try ONE recovery:
-1. Call `filler.check_and_fix_errors()` 
-2. Scroll modal content down: `modal.evaluate("el => el.scrollTop += 300")`
-3. Re-fill modal: `filler.fill_current_modal()`
-4. Try `filler.click_next()` 
-5. If click_next succeeds, reset stuck_count and continue
-6. If fails, THEN abort and close modal
+## IMPORTANT
+- Delete the old `apply()` method entirely and replace with the new one
+- Keep `_process_easy_apply`, `_close_modal`, `_ensure_clean_state`, `_get_modal_hash` as they are
+- The old apply() used PageClassifier — the new one does NOT. Direct button check only.
+- Import ALREADY_APPLIED_PHRASES and CLOSED_PHRASES from page_classifier
 
 ## Code Standards
-- Static typing, logging module, guard clauses, functions under 25 lines, f-strings
-- Import `random` where needed
+- Static typing, logging, guard clauses, functions under 25 lines
 
 ## Verification
 ```
 cd C:\Projects\Mater-Browser
-python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; from src.agent.page_classifier import PageClassifier; from src.automation.runner import AutomationRunner; print('OK')"
+python -c "from src.agent.linkedin_flow import LinkedInFlow; print('OK')"
 ```
 
 

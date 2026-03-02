@@ -223,6 +223,7 @@ class AutomationRunner:
         with Playwright - all browser operations are on main thread.
         """
         logger.info("Automation loop started")
+        self._queue.recover_stuck_jobs()
         self._emit("started", {})
 
         try:
@@ -294,12 +295,20 @@ class AutomationRunner:
         self._state = RunnerState.APPLYING
         logger.info("Starting apply cycle")
 
+        attempted_urls: set[str] = set()
+
         while not self._stop_flag.is_set():
             job = self._queue.get_next()
             if job is None:
                 logger.info("No more pending jobs in queue")
                 break
 
+            if job.url in attempted_urls:
+                logger.warning(f"Job {job.url} already attempted this cycle, marking failed")
+                self._queue.mark_failed(job.url, "Duplicate in apply cycle")
+                continue
+
+            attempted_urls.add(job.url)
             success = self._apply_to_job(job)
 
             if success:
@@ -340,76 +349,84 @@ class AutomationRunner:
         Returns:
             True if application succeeded, False otherwise.
         """
-        result = self._scorer.check_filter(job)
-        if not result.passed:
-            logger.info(f"Skipping {job.title} at {job.company}: {result.reason}")
-            self._queue.mark_skipped(job.url, result.reason)
-            return True
-
-        self._stats.current_job = f"{job.title} at {job.company}"
-        logger.info(f"Requesting apply to: {self._stats.current_job}")
-
-        self._emit(
-            "apply_start",
-            {
-                "job": {
-                    "title": job.title,
-                    "company": job.company,
-                    "url": job.url,
-                }
-            },
-        )
-
-        request = ApplyRequest(job=job)
-        logger.debug(f"Putting ApplyRequest in queue for {job.url}")
-        self._apply_queue.put(request)
-
         try:
-            logger.debug(f"Waiting for ApplyResult (timeout={APPLY_TIMEOUT_SECONDS}s)")
-            apply_result = self._result_queue.get(timeout=APPLY_TIMEOUT_SECONDS)
-        except queue.Empty:
-            logger.error(
-                f"Apply timeout after {APPLY_TIMEOUT_SECONDS}s - no response from main thread"
+            result = self._scorer.check_filter(job)
+            if not result.passed:
+                logger.info(f"Skipping {job.title} at {job.company}: {result.reason}")
+                self._queue.mark_skipped(job.url, result.reason)
+                return True
+
+            self._stats.current_job = f"{job.title} at {job.company}"
+            logger.info(f"Requesting apply to: {self._stats.current_job}")
+
+            self._emit(
+                "apply_start",
+                {
+                    "job": {
+                        "title": job.title,
+                        "company": job.company,
+                        "url": job.url,
+                    }
+                },
             )
-            self._queue.mark_failed(job.url, "Apply timeout - no response from main thread")
+
+            request = ApplyRequest(job=job)
+            logger.debug(f"Putting ApplyRequest in queue for {job.url}")
+            self._apply_queue.put(request)
+
+            try:
+                logger.debug(f"Waiting for ApplyResult (timeout={APPLY_TIMEOUT_SECONDS}s)")
+                apply_result = self._result_queue.get(timeout=APPLY_TIMEOUT_SECONDS)
+            except queue.Empty:
+                logger.error(
+                    f"Apply timeout after {APPLY_TIMEOUT_SECONDS}s - no response from main thread"
+                )
+                self._queue.mark_failed(job.url, "Apply timeout - no response from main thread")
+                self._stats.jobs_applied += 1
+                self._stats.failed_count += 1
+                self._emit(
+                    "apply_failed",
+                    {
+                        "job": {"title": job.title, "company": job.company, "url": job.url},
+                        "error": "Apply timeout - no response from main thread",
+                    },
+                )
+                return False
+
             self._stats.jobs_applied += 1
+
+            if apply_result.success:
+                self._queue.mark_applied(job.url)
+                self._stats.success_count += 1
+                logger.info(f"Successfully applied to {job.company}")
+                self._emit(
+                    "apply_complete",
+                    {
+                        "job": {"title": job.title, "company": job.company, "url": job.url},
+                        "result": {"status": "success", "message": "Application submitted"},
+                    },
+                )
+                return True
+
+            error_msg = apply_result.error or "Unknown error"
+            self._queue.mark_failed(job.url, error_msg)
             self._stats.failed_count += 1
+            logger.warning(f"Failed to apply to {job.company}: {error_msg}")
             self._emit(
                 "apply_failed",
                 {
                     "job": {"title": job.title, "company": job.company, "url": job.url},
-                    "error": "Apply timeout - no response from main thread",
+                    "error": error_msg,
                 },
             )
             return False
 
-        self._stats.jobs_applied += 1
-
-        if apply_result.success:
-            self._queue.mark_applied(job.url)
-            self._stats.success_count += 1
-            logger.info(f"Successfully applied to {job.company}")
-            self._emit(
-                "apply_complete",
-                {
-                    "job": {"title": job.title, "company": job.company, "url": job.url},
-                    "result": {"status": "success", "message": "Application submitted"},
-                },
-            )
-            return True
-
-        error_msg = apply_result.error or "Unknown error"
-        self._queue.mark_failed(job.url, error_msg)
-        self._stats.failed_count += 1
-        logger.warning(f"Failed to apply to {job.company}: {error_msg}")
-        self._emit(
-            "apply_failed",
-            {
-                "job": {"title": job.title, "company": job.company, "url": job.url},
-                "error": error_msg,
-            },
-        )
-        return False
+        except Exception as e:
+            logger.exception(f"Unexpected error in _apply_to_job for {job.url}: {e}")
+            self._queue.mark_failed(job.url, f"Unexpected error: {e}")
+            self._stats.jobs_applied += 1
+            self._stats.failed_count += 1
+            return False
 
     def _stats_dict(self) -> dict:
         """Convert stats to dictionary."""

@@ -42,13 +42,16 @@ class JobQueue:
         return added
 
     def get_next(self) -> Optional[JobListing]:
-        """Get next pending job with highest score."""
+        """Get next pending job with highest score and mark as in_progress."""
         with self._lock:
             pending = [j for j in self._jobs.values() if j.status == "pending"]
             if not pending:
                 return None
             pending.sort(key=lambda j: j.score, reverse=True)
-            return pending[0]
+            job = pending[0]
+            job.status = "in_progress"
+            self._save()
+            return job
 
     def get_pending(self) -> list[JobListing]:
         """Get all pending jobs sorted by score."""
@@ -85,6 +88,24 @@ class JobQueue:
                 self._jobs[url].status = "skipped"
                 self._jobs[url].error = reason
                 self._save()
+
+    def recover_stuck_jobs(self) -> int:
+        """Mark any in_progress jobs as failed.
+
+        Returns:
+            Count of recovered jobs.
+        """
+        with self._lock:
+            count = 0
+            for job in self._jobs.values():
+                if job.status == "in_progress":
+                    job.status = "failed"
+                    job.error = "Stuck in progress - recovered"
+                    count += 1
+            if count:
+                self._save()
+                logger.warning(f"Recovered {count} stuck in_progress jobs")
+            return count
 
     def clear_pending(self) -> None:
         """Clear all pending jobs."""
@@ -164,6 +185,14 @@ class JobQueue:
                     error=d.get("error"),
                 )
                 self._jobs[job.url] = job
+
+            stuck = [j for j in self._jobs.values() if j.status == "in_progress"]
+            for job in stuck:
+                job.status = "pending"
+                job.error = None
+            if stuck:
+                self._save()
+                logger.info(f"Reset {len(stuck)} in_progress jobs to pending on load")
 
             logger.info(f"Loaded {len(self._jobs)} jobs from queue")
         except Exception as e:
