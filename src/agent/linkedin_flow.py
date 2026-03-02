@@ -3,6 +3,8 @@ import logging
 import time
 from typing import Optional
 
+from playwright.sync_api import Locator
+
 from ..browser.page import Page
 from ..browser.tabs import TabManager
 from .page_classifier import PageClassifier, PageType, ALREADY_APPLIED_PHRASES, CLOSED_PHRASES
@@ -111,11 +113,15 @@ class LinkedInFlow:
         except Exception:
             pass
 
-        # Direct Easy Apply button check — 5s timeout
-        easy_apply_btn = self._page.raw.locator('#jobs-apply-button-id')
+        # Wait for network to settle (XHR loads job details)
         try:
-            easy_apply_btn.wait_for(state="visible", timeout=5000)
+            self._page.raw.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
+            pass
+
+        # Find Easy Apply button with fallback selectors
+        easy_apply_btn = self._find_easy_apply_button()
+        if not easy_apply_btn:
             return self._handle_non_easy_apply(job_url)
 
         # Dismiss overlays
@@ -138,8 +144,8 @@ class LinkedInFlow:
             # Retry click once
             self._dismiss_click_blockers()
             try:
-                btn = self._page.raw.locator('#jobs-apply-button-id')
-                if btn.is_visible(timeout=1000):
+                btn = self._find_easy_apply_button()
+                if btn and btn.is_visible(timeout=1000):
                     btn.click(timeout=2000)
                     if not self._wait_for_modal():
                         return ApplicationResult(
@@ -155,6 +161,24 @@ class LinkedInFlow:
                 )
 
         return self._process_easy_apply(job_url)
+
+    def _find_easy_apply_button(self) -> Optional[Locator]:
+        """Find Easy Apply button using multiple selectors."""
+        selectors_with_timeouts = [
+            ('#jobs-apply-button-id', 5000),
+            ('[data-live-test-job-apply-button]', 2000),
+            ('button.jobs-apply-button', 2000),
+            ('button[aria-label^="Easy Apply"]', 2000),
+        ]
+        for selector, timeout in selectors_with_timeouts:
+            try:
+                btn = self._page.raw.locator(selector).first
+                btn.wait_for(state="visible", timeout=timeout)
+                logger.info(f"Found Easy Apply button via: {selector}")
+                return btn
+            except Exception:
+                continue
+        return None
 
     def _handle_non_easy_apply(self, job_url: str) -> ApplicationResult:
         """Handle case where Easy Apply button not found."""

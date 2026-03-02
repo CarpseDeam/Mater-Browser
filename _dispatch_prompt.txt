@@ -1,145 +1,47 @@
-## Task: Rewrite apply() to skip non-Easy-Apply jobs instantly and fix modal opening
+## Task: Fix Easy Apply button detection — add networkidle wait and fallback selectors
 
 **Project:** C:\Projects\Mater-Browser
+**File:** `src/agent/linkedin_flow.py`
 
 ## Problem
-Bot wastes time navigating to every job, running full classifier, then discovering it's not Easy Apply. When it IS Easy Apply, it clicks the wrong button (score 4.80 from DomExtractor) and modal doesn't open.
+Easy Apply button not found because LinkedIn loads job details via XHR after domcontentloaded.
 
-## Solution: Rewrite `apply()` in `src/agent/linkedin_flow.py`
+## Changes needed in apply() method:
 
-Replace the ENTIRE `apply()` method. No more PageClassifier for the main flow — just check for `#jobs-apply-button-id` directly.
-
-Add this import at top of file:
+1. After the `domcontentloaded` wait, add `networkidle` wait:
 ```python
-from .page_classifier import ALREADY_APPLIED_PHRASES, CLOSED_PHRASES
+try:
+    self._page.raw.wait_for_load_state("networkidle", timeout=8000)
+except Exception:
+    pass
 ```
 
-New `apply()` method — replace the existing one completely:
+2. Replace single `#jobs-apply-button-id` locator/wait with call to new `_find_easy_apply_button()` method
 
+3. Add new method:
 ```python
-def apply(self, job_url: str) -> ApplicationResult:
-    """Handle LinkedIn Easy Apply flow."""
-    logger.info("Using LinkedIn Easy Apply flow")
-    self._ensure_clean_state()
-
-    if not self._page.goto(job_url):
-        return ApplicationResult(
-            status=ApplicationStatus.ERROR,
-            message="Navigation failed",
-            url=job_url,
-        )
-
-    self._page.wait(LONG_WAIT_MS)
-    try:
-        self._page.raw.wait_for_load_state("domcontentloaded", timeout=5000)
-    except Exception:
-        pass
-
-    # Direct Easy Apply button check — 5s timeout
-    easy_apply_btn = self._page.raw.locator('#jobs-apply-button-id')
-    try:
-        easy_apply_btn.wait_for(state="visible", timeout=5000)
-    except Exception:
-        return self._handle_non_easy_apply(job_url)
-
-    # Dismiss overlays
-    self._dismiss_click_blockers()
-
-    # Click the actual button we found
-    try:
-        easy_apply_btn.click(timeout=3000)
-        logger.info("Clicked Easy Apply button")
-    except Exception as e:
-        logger.warning(f"Click failed: {e}")
-        return ApplicationResult(
-            status=ApplicationStatus.FAILED,
-            message="Could not click Easy Apply button",
-            url=job_url,
-        )
-
-    # Wait for modal to appear
-    if not self._wait_for_modal():
-        # Retry click once
-        self._dismiss_click_blockers()
-        try:
-            btn = self._page.raw.locator('#jobs-apply-button-id')
-            if btn.is_visible(timeout=1000):
-                btn.click(timeout=2000)
-                if not self._wait_for_modal():
-                    return ApplicationResult(
-                        status=ApplicationStatus.FAILED,
-                        message="Easy Apply modal did not open",
-                        url=job_url,
-                    )
-        except Exception:
-            return ApplicationResult(
-                status=ApplicationStatus.FAILED,
-                message="Easy Apply modal did not open",
-                url=job_url,
-            )
-
-    return self._process_easy_apply(job_url)
-```
-
-Also add these new helper methods to LinkedInFlow:
-
-```python
-def _handle_non_easy_apply(self, job_url: str) -> ApplicationResult:
-    """Handle case where Easy Apply button not found."""
-    try:
-        content_lower = self._page.raw.content().lower()[:3000]
-    except Exception:
-        content_lower = ""
-    
-    if any(p in content_lower for p in ALREADY_APPLIED_PHRASES):
-        return ApplicationResult(status=ApplicationStatus.FAILED, message="Already applied", url=job_url)
-    if any(p in content_lower for p in CLOSED_PHRASES):
-        return ApplicationResult(status=ApplicationStatus.FAILED, message="Job closed", url=job_url)
-    
-    logger.info("No Easy Apply button found — skipping")
-    return ApplicationResult(status=ApplicationStatus.SKIPPED, message="Not Easy Apply", url=job_url)
-
-def _dismiss_click_blockers(self) -> None:
-    """Remove overlays that can intercept button clicks."""
-    try:
-        self._page.raw.evaluate('''() => {
-            document.querySelector('.msg-overlay-list-bubble')?.remove();
-            document.querySelectorAll('.artdeco-toast-item').forEach(n => n.remove());
-            document.querySelectorAll('[class*="cookie"], [class*="consent"]').forEach(
-                el => el.offsetParent && el.remove()
-            );
-        }''')
-    except Exception:
-        pass
-
-def _wait_for_modal(self) -> bool:
-    """Wait for Easy Apply modal to appear. Returns True if found."""
-    self._page.wait(2000)
-    modal_selectors = [
-        ".jobs-easy-apply-modal",
-        ".artdeco-modal--is-open",
-        ".artdeco-modal",
-        '[role="dialog"]',
+def _find_easy_apply_button(self) -> Optional[Locator]:
+    """Find Easy Apply button using multiple selectors."""
+    selectors_with_timeouts = [
+        ('#jobs-apply-button-id', 5000),
+        ('[data-live-test-job-apply-button]', 2000),
+        ('button.jobs-apply-button', 2000),
+        ('button[aria-label^="Easy Apply"]', 2000),
     ]
-    for sel in modal_selectors:
+    for selector, timeout in selectors_with_timeouts:
         try:
-            self._page.raw.locator(sel).first.wait_for(state="visible", timeout=3000)
-            logger.info(f"Modal appeared via: {sel}")
-            return True
+            btn = self._page.raw.locator(selector).first
+            btn.wait_for(state="visible", timeout=timeout)
+            logger.info(f"Found Easy Apply button via: {selector}")
+            return btn
         except Exception:
             continue
-    logger.warning("Modal not found after waiting")
-    return False
+    return None
 ```
 
-## IMPORTANT
-- Delete the old `apply()` method entirely and replace with the new one
-- Keep `_process_easy_apply`, `_close_modal`, `_ensure_clean_state`, `_get_modal_hash` as they are
-- The old apply() used PageClassifier — the new one does NOT. Direct button check only.
-- Import ALREADY_APPLIED_PHRASES and CLOSED_PHRASES from page_classifier
+4. Import Locator at top: `from playwright.sync_api import Locator`
 
-## Code Standards
-- Static typing, logging, guard clauses, functions under 25 lines
+5. Update retry click section to use `self._find_easy_apply_button()` instead of hardcoded selector
 
 ## Verification
 ```
