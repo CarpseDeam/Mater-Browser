@@ -118,6 +118,8 @@ class AutomationRunner:
         apply_queue: Queue[ApplyRequest],
         result_queue: Queue[ApplyResult],
         on_progress: Callable[[str, dict], None] | None = None,
+        search_queue: Queue[str] | None = None,
+        search_result_queue: Queue[list] | None = None,
     ) -> None:
         """Initialize automation runner with dependencies.
 
@@ -127,12 +129,16 @@ class AutomationRunner:
             apply_queue: Queue for sending apply requests to main thread.
             result_queue: Queue for receiving apply results from main thread.
             on_progress: Optional callback for progress events.
+            search_queue: Queue for sending search requests to main thread.
+            search_result_queue: Queue for receiving search results from main thread.
         """
         self._profile = profile
         self._settings = settings
         self._apply_queue = apply_queue
         self._result_queue = result_queue
         self._on_progress = on_progress
+        self._search_queue = search_queue
+        self._search_result_queue = search_result_queue
 
         self._search_gen = SearchGenerator(profile)
         self._scraper = JobSpyClient()
@@ -259,15 +265,12 @@ class AutomationRunner:
         logger.info(f"Searching: {term}")
         self._emit("search_start", {"term": term})
 
-        try:
-            jobs = self._scraper.search(
-                search_term=term,
-                location=DEFAULT_SEARCH_LOCATION,
-                remote_only=True,
-            )
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
-            self._emit("search_failed", {"term": term, "error": str(e)})
+        if self._search_queue and self._search_result_queue:
+            jobs = self._browser_search(term)
+        else:
+            jobs = self._jobspy_search(term)
+
+        if jobs is None:
             return
 
         scored = self._scorer.filter_and_score(jobs)
@@ -285,6 +288,36 @@ class AutomationRunner:
                 "added": added,
             },
         )
+
+    def _jobspy_search(self, term: str) -> list[JobListing] | None:
+        """Execute search via JobSpy API."""
+        try:
+            jobs = self._scraper.search(
+                search_term=term,
+                location=DEFAULT_SEARCH_LOCATION,
+                remote_only=True,
+            )
+            return jobs
+        except Exception as e:
+            logger.error(f"JobSpy search failed: {e}")
+            self._emit("search_failed", {"term": term, "error": str(e)})
+            return None
+
+    def _browser_search(self, term: str) -> list[JobListing] | None:
+        """Execute search via browser scraper on main thread."""
+        try:
+            logger.debug(f"Putting search request on queue: {term}")
+            self._search_queue.put(term)
+
+            logger.debug("Waiting for search results...")
+            jobs = self._search_result_queue.get(timeout=60.0)
+            logger.info(f"Received {len(jobs)} jobs from browser search")
+            return jobs
+
+        except Exception as e:
+            logger.error(f"Browser search failed: {e}")
+            self._emit("search_failed", {"term": term, "error": str(e)})
+            return None
 
     def _run_apply_cycle(self) -> None:
         """Execute application cycle for queued jobs.

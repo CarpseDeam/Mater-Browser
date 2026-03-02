@@ -1,14 +1,3 @@
-## Task: Build browser-based LinkedIn Easy Apply scraper and wire it into the worker/runner pipeline
-
-**Project:** C:\Projects\Mater-Browser
-
-This is a large task with multiple files. Read each file fully before modifying. Follow the architecture exactly.
-
-## New file: `src/scraper/linkedin_browser_scraper.py`
-
-Browser-based scraper that navigates LinkedIn search with `f_AL=true` and extracts only Easy Apply jobs from the DOM.
-
-```python
 """Browser-based LinkedIn job scraper — only returns Easy Apply jobs."""
 import logging
 from typing import Optional
@@ -37,7 +26,7 @@ class LinkedInBrowserScraper:
         jobs: list[JobListing] = []
         seen_ids: set[str] = set()
         pages_to_scrape = min(MAX_PAGES, (max_results // JOBS_PER_PAGE) + 1)
-        
+
         for page_num in range(pages_to_scrape):
             if len(jobs) >= max_results:
                 break
@@ -61,7 +50,7 @@ class LinkedInBrowserScraper:
             logger.info(f"Page {page_num + 1}: {len(page_jobs)} jobs, total: {len(jobs)}")
             if len(page_jobs) < 5:
                 break
-        
+
         logger.info(f"Browser scrape: {len(jobs)} Easy Apply jobs for '{keywords}'")
         return jobs
 
@@ -91,7 +80,7 @@ class LinkedInBrowserScraper:
         except Exception as e:
             logger.warning(f"JS extraction failed: {e}")
             return []
-        
+
         jobs: list[JobListing] = []
         for raw in raw_jobs:
             job_id = raw.get('jobId', '')
@@ -110,84 +99,3 @@ class LinkedInBrowserScraper:
                 is_remote=True, job_type=None,
             ))
         return jobs
-```
-
-## Modify: `src/gui/worker.py`
-
-1. Add `SEARCH = auto()` to `WorkerCommand` enum
-2. Add `search_term: Optional[str] = None` to `WorkerTask` dataclass
-3. Add `on_search_result` callback parameter to `ApplyWorker.__init__`
-4. In `_connect()`, after creating `self._agent`, create the browser scraper:
-   ```python
-   from src.scraper.linkedin_browser_scraper import LinkedInBrowserScraper
-   page = self._tabs.get_page()
-   self._scraper = LinkedInBrowserScraper(page.raw)
-   ```
-5. Add `submit_search(self, search_term: str) -> bool` method
-6. In `_process_loop`, handle `WorkerCommand.SEARCH`
-7. Add `_process_search(self, search_term: str)` method that calls `self._scraper.search()` and emits results via callback
-
-## Modify: `src/automation/runner.py`
-
-1. Add `search_queue: Queue[str] | None = None` and `search_result_queue: Queue[list] | None = None` params to `__init__`
-2. Change `_run_search_cycle` to use browser search when queues are available, fall back to JobSpy
-3. Extract current JobSpy search into `_jobspy_search(self, term: str) -> list[JobListing]`
-
-## Modify: `src/gui/dashboard.py`
-
-1. Create `self._search_queue` and `self._search_result_queue` in `_start_automation`
-2. Pass them to `AutomationRunner`
-3. Pass `on_search_result` callback to `ApplyWorker`
-4. Add `_process_search_queue` method (polled via `root.after` like apply queue)
-5. Wire `_on_worker_search_result` to put results on `_search_result_queue`
-6. Start `_process_search_queue` in `_start_automation`
-
-## Clear: `data/job_queue.json` → `[]`
-
-## Key: The search request/result flows through queues just like apply requests:
-Runner thread → puts search term on search_queue → Dashboard polls it → forwards to Worker → Worker runs browser scraper → Worker calls on_search_result callback → Dashboard puts result on search_result_queue → Runner gets result
-
-## Verification
-```
-cd C:\Projects\Mater-Browser
-python -c "
-from src.scraper.linkedin_browser_scraper import LinkedInBrowserScraper
-from src.gui.worker import ApplyWorker, WorkerCommand
-from src.automation.runner import AutomationRunner
-print('All imports OK')
-"
-```
-
-
-## Code Standards
-
-Write code that looks inevitable. Follow these constraints:
-
-**Restraint**
-- Solve it in one file if possible
-- No abstractions until the third time you need them
-- No classes if functions will do
-- No inheritance - use composition
-
-**Functions**
-- Max 25 lines, aim for 15
-- One level of nesting max
-- Name describes exactly what it does: `extract_billable_hours()` not `process_data()`
-- Input → transform → output. No side effects unless that's the point.
-
-**Files**
-- Max 200 lines for new files
-- One clear responsibility
-- If you're adding a second "system" to a file, stop and split
-
-**No Ceremony**
-- No AbstractFactory, no IServiceProvider, no Manager classes
-- No code "just in case" - solve the actual problem
-- Delete commented-out code, don't keep it
-
-**Data**
-- Use dataclasses or plain dicts, not classes with only __init__ and getters
-- Data flows obviously - reader should predict what happens next
-- No global state
-
-The best code is code you delete. Every line is a liability.

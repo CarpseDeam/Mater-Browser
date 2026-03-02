@@ -32,6 +32,7 @@ SHUTDOWN_TIMEOUT: float = 10.0
 class WorkerCommand(Enum):
     """Commands that can be sent to the worker thread."""
     APPLY = auto()
+    SEARCH = auto()
     SHUTDOWN = auto()
 
 
@@ -40,6 +41,7 @@ class WorkerTask:
     """Task to be processed by the worker thread."""
     command: WorkerCommand
     request: Optional[ApplyRequest] = None
+    search_term: Optional[str] = None
 
 
 class WorkerState(Enum):
@@ -80,6 +82,7 @@ class ApplyWorker:
         settings: Settings,
         on_status: Optional[Callable[[WorkerStatus], None]] = None,
         on_result: Optional[Callable[[ApplyResult], None]] = None,
+        on_search_result: Optional[Callable[[list], None]] = None,
     ) -> None:
         """Initialize the worker.
 
@@ -88,11 +91,13 @@ class ApplyWorker:
             settings: Application settings.
             on_status: Callback for status updates (called from worker thread).
             on_result: Callback for apply results (called from worker thread).
+            on_search_result: Callback for search results (called from worker thread).
         """
         self._profile = profile
         self._settings = settings
         self._on_status = on_status
         self._on_result = on_result
+        self._on_search_result = on_search_result
 
         self._task_queue: Queue[WorkerTask] = Queue()
         self._thread: Optional[threading.Thread] = None
@@ -102,6 +107,7 @@ class ApplyWorker:
         self._connection: Optional[BrowserConnection] = None
         self._tabs: Optional[TabManager] = None
         self._agent: Optional[ApplicationAgent] = None
+        self._scraper = None
 
     @property
     def state(self) -> WorkerState:
@@ -175,6 +181,22 @@ class ApplyWorker:
         self._task_queue.put(WorkerTask(command=WorkerCommand.APPLY, request=request))
         return True
 
+    def submit_search(self, search_term: str) -> bool:
+        """Submit a search request to the worker.
+
+        Args:
+            search_term: The search keywords.
+
+        Returns:
+            True if submitted, False if worker not ready.
+        """
+        if not self.is_ready:
+            logger.warning("Cannot submit search: worker not ready")
+            return False
+
+        self._task_queue.put(WorkerTask(command=WorkerCommand.SEARCH, search_term=search_term))
+        return True
+
     def _emit_status(self, state: WorkerState, message: str = "", error: Optional[str] = None) -> None:
         """Emit a status update to the callback."""
         self._state = state
@@ -236,6 +258,10 @@ class ApplyWorker:
                 max_pages=15,
             )
 
+            from src.scraper.linkedin_browser_scraper import LinkedInBrowserScraper
+            page = self._tabs.get_page()
+            self._scraper = LinkedInBrowserScraper(page.raw)
+
             logger.info("ApplyWorker connected and agent initialized")
             return True
 
@@ -269,6 +295,9 @@ class ApplyWorker:
 
             if task.command == WorkerCommand.APPLY and task.request:
                 self._process_apply(task.request)
+
+            if task.command == WorkerCommand.SEARCH and task.search_term:
+                self._process_search(task.search_term)
 
     def _process_apply(self, request: ApplyRequest) -> None:
         """Process a single apply request."""
@@ -315,4 +344,31 @@ class ApplyWorker:
             )
 
         self._emit_result(result)
+        self._emit_status(WorkerState.READY)
+
+    def _process_search(self, search_term: str) -> None:
+        """Process a search request."""
+        logger.info(f"Processing browser search: {search_term}")
+
+        self._emit_status(WorkerState.PROCESSING, message=f"Searching: {search_term}")
+
+        if self._scraper is None:
+            logger.error("Scraper not initialized")
+            if self._on_search_result:
+                self._on_search_result([])
+            self._emit_status(WorkerState.READY)
+            return
+
+        try:
+            jobs = self._scraper.search(search_term, max_results=50)
+            logger.info(f"Browser search complete: {len(jobs)} jobs found")
+
+            if self._on_search_result:
+                self._on_search_result(jobs)
+
+        except Exception as e:
+            logger.exception(f"Search error: {e}")
+            if self._on_search_result:
+                self._on_search_result([])
+
         self._emit_status(WorkerState.READY)

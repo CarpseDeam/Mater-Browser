@@ -151,6 +151,8 @@ class DashboardApp:
 
         self._apply_queue: Queue[ApplyRequest] = Queue()
         self._result_queue: Queue[ApplyResult] = Queue()
+        self._search_queue: Queue[str] = Queue()
+        self._search_result_queue: Queue[list] = Queue()
         self._worker: Optional[ApplyWorker] = None
         self._log_expanded = False
 
@@ -617,6 +619,7 @@ class DashboardApp:
             settings=self.settings,
             on_status=self._on_worker_status,
             on_result=self._on_worker_result,
+            on_search_result=self._on_worker_search_result,
         )
 
         if self._worker.start():
@@ -632,6 +635,10 @@ class DashboardApp:
     def _on_worker_result(self, result: ApplyResult) -> None:
         """Handle apply results from worker thread (thread-safe via queue)."""
         self._result_queue.put(result)
+
+    def _on_worker_search_result(self, jobs: list) -> None:
+        """Handle search results from worker thread (thread-safe via queue)."""
+        self._search_result_queue.put(jobs)
 
     def _toggle_automation(self) -> None:
         if self.runner and self.runner.is_running:
@@ -654,6 +661,8 @@ class DashboardApp:
             apply_queue=self._apply_queue,
             result_queue=self._result_queue,
             on_progress=self._on_runner_progress,
+            search_queue=self._search_queue,
+            search_result_queue=self._search_result_queue,
         )
 
         if self.runner.start():
@@ -662,6 +671,7 @@ class DashboardApp:
             self._update_status("Starting...", ACCENT)
             self._log("Automation started")
             self.root.after(APPLY_QUEUE_POLL_MS, self._process_apply_queue)
+            self.root.after(APPLY_QUEUE_POLL_MS, self._process_search_queue)
 
     def _stop_automation(self) -> None:
         if not self.runner:
@@ -702,6 +712,28 @@ class DashboardApp:
             self._worker.submit_apply(request)
 
         self.root.after(APPLY_QUEUE_POLL_MS, self._process_apply_queue)
+
+    def _process_search_queue(self) -> None:
+        """Forward search requests from runner to worker (non-blocking)."""
+        if not self.runner or not self.runner.is_running:
+            logger.debug("Runner not active, stopping search queue processor")
+            return
+
+        try:
+            search_term = self._search_queue.get_nowait()
+        except Empty:
+            self.root.after(APPLY_QUEUE_POLL_MS, self._process_search_queue)
+            return
+
+        logger.info(f"Forwarding search request: {search_term}")
+
+        if not self._worker or not self._worker.is_ready:
+            logger.error("Worker not ready, cannot process search request")
+            self._search_result_queue.put([])
+        else:
+            self._worker.submit_search(search_term)
+
+        self.root.after(APPLY_QUEUE_POLL_MS, self._process_search_queue)
 
     def _process_messages(self) -> None:
         try:
