@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-03-02: feat: Add diagnostic page dump for failed button detection and force Easy Apply filtering
+  - Added diagnostic logging to `LinkedInFlow._handle_non_easy_apply`: logs current URL, page title, and top 20 buttons (including visibility, id, and ARIA labels)
+  - Implemented automatic screenshot saving to `data/debug_screenshots/` when the "Easy Apply" button is missing to aid in selector debugging
+  - Enhanced authentication state detection to return `NEEDS_LOGIN` status when redirected to login or checkpoint pages
+  - Updated `JobSpyClient` to explicitly filter for `easy_apply=True` during job scraping
+
 - 2026-03-02: fix: Enhance LinkedIn Easy Apply button detection with networkidle wait and fallback selectors
   - Added `networkidle` wait state to ensure XHR-loaded job details are ready before searching for buttons
   - Implemented `_find_easy_apply_button` to support multiple selector fallbacks (`#jobs-apply-button-id`, `[data-live-test-job-apply-button]`, etc.)
@@ -28,12 +34,12 @@ All notable changes to this project.
   - Improved discard confirmation handling when closing modals
 
 - 2026-03-02: docs: Update selector update strategy and project coding standards
-  - Expanded LinkedIn DOM analysis scope to include multiple modal dumps
+  - Expanded LinkedIn DOM analysis scope to include multiple modal dumps        
   - Established explicit selector priority: aria-label > role > data-test* > semantic tags > CSS classes
   - Introduced strict coding standards: 25-line function limit, 200-line file limit, and one-level nesting maximum
   - Shifted preference toward functional composition and dataclasses over complex class hierarchies
 
-- 2026-03-02: feat: Add resilience safeguards to LinkedIn Easy Apply flow
+- 2026-03-02: feat: Add resilience safeguards to LinkedIn Easy Apply flow       
   - Implemented hard 120-second timeout for the entire Easy Apply process to prevent hangs
   - Added per-page error handling with a 2-consecutive-error threshold for automatic abortion
   - Introduced _close_modal helper to ensure clean state after success, failure, or timeout
@@ -45,14 +51,14 @@ All notable changes to this project.
 - 2026-03-02: refactor: Clean up Mater-Browser — Remove all bloat, LinkedIn Easy Apply only
   - Removed all Claude-based form filling infrastructure (src/agent/claude.py, prompts.py, actions.py)
   - Removed Indeed-specific flow and form filling (src/agent/external_flow.py, indeed_form_filler.py, indeed_helpers.py)
-  - Deleted obsolete infrastructure including vision_fallback.py, zero_actions_handler.py, navigation_helpers.py, loop_detector.py, and stuck_detection.py
+  - Deleted obsolete infrastructure including vision_fallback.py, zero_actions_handler.py, navigation_helpers.py, loop_detector.py, and stuck_detection.py      
   - Simplified ApplicationAgent and LinkedInFlow to focus exclusively on LinkedIn Easy Apply
   - Removed redundant executor and extractor modules, favoring direct Playwright interaction
   - Streamlined feedback system by removing auto_repairer.py, config_suggester.py, and failure_summarizer.py
   - Cleaned up models.py and configuration files to remove Indeed and other dead references
-  - Updated main.py and GUI components to reflect the LinkedIn-only focus
+  - Updated main.py and GUI components to reflect the LinkedIn-only focus       
 
-- 2026-01-31: fix: Fix LinkedIn Easy Apply flow getting stuck immediately
+- 2026-01-31: fix: Fix LinkedIn Easy Apply flow getting stuck immediately       
   - Enhanced LinkedInFlow with robust modal state hashing (progress bar, aria-valuenow, multiple selectors, element counts, and labels)
   - Improved LinkedInFormFiller to support multiple modal selectors (.artdeco-modal, [role='dialog']) for broader compatibility
   - Added comprehensive logging for page processing, modal detection, and button interaction

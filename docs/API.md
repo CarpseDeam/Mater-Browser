@@ -14,7 +14,7 @@ Orchestrates the job application flow for LinkedIn Easy Apply.
 ### `LinkedInFlow`
 
 - `__init__(page: Page, tabs: TabManager, max_pages: int)`: Initializes the LinkedIn-specific flow.
-- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job. Uses a direct button-check strategy (bypassing `PageClassifier` for the main flow) with a `networkidle` wait state to ensure XHR-loaded content is present. Employs a multi-selector fallback strategy to find the Easy Apply button with a hard 120-second timeout and per-page error resilience. Instantly skips jobs that are closed or already applied.
+- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job. Uses a direct button-check strategy with a `networkidle` wait state. If the Easy Apply button is not found, it performs a diagnostic page dump (logging URL, title, and buttons) and saves a screenshot to `data/debug_screenshots/` for troubleshooting. Returns `NEEDS_LOGIN` if redirected to an authentication page. Employs a multi-selector fallback strategy with a hard 120-second timeout.
 
 ### `JobQueue` (Data Model)
 
@@ -98,4 +98,4 @@ Evaluates and filters job listings based on relevance using centralized configur
 
 Interface for job scraping.
 
-- `scrape(queries: list[str], location: str) -> list[JobListing]`: Executes job searches (defaulting to LinkedIn) and returns a list of job listings.
+- `scrape(queries: list[str], location: str) -> list[JobListing]`: Executes job searches (defaulting to LinkedIn) and returns a list of job listings. Explicitly filters for jobs with `easy_apply=True` to ensure compatibility with the automation agent.
