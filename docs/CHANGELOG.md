@@ -2,6 +2,12 @@
 
 All notable changes to this project.
 
+- 2026-03-02: fix: Enhance LinkedIn Easy Apply button detection with networkidle wait and fallback selectors
+  - Added `networkidle` wait state to ensure XHR-loaded job details are ready before searching for buttons
+  - Implemented `_find_easy_apply_button` to support multiple selector fallbacks (`#jobs-apply-button-id`, `[data-live-test-job-apply-button]`, etc.)
+  - Improved click reliability by refactoring button finding into a dedicated method with individual timeouts
+  - Updated retry logic to use the new fallback-aware button detection
+
 - 2026-03-02: refactor: Rewrite LinkedIn apply() to bypass classifier and skip non-Easy-Apply jobs instantly
   - Replaced `PageClassifier` dependency in main `apply()` flow with direct `#jobs-apply-button-id` check
   - Implemented `_handle_non_easy_apply` to instantly skip closed or already applied jobs

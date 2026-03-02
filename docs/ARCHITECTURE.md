@@ -17,9 +17,9 @@ The system is optimized exclusively for LinkedIn "Easy Apply" flows. External jo
 
 ### Direct Application Flow (2026 Optimization)
 To maximize speed and reliability, the application flow uses a direct-check strategy:
-- **Instant Skip**: Bypasses full page classification for the primary flow. It directly checks for the `#jobs-apply-button-id` (the most stable 2026 selector). If not found, it instantly checks for "Already applied" or "Job closed" phrases and skips the job.
+- **Instant Skip**: Bypasses full page classification for the primary flow. It waits for the `networkidle` state to ensure XHR-loaded job details are ready, then performs a multi-selector check for the Easy Apply button. If no button is found (using stable 2026 selectors and fallbacks), it instantly checks for "Already applied" or "Job closed" phrases and skips the job.
 - **Click Blocker Dismissal**: Automatically removes non-modal overlays (chat bubbles, cookie banners, toasts) that could intercept the click before attempting to open the modal.
-- **Modal Wait & Retry**: Implements a dedicated `_wait_for_modal` sequence with 2026-specific selectors and a one-time retry if the initial click fails to open the modal.
+- **Modal Wait & Retry**: Implements a dedicated `_wait_for_modal` sequence with 2026-specific selectors and a one-time retry (using fallback button detection) if the initial click fails to open the modal.
 
 ## Form Processing
 
@@ -48,7 +48,7 @@ To ensure high completion rates across diverse LinkedIn configurations, a robust
 #### 2026 DOM Optimization
 To increase reliability and speed for LinkedIn applications, the system uses optimized 2026 selectors:
 
-- **Direct Button Selection**: Uses stable IDs (e.g., `#jobs-apply-button-id`) and data attributes (e.g., `[data-live-test-job-apply-button]`) for early detection.
+- **Direct Button Selection**: Uses a prioritized fallback strategy for early detection, including stable IDs (`#jobs-apply-button-id`), data attributes (`[data-live-test-job-apply-button]`), semantic classes (`button.jobs-apply-button`), and ARIA labels. Each selector is checked with a dedicated timeout to balance speed and discovery.
 - **Aria-Label Stability**: Prioritizes case-insensitive `aria-label*` partial matches for navigation buttons (Next, Review, Submit) to handle varied translations and obfuscated classes.
 - **Progress Monitoring**: Uses the ARIA `progressbar` role and `aria-valuenow` state for precise modal state tracking.
 
