@@ -56,36 +56,3 @@ cd C:\Projects\Mater-Browser
 python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; from src.agent.page_classifier import PageClassifier; print('OK')"
 ```
 
-
-## Code Standards
-
-Write code that looks inevitable. Follow these constraints:
-
-**Restraint**
-- Solve it in one file if possible
-- No abstractions until the third time you need them
-- No classes if functions will do
-- No inheritance - use composition
-
-**Functions**
-- Max 25 lines, aim for 15
-- One level of nesting max
-- Name describes exactly what it does: `extract_billable_hours()` not `process_data()`
-- Input → transform → output. No side effects unless that's the point.
-
-**Files**
-- Max 200 lines for new files
-- One clear responsibility
-- If you're adding a second "system" to a file, stop and split
-
-**No Ceremony**
-- No AbstractFactory, no IServiceProvider, no Manager classes
-- No code "just in case" - solve the actual problem
-- Delete commented-out code, don't keep it
-
-**Data**
-- Use dataclasses or plain dicts, not classes with only __init__ and getters
-- Data flows obviously - reader should predict what happens next
-- No global state
-
-The best code is code you delete. Every line is a liability.
