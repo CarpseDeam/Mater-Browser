@@ -1,0 +1,583 @@
+
+================================================================================
+URL: https://www.linkedin.com/jobs/search-results/?currentJobId=4359524797&keywords=Python%20Developer%20or%20Platform%20Engineer%20or%20System%20Architect%20or%20Back%20End%20Developer%2C%20remote&origin=PREFERENCES_LANDING&originToLandingJobPostings=4359524797%2C4338901561%2C4357900708&geoId=103349451
+Title: Sr Software Engineer, Billing and Internal Systems | Sinch | LinkedIn
+================================================================================
+
+================================================================================
+1. APPLY BUTTONS
+================================================================================
+
+================================================================================
+2. MODALS/DIALOGS
+================================================================================
+
+Role: dialog
+Class: vjs-error-display vjs-modal-dialog vjs-hidden 
+Aria-label: Modal Window
+Visible: False
+
+Role: None
+Class: vjs-modal-dialog-description vjs-control-text
+Aria-label: None
+Visible: False
+
+Role: document
+Class: vjs-modal-dialog-content
+Aria-label: None
+Visible: False
+
+Role: dialog
+Class: vjs-modal-dialog vjs-hidden  vjs-text-track-settings
+Aria-label: Caption Settings Dialog
+Visible: False
+
+Role: None
+Class: vjs-modal-dialog-description vjs-control-text
+Aria-label: None
+Visible: False
+
+Role: document
+Class: vjs-modal-dialog-content
+Aria-label: None
+Visible: False
+
+================================================================================
+3. PROGRESS INDICATORS
+================================================================================
+
+Tag: div
+Class: vjs-progress-control vjs-control
+Aria-valuenow: None
+Aria-valuemax: None
+Visible: False
+
+Tag: div
+Class: vjs-progress-holder vjs-slider vjs-slider-horizontal
+Aria-valuenow: 0.00
+Aria-valuemax: 100
+Visible: False
+
+Tag: div
+Class: vjs-load-progress
+Aria-valuenow: None
+Aria-valuemax: None
+Visible: False
+
+Tag: div
+Class: vjs-play-progress vjs-slider-bar
+Aria-valuenow: None
+Aria-valuemax: None
+Visible: False
+
+================================================================================
+4. NAVIGATION BUTTONS (next, submit, review, continue, dismiss, close, discard)
+================================================================================
+
+Tag: button
+Text: ''
+Aria-label: 'Close jump menu'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _0ca50cee _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 d12e4edf
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _0ca50cee _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 d12e4edf" type="button" aria-label="Close jump menu"><span class="_3c5e86e0 _28a1891e fb53a729 fa04ee38 _5d149fcd _2e6f1a84 _655ffe61 _57cddce6 e8731c4e _3f61
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Sr Software Engineer, Billing and Internal Systems job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="67176439-5ac1-47f4-a9e0-0f375927bdfd" aria-label="Dismiss Sr Software Engineer, Billing and Internal Systems job" data-view-name=
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Staff Backend Engineer (Python) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="553f075b-de9f-4908-a6d5-13bafbac3cfc" aria-label="Dismiss Staff Backend Engineer (Python) job" data-view-name="dismiss-job" data-
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="55ceab8b-bd72-45ce-b824-a691af0ccb85" aria-label="Dismiss Senior Software Engineer job" data-view-name="dismiss-job" data-view-tr
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Software Engineer, Backend (Developer - Foundations) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="d555fc6a-42c0-4371-8727-5ca5cafe52f5" aria-label="Dismiss Senior Software Engineer, Backend (Developer - Foundations) job" data-v
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Staff Software Engineer - AI Weather Startup / Data Pipelines / Cloud-Native job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="dfe9ab13-b4d6-43a1-b243-b30ed81e1e9e" aria-label="Dismiss Staff Software Engineer - AI Weather Startup / Data Pipelines / Cloud-N
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Python Data Engineer - (Remote) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="25334062-adbf-4d38-9157-7a320ee1b181" aria-label="Dismiss Senior Python Data Engineer - (Remote) job" data-view-name="dismiss-job
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Backend Platform Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="723f6215-57e1-488f-86f4-675f10a3c122" aria-label="Dismiss Backend Platform Engineer job" data-view-name="dismiss-job" data-view-t
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Software Developer 4 job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="ffc0bf0d-e7f4-47a5-acf4-f2ee8aceca0f" aria-label="Dismiss Software Developer 4 job" data-view-name="dismiss-job" data-view-tracki
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss REMOTE - Python Developer Needed job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="e23e1e54-eaf2-4181-a9b3-b6c2791ef711" aria-label="Dismiss REMOTE - Python Developer Needed job" data-view-name="dismiss-job" data
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Sr Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="8f493202-7c2f-4466-bafe-bac1d259c75a" aria-label="Dismiss Sr Software Engineer job" data-view-name="dismiss-job" data-view-tracki
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Software Engineer, Application Frameworks job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="4ef8660a-f6e2-4259-9783-e388a521f64d" aria-label="Dismiss Software Engineer, Application Frameworks job" data-view-name="dismiss-
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Backend Engineer (Python) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="9ba78f38-d15f-415b-9dd8-c4c2111ca3de" aria-label="Dismiss Senior Backend Engineer (Python) job" data-view-name="dismiss-job" data
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Backend Engineer - Remote (f/m/x) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="53618609-bfea-4496-a471-7589123d8398" aria-label="Dismiss Senior Backend Engineer - Remote (f/m/x) job" data-view-name="dismiss-j
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Software Engineer II - Python - Developer Tools - Search job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="3d3ffd0f-d70a-4dd3-9b48-78cbf8a54d33" aria-label="Dismiss Software Engineer II - Python - Developer Tools - Search job" data-view
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Staff Software Engineer - Fullstack, Connect job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="f092fa3f-9fd8-4d17-998c-21f25c992174" aria-label="Dismiss Staff Software Engineer - Fullstack, Connect job" data-view-name="dismi
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="48165ccd-46dc-4034-893b-281d67aa6342" aria-label="Dismiss Senior Software Engineer job" data-view-name="dismiss-job" data-view-tr
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Backend Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="31b98fdc-b036-478d-b74d-f144e4b82e4a" aria-label="Dismiss Backend Engineer job" data-view-name="dismiss-job" data-view-tracking-s
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Engineer – Python & AWS - W2 Candidate job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="0a486009-1e8c-4b65-8f91-b7ed1de554d4" aria-label="Dismiss Senior Engineer – Python &amp; AWS - W2 Candidate job" data-view-name="
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Back End Developer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="e04f0473-981d-4256-bdee-c48f94d93a33" aria-label="Dismiss Back End Developer job" data-view-name="dismiss-job" data-view-tracking
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Software Engineer, Platform Operations job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="2be7f221-4c01-4441-80e1-873215c076f2" aria-label="Dismiss Software Engineer, Platform Operations job" data-view-name="dismiss-job
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Full Stack Engineer - Full Remote - Python/Next.JS $180k + Equity job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="97a74a78-73c4-4300-a40b-59e4d02ea3a5" aria-label="Dismiss Full Stack Engineer - Full Remote - Python/Next.JS $180k + Equity job" 
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Software Developer 3 job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="145b5750-8317-435c-aa88-98dfec29f047" aria-label="Dismiss Software Developer 3 job" data-view-name="dismiss-job" data-view-tracki
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Senior Software Development Engineer, Backend (Subscriptions) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="6c78ad4e-b083-4b0c-97ad-9fe6c63a000f" aria-label="Dismiss Senior Software Development Engineer, Backend (Subscriptions) job" data
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Software Engineer / Sr. Software Engineer (Backend/ Python) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="ee7176d3-d356-42b5-afdb-0ac335ba931e" aria-label="Dismiss Software Engineer / Sr. Software Engineer (Backend/ Python) job" data-v
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754" type="button" componentkey="b0f17a6a-0586-46bb-b9b2-eef8a77431be" aria-label="Dismiss Software Engineer job" data-view-name="dismiss-job" data-view-tracking-
+
+Tag: button
+Text: ''
+Aria-label: 'Dismiss'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _03402cca _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 _29537324 d1658c4e _2f137206 f125ed94 _6b10050c
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _03402cca _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 _29537324 d1658c4e _2f137206 f125ed94 _6b10050c" type="button" aria-label="Dismiss"><span class="_3c5e86e0 _28a1891e fb53a729 fa04ee38 _5d149fcd _2e6f1a84 _65
+
+Tag: button
+Text: 'Next'
+Aria-label: 'None'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _0ca50cee _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 _16b1a37d
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _0ca50cee _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 _16b1a37d" type="button" data-testid="pagination-controls-next-button-visible"><span class="_3c5e86e0 _28a1891e fb53a729 fa04ee38 _5d149fcd _2e6f1a84 _655ffe6
+
+Tag: button
+Text: 'Close Modal Dialog'
+Aria-label: 'None'
+Class: vjs-close-button vjs-control vjs-button
+Visible: False
+HTML preview: <button class="vjs-close-button vjs-control vjs-button" type="button" title="Close Modal Dialog" aria-disabled="false"><span class="vjs-icon-placeholder" aria-hidden="true"></span><span class="vjs-control-text" aria-live="polite">Close Modal Dialog</span></button>
+
+Tag: button
+Text: ''
+Aria-label: 'Next'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _03402cca _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 fd62f074 _947ce895 b233dda5
+Visible: True
+HTML preview: <button class="_17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _03402cca _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 fd62f074 _947ce895 b233dda5" type="button" data-testid="carousel-inline-right-button" aria-label="Next"><span class="_3c5e86e0 _28a1891e fb53a729 fa04ee38 _5d
+
+================================================================================
+5. FORM INPUTS
+================================================================================
+
+--- INPUTS ---
+
+Tag: input
+Type: text
+Name: None
+ID: :r1e:
+Class: _9c974da8 _8f4567de _785b5929 _52c83701 _27cee8da e4c7c08b _5ad5d58f _21d39d06 efa0e67b b213288c f8e45584 f6502153 _0397edc0 _40524da0 _41cf5362 _18aa3291 ea8735e6 e0d8fa23 _0ca71ee0 a056625e e4cdcc22
+Aria-label: None
+Placeholder: 
+Visible: True
+
+--- SELECTS ---
+
+Tag: select
+Name: None
+ID: vjs_select_649
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_654
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_664
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_669
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_679
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_684
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_699
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_718
+Class: None
+Aria-label: None
+Visible: False
+
+Tag: select
+Name: None
+ID: vjs_select_733
+Class: None
+Aria-label: None
+Visible: False
+
+--- TEXTAREAS ---
+
+================================================================================
+6. FIELDSETS
+================================================================================
+
+Class: vjs-fg vjs-track-setting
+Legend: 
+Visible: False
+
+Class: vjs-bg vjs-track-setting
+Legend: 
+Visible: False
+
+Class: vjs-window vjs-track-setting
+Legend: 
+Visible: False
+
+Class: vjs-font-percent vjs-track-setting
+Legend: 
+Visible: False
+
+Class: vjs-edge-style vjs-track-setting
+Legend: 
+Visible: False
+
+Class: vjs-font-family vjs-track-setting
+Legend: 
+Visible: False
+
+================================================================================
+7. LABELS (class contains 'form-element' or 'fb-')
+================================================================================
+
+================================================================================
+8. KEY ARIA-LABELS (easy, apply, submit, next, review, dismiss, close)
+================================================================================
+
+Tag: button
+Aria-label: 'Close jump menu'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _0ca50cee _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 d12e4edf
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Sr Software Engineer, Billing and Internal Systems job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Staff Backend Engineer (Python) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Software Engineer, Backend (Developer - Foundations) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Staff Software Engineer - AI Weather Startup / Data Pipelines / Cloud-Native job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Python Data Engineer - (Remote) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Backend Platform Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Software Developer 4 job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss REMOTE - Python Developer Needed job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Sr Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Software Engineer, Application Frameworks job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Backend Engineer (Python) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Backend Engineer - Remote (f/m/x) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Software Engineer II - Python - Developer Tools - Search job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Staff Software Engineer - Fullstack, Connect job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Backend Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Engineer – Python & AWS - W2 Candidate job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Back End Developer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Software Engineer, Platform Operations job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Full Stack Engineer - Full Remote - Python/Next.JS $180k + Equity job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Software Developer 3 job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Senior Software Development Engineer, Backend (Subscriptions) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Software Engineer / Sr. Software Engineer (Backend/ Python) job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss Software Engineer job'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _44e18b41 _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Dismiss'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _03402cca _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 _29537324 d1658c4e _2f137206 f125ed94 _6b10050c
+Text: 
+Visible: True
+
+Tag: button
+Aria-label: 'Next'
+Class: _17563ed1 f276fd26 _5d149fcd _2e6f1a84 f2741651 _3f61d253 _52d3c371 _03402cca _0755df26 _0ad6fea6 _655ffe61 fa04ee38 _0bc43754 fd62f074 _947ce895 b233dda5
+Text: 
+Visible: True
+
+================================================================================
+SUMMARY STATISTICS
+================================================================================
+Total buttons: 130
+Total inputs: 1
+Total selects: 9
+Total textareas: 0
+Total modals: 6
+Total progress: 4
+Total fieldsets: 6
+Total labels: 6

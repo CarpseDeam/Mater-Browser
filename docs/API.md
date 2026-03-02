@@ -14,7 +14,7 @@ Orchestrates the job application flow for LinkedIn Easy Apply.
 ### `LinkedInFlow`
 
 - `__init__(page: Page, tabs: TabManager, max_pages: int)`: Initializes the LinkedIn-specific flow.
-- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job.
+- `apply(job_url: str) -> ApplicationResult`: Executes the full Easy Apply flow for a single job. Includes a hard 120-second timeout and per-page error resilience.
 
 ### `AnswerEngine`
 
@@ -27,7 +27,7 @@ Config-driven answer lookup for form questions.
 
 Deterministic form filler for LinkedIn Easy Apply modals.
 
-- `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups).
+- `fill_current_modal() -> bool`: Fills all fields in the current modal (text inputs, selects, radios, checkboxes, and multi-select groups). Includes a 30-second timeout to prevent stalling on complex forms.
     - **Intelligent Skill Matching**: Automatically matches multi-select skill checkboxes against the user's documented technical profile.
     - **Smart Dropdowns**: Employs fuzzy and range-based matching for experience and preference dropdowns.
     - **Intelligent Radio Defaults**: Applies safe defaults for Yes/No questions based on context (e.g., "No" for conflicts of interest, "Yes" for work authorization) when no explicit answer is found.

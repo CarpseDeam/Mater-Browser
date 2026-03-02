@@ -9,7 +9,7 @@ The `PageClassifier` is responsible for identifying the current state of a job a
 - **Apply Button Detection**: Prioritizes direct selector matching for LinkedIn to ensure high reliability. If no direct match is found, it employs a Similo-style weighted scoring system to find the most likely "Apply" button. It distinguishes between:
     - **Easy Apply**: Internal application flows (specifically LinkedIn Easy Apply).
     - **External Link**: Buttons that lead away from the platform to a company-specific ATS. The system proactively detects "External-only" jobs and skips them early to prioritize Easy Apply flows.
-- **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays.
+- **Robust Interaction**: Implements a multi-stage click sequence (standard click, bounding box center click, JavaScript `el.click()`, and forced click) to handle obscured or non-standard button implementations, including automatic dismissal of overlays (with a 3-second timeout to prevent classification hangs).
 
 ## LinkedIn Easy Apply Strategy
 
@@ -24,6 +24,14 @@ The `ApplicationAgent` orchestrates the interaction with web forms using a platf
 This strategy avoids LLM hallucinations, reduces token costs, and provides consistent results based on the user's `answers.yaml` configuration.
 
 ### Deterministic LinkedIn Flow
+
+#### Resilience and Stalling Prevention
+To ensure the automation remains responsive even in cases of unexpected browser behavior or network delays:
+
+- **Flow Timeout**: Implements a hard 120-second timeout for the entire Easy Apply process to prevent infinite hangs.
+- **Page Error Handling**: Each page iteration in the modal-filling loop is wrapped in a try/except block. If more than 2 consecutive errors occur, the application is aborted to avoid wasting time.
+- **Modal Fill Timeout**: Added a 30-second timeout to the `fill_current_modal` method to prevent stalling on complex or unresponsive forms.
+- **Cleanup**: Always executes `_close_modal` to return the browser to a clean state after success, failure, or timeout.
 To increase reliability and speed for LinkedIn applications, the system bypasses AI for Easy Apply modals:
 
 - **Direct Button Selection**: Uses optimized CSS selectors to immediately identify the "Easy Apply" button, bypassing generic DOM analysis for faster interaction.

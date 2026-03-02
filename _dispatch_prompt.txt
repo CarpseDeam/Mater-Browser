@@ -1,138 +1,59 @@
-## Task: Add resilience safeguards to LinkedIn Easy Apply flow
+## Task: Analyze LinkedIn DOM dump and update selectors
 
 **Project:** C:\Projects\Mater-Browser
 
-## Goal
-Make Easy Apply flow bulletproof: if anything goes wrong, close the modal, return FAILED quickly, and let the runner move to the next job. Never hang.
+## Step 1: Analyze the DOM dump
 
-## Changes needed:
+Read `C:\Projects\Mater-Browser\data\full_dom_dump.json` and extract:
 
-### 1. `src/agent/linkedin_flow.py` — Wrap `_process_easy_apply` with overall timeout and per-page error handling
+1. **Every button** where text, aria-label, or className contains "apply" — print full details (text, aria, class, html preview, visibility)
+2. **Every modal/dialog** — print class, role, aria-label, visibility  
+3. **Every progress indicator** — print class, aria-valuenow, aria-valuemax
+4. **Every button** that contains "next", "submit", "review", "continue", "dismiss", "close", "discard" in text or aria-label — print full details
+5. **Every input, select, textarea** — print type, name, class, aria-label, placeholder, associated label text
+6. **Every fieldset** with radio buttons — print legend, radio values, labels
+7. **Every label** with class containing "form-element" or "fb-" — print text and class
+8. **Every aria-label** on the page that contains "easy", "apply", "submit", "next", "review", "dismiss", "close"
 
-**A) Add a hard timeout wrapper around the entire `_process_easy_apply` method.**
+Print all of this to stdout so we can see what LinkedIn actually uses.
 
-Use a simple wall-clock approach (not threading) — track `time.time()` at start, check elapsed at each loop iteration. If elapsed > EASY_APPLY_TIMEOUT_SECONDS (default 120 seconds), break and return FAILED. Import `time` at top.
+## Step 2: Compare with current selectors
 
-Add constant at module level:
-```python
-EASY_APPLY_TIMEOUT_SECONDS: float = 120.0
-```
+Read these files and compare what the DOM dump shows vs what the code uses:
+- `src/agent/page_classifier.py` — LINKEDIN_EASY_APPLY_SELECTORS, _classify_apply_button logic, dismiss selectors
+- `src/agent/linkedin_form_filler.py` — LinkedInSelectors class, SUBMIT_BUTTON_PATTERNS, click_next method, fill methods
+- `src/agent/linkedin_flow.py` — _close_modal dismiss selectors, _get_modal_hash selectors, is_confirmation_page checks
 
-**B) Wrap each page iteration body in try/except.**
+For each selector in the code, report:
+- MATCH: selector exists in the DOM dump
+- MISS: selector does NOT exist in the DOM dump  
+- NEW: selector exists in DOM but code doesn't use it
 
-Inside the `for page_num in range(self._max_pages):` loop, wrap the body (from modal hash check through click_next) in a try/except that catches `Exception`. On exception:
-- Log the error at WARNING level with the page number
-- Increment a `page_errors` counter
-- If `page_errors >= 2` consecutive, break the loop
-- Otherwise `continue` to retry the page
+## Step 3: Update the code
 
-**C) Add confirmation check immediately after click_next succeeds.**
+Based on the analysis, update all three files with the correct selectors from the actual LinkedIn DOM. Key things to fix:
 
-After `filler.click_next()` returns True, wait 500ms then immediately check `filler.is_confirmation_page()`. If True, close modal and return SUCCESS. This catches the case where Submit was clicked (not just Next), avoiding an unnecessary extra loop iteration.
+1. **page_classifier.py**: Update LINKEDIN_EASY_APPLY_SELECTORS to match what's actually on the page. Fix _classify_apply_button if the button text/aria doesn't contain "easy" (LinkedIn may have changed the button text format).
 
-**D) Always close the modal on exit (success or failure).**
+2. **linkedin_form_filler.py**: Update LinkedInSelectors class with actual CSS classes from the dump. Update SUBMIT_BUTTON_PATTERNS with actual button selectors. Update click_next to find buttons that actually exist.
 
-Add a helper method:
+3. **linkedin_flow.py**: Update _close_modal with dismiss button selectors that actually exist. Update _get_modal_hash with actual progress bar and form element selectors.
 
-```python
-def _close_modal(self) -> None:
-    """Close Easy Apply modal to clean up for next job."""
-    try:
-        dismiss_selectors = [
-            'button[aria-label="Dismiss"]',
-            '[data-test-modal-close-btn]',
-            'button.artdeco-modal__dismiss',
-        ]
-        for selector in dismiss_selectors:
-            btn = self._page.raw.locator(selector).first
-            if btn.is_visible(timeout=1000):
-                btn.click()
-                self._page.wait(500)
-                return
-    except Exception:
-        pass
-    try:
-        self._page.raw.keyboard.press("Escape")
-        self._page.wait(500)
-    except Exception:
-        pass
-```
-
-Call this before EVERY return from `_process_easy_apply` that isn't SUCCESS (on success, call after `filler.close_modal()` as fallback).
-
-**E) Handle the "modal not found" case in the loop.**
-
-If `filler.fill_current_modal()` returns False (no modal found), check if it's a confirmation page. If not, break immediately — don't keep looping on a missing modal.
-
-### 2. `src/agent/linkedin_form_filler.py` — Improve error visibility and add safety
-
-**A) Promote key exception logs from `debug` to `warning`.**
-
-In these methods, change `logger.debug` to `logger.warning` for exception catches that indicate real problems:
-- `_fill_single_text_input` — when fill operation itself fails
-- `_fill_single_select` — when select_option fails  
-- `_fill_single_radio_group` — when radio click fails
-- `_fill_checkboxes` — when checkbox toggle fails
-- `click_next` — when button click fails
-
-Do NOT promote "element not visible" or "skipping pre-filled" messages — those are normal flow.
-
-**B) Add a timeout to `fill_current_modal` method.**
-
-Track wall-clock time. If filling takes longer than 30 seconds, log a warning and return True (partial fill is better than hanging).
-
-Add constant at module level:
-```python
-MODAL_FILL_TIMEOUT_SECONDS: float = 30.0
-```
-
-**C) Make `click_next` more resilient after clicking.**
-
-After clicking a button, catch any post-click exception (page may navigate/detach after Submit):
-
-```python
-btn.click()
-logger.info(f"Clicked button: {btn_text[:30]}")
-try:
-    self._page.wait_for_timeout(500)
-except Exception:
-    pass  # Page may have navigated after submit
-return True
-```
-
-### 3. `src/agent/linkedin_flow.py` — Fix classify-then-click ordering
-
-Currently clicks apply button BEFORE checking `page_type != PageType.EASY_APPLY`. Reorder:
-
-1. Classify page
-2. Handle PAYMENT, ACCOUNT_CREATION, LOGIN, ALREADY_APPLIED, CLOSED, EXTERNAL → return early
-3. Check `page_type != EASY_APPLY` → return SKIPPED 
-4. THEN click the Easy Apply button
-5. Process the modal
-
-### 4. `src/agent/page_classifier.py` — Add timeout to overlay dismiss
-
-Wrap the `evaluate` call:
-```python
-def dismiss_overlays(self) -> None:
-    try:
-        self._page.evaluate(self._get_overlay_removal_js(), timeout=3000)
-    except Exception:
-        pass
-```
+## Important
+- The DOM dump is from a LIVE LinkedIn page as of today (March 2, 2026)
+- LinkedIn changes their DOM frequently — use what the dump shows, not what you think it should be
+- Keep fallback selectors for resilience but put the ones from the dump FIRST
+- Don't remove old selectors entirely — just reorder so working ones come first
 
 ## Code Standards
 - Static typing everywhere
-- `logging` module, never print()
-- Guard clauses, fail fast
+- logging module
 - Keep functions under 25 lines
-- f-strings for formatting
 
 ## Verification
-After changes:
 ```
 cd C:\Projects\Mater-Browser
-python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; print('OK')"
+python -c "from src.agent.linkedin_flow import LinkedInFlow; from src.agent.linkedin_form_filler import LinkedInFormFiller; from src.agent.page_classifier import PageClassifier; print('OK')"
 ```
 
 
